@@ -1,3 +1,4 @@
+# Haskell things
 dist
 cabal-dev
 *.o
@@ -5,3 +6,8 @@ cabal-dev
 *.chi
 *.chs.h
 .virthualenv
+
+# Emacs things
+*~
+\#*
+*\#
