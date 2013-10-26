@@ -1,5 +1,6 @@
 module Graphics.Rendering.Lambency.Vertex (
   Vertex,
+  toFloats,
   mkVertex3
   ) where
 
@@ -8,10 +9,16 @@ module Graphics.Rendering.Lambency.Vertex (
 import qualified Graphics.Rendering.OpenGL as GL
 import Data.Vect.Float
 
+import Foreign.Storable
+
 --------------------------------------------------------------------------------
 
-data Vertex = SimpleVertex2 (GL.Vertex2 GL.GLfloat)
-            | SimpleVertex3 (GL.Vertex3 GL.GLfloat)
+data Vertex = SimpleVertex2 Vec2
+            | SimpleVertex3 Vec3
+
+toFloats :: Vertex -> [Float]
+toFloats (SimpleVertex2 v) = [_1 v, _2 v]
+toFloats (SimpleVertex3 v) = [_1 v, _2 v, _3 v]
 
 mkVertex3 :: Vec3 -> Vertex
-mkVertex3 v = SimpleVertex3 $ GL.Vertex3 (realToFrac $ _1 v) (realToFrac $ _2 v) (realToFrac $ _3 v)
+mkVertex3 v = SimpleVertex3 v

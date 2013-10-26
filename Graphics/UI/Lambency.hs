@@ -9,7 +9,7 @@ module Graphics.UI.Lambency (
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Graphics.Rendering.OpenGL as GL
 
-import Graphics.Rendering.Lambency
+import qualified Graphics.Rendering.Lambency as LR
 
 import Control.Applicative
 import Control.Monad (unless, when)
@@ -22,6 +22,7 @@ makeWindow width height title = do
   r <- GLFW.init
   unless r $ return ()
   m <- GLFW.createWindow width height title Nothing Nothing
+  LR.initLambency
   case m of
     Nothing -> return ()
     (Just win) -> GLFW.makeContextCurrent m
@@ -40,7 +41,7 @@ charCallback win c = do
   putStrLn [c]
   hFlush stdout
 
-run :: GLFW.Window -> [ RenderObject ] -> IO ()
+run :: GLFW.Window -> [ LR.RenderObject ] -> IO ()
 run win objs = do
   GLFW.pollEvents
   keyState <- GLFW.getKey win GLFW.Key'Q
@@ -49,7 +50,7 @@ run win objs = do
     _ -> return ()
   GL.clearColor GL.$= GL.Color4 0.0 0.0 0.5 1
   GL.clear [GL.ColorBuffer]
-  sequence_ $ render <$> objs
+  sequence_ $ LR.render <$> objs
   GL.flush
   GLFW.swapBuffers win
   q <- GLFW.windowShouldClose win

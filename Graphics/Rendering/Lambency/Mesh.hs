@@ -17,11 +17,11 @@ data Mesh = Mesh { vertices :: [Vec3] }
 
 instance Renderable Mesh where
   createRenderObject Mesh { vertices = vs } = do
-    ro <- renderObjectWithVertices $ map mkVertex3 vs
+    ro <- createROWithVertices $ map mkVertex3 vs
     return ro
   createRenderObject NMesh { vertices = vs,
                normals = ns } = do
-    ro <- renderObjectWithVertices $ map mkVertex3 vs
+    ro <- createROWithVertices $ map mkVertex3 vs
     return ro
 
 makeTriangle :: Mesh
