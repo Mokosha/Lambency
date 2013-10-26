@@ -7,6 +7,7 @@ Try the Example:
 --------
 
 From the source directory:
+
     cabal install --user
     cd Examples
     cabal configure
