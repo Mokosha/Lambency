@@ -23,7 +23,7 @@ initLambency :: IO ()
 initLambency = do
   vaos <- GL.genObjectNames 1
   case vaos of
-    vao : vaos -> do
+    vao : _ -> do
       let vaoBind = GL.bindVertexArrayObject
         in
        vaoBind GL.$= (Just vao)

@@ -13,7 +13,6 @@ import Graphics.Rendering.Lambency.Vertex
 
 import Data.Array.IO
 import Data.Array.Storable
-import Data.Vect.Float
 import Foreign.Ptr
 import Foreign.Storable
 
@@ -30,7 +29,7 @@ createROWithVertices vs =
   let
     flts = mconcat $ toFloats <$> vs
     ptrsize [] = toEnum 0
-    ptrsize (x:xs) = toEnum $ length flts * (sizeOf x)
+    ptrsize xs = toEnum $ length flts * (sizeOf $ head xs)
   in
    do
      [vbo] <- GL.genObjectNames 1

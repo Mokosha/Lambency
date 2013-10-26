@@ -12,8 +12,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.Lambency as LR
 
 import Control.Applicative
-import Control.Monad (unless, when)
-import System.IO
+import Control.Monad (unless)
 
 --------------------------------------------------------------------------------
 
@@ -25,7 +24,7 @@ makeWindow width height title = do
   LR.initLambency
   case m of
     Nothing -> return ()
-    (Just win) -> GLFW.makeContextCurrent m
+    (Just _) -> GLFW.makeContextCurrent m
   return m
 
 destroyWindow :: Maybe GLFW.Window -> IO ()
@@ -35,11 +34,6 @@ destroyWindow m = do
       GLFW.destroyWindow win
     Nothing -> return ()
   GLFW.terminate  
-
-charCallback :: GLFW.Window -> Char -> IO ()
-charCallback win c = do
-  putStrLn [c]
-  hFlush stdout
 
 run :: GLFW.Window -> [ LR.RenderObject ] -> IO ()
 run win objs = do

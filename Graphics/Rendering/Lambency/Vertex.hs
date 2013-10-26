@@ -6,10 +6,7 @@ module Graphics.Rendering.Lambency.Vertex (
 
 --------------------------------------------------------------------------------
 
-import qualified Graphics.Rendering.OpenGL as GL
 import Data.Vect.Float
-
-import Foreign.Storable
 
 --------------------------------------------------------------------------------
 
