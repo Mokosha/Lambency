@@ -16,8 +16,6 @@ import Data.Array.Storable
 import Foreign.Ptr
 import Foreign.Storable
 
-import Control.Applicative
-import Data.Monoid
 --------------------------------------------------------------------------------
 
 data RenderObject = RenderObject {
@@ -27,7 +25,9 @@ data RenderObject = RenderObject {
 createROWithVertices :: [Vertex] -> IO (RenderObject)
 createROWithVertices vs =
   let
-    flts = mconcat $ toFloats <$> vs
+    flts :: [Float]
+    flts = vs >>= toFloats
+    ptrsize :: (Storable a) => [a] -> GL.GLsizeiptr
     ptrsize [] = toEnum 0
     ptrsize xs = toEnum $ length flts * (sizeOf $ head xs)
   in
@@ -46,13 +46,12 @@ render :: RenderObject -> IO ()
 render ro =
   let
     vloc = GL.AttribLocation 0
+    vadesc = GL.VertexArrayDescriptor 3 GL.Float 0 (nullPtr :: Ptr Float)
   in
    do
      GL.vertexAttribArray vloc GL.$= GL.Enabled
      GL.bindBuffer GL.ArrayBuffer GL.$= (Just $ vertexBufferObject ro)
-     GL.vertexAttribPointer vloc GL.$= (GL.KeepIntegral, GL.VertexArrayDescriptor 3 GL.Float 0 (nullPtr :: Ptr Float))
-     putStrLn "Crash"
+     GL.vertexAttribPointer vloc GL.$= (GL.ToFloat, vadesc)
      GL.drawArrays GL.Triangles 0 3
-     putStrLn "No crash"
      GL.vertexAttribArray vloc GL.$= GL.Disabled
     
