@@ -10,8 +10,6 @@ import qualified Data.ByteString as BS
 
 import qualified Graphics.Rendering.Lambency.Utils as Utils
 
-import Control.Applicative
-
 --------------------------------------------------------------------------------
 
 type Shader = GL.Program
@@ -38,11 +36,14 @@ loadShader vss fss gss = do
       return $ Just prg
   where
    compileShader :: GL.ShaderType -> (Maybe FilePath) -> IO(Maybe GL.Shader)
-   compileShader sTy ss = case ss
-                       of Nothing -> return Nothing
-                          (Just fp) -> do
-                            sid <- GL.createShader sTy
-                            fileSrc <- BS.readFile fp
-                            GL.shaderSourceBS sid GL.$= fileSrc
-                            GL.compileShader sid
-                            return (Just sid)
+   compileShader sTy ss =
+     case ss
+       of Nothing -> return Nothing
+          (Just fp) -> do
+            putStrLn $ "Compiling " ++ (show sTy) ++ ": " ++ fp
+            sid <- GL.createShader sTy
+            fileSrc <- BS.readFile fp
+            GL.shaderSourceBS sid GL.$= fileSrc
+            GL.compileShader sid
+            putStrLn =<< (GL.get $ GL.shaderInfoLog sid)
+            return (Just sid)

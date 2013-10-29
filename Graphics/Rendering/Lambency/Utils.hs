@@ -10,16 +10,20 @@ import GHC.Paths
 import System.Directory
 import System.Environment
 import System.FilePath
+import qualified System.FilePath.Find as Find
 import System.IO.Error
+import Control.Applicative
 --------------------------------------------------------------------------------
 fixDescription :: String -> String
 fixDescription s = let
+  ls = lines s
   desc = idxOf "description:"
   cgry = idxOf "category:"
+  (todesc, tocgry) = splitAt (desc + 1) ls
   in
-   unlines $ take (cgry - desc) . drop desc $ lines s
+   unlines $ todesc ++ (drop (cgry - desc - 1) tocgry)
   where
-    idxOf s = case (findIndex (\x -> s `isPrefixOf` x) (lines s)) of
+    idxOf pfx = case (findIndex (\x -> pfx `isPrefixOf` x) $ lines s) of
       Nothing -> 0
       Just sth -> sth
 
@@ -27,17 +31,18 @@ getPkgInfo :: FilePath -> IO InstalledPackageInfo
 getPkgInfo fp = do
   putStrLn $ "Reading package info: " ++ fp
   fileContents <- readFile fp
-  putStrLn $ fixDescription fileContents
-  putStrLn $ show $ sourcePackageId ((read fileContents) :: InstalledPackageInfo)
-  return . read =<< readFile fp
+  let fixed = fixDescription fileContents
+  putStrLn . show $ ((read fileContents) :: InstalledPackageInfo)
+  return . read . fixDescription =<< readFile fp
 
 getPkgInfos :: IO [InstalledPackageInfo]
 getPkgInfos = do
 
   global_conf_dir <- do let dir = takeDirectory $ takeDirectory ghc_pkg
-                            path = dir </> "package.conf.d"
-                        exists <- doesDirectoryExist path
-                        if exists then return path
+                            predicate = Find.fileName Find.==? "package.conf.d"
+                        paths <- Find.find Find.always predicate dir
+                        exists <- doesDirectoryExist $ head paths
+                        if exists then return $ head paths
                           else ioError $ userError "Can't find package.conf.d"
 
   global_confs <- do files <- getDirectoryContents global_conf_dir

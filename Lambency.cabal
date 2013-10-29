@@ -29,6 +29,7 @@ library
                        OpenGL >2.9,
                        vect == 0.4.*,
                        filepath,
+                       filemanip,
                        bytestring,
                        directory,
                        ghc-paths,
