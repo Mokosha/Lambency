@@ -53,9 +53,6 @@ addShaderToRenderObject ro shdr =
   RenderObject { shaderProgram = Just shdr,
                  vertexBufferObject = (vertexBufferObject ro) }
 
-class Renderable a where
-  createRenderObject :: a -> IO (RenderObject)
-
 render :: RenderObject -> IO ()
 render ro =
   let
@@ -69,4 +66,7 @@ render ro =
      GL.vertexAttribPointer vloc GL.$= (GL.ToFloat, vadesc)
      GL.drawArrays GL.Triangles 0 3
      GL.vertexAttribArray vloc GL.$= GL.Disabled
-    
+
+class Renderable a where
+  createRenderObject :: a -> IO (RenderObject)
+
