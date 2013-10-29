@@ -7,7 +7,10 @@ module Graphics.Rendering.Lambency (
   Renderable,
   render,
   
-  makeTriangle
+  makeTriangle,
+
+  Shader,
+  loadShader
   ) where
 
 --------------------------------------------------------------------------------
@@ -16,6 +19,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 
 import Graphics.Rendering.Lambency.Mesh
 import Graphics.Rendering.Lambency.Renderable
+import Graphics.Rendering.Lambency.Shader
 
 --------------------------------------------------------------------------------
 

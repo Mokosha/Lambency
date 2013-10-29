@@ -10,6 +10,7 @@ module Graphics.Rendering.Lambency.Renderable (
 
 import qualified Graphics.Rendering.OpenGL as GL
 import Graphics.Rendering.Lambency.Vertex
+import Graphics.Rendering.Lambency.Shader
 
 import Data.Array.IO
 import Data.Array.Storable
@@ -19,6 +20,7 @@ import Foreign.Storable
 --------------------------------------------------------------------------------
 
 data RenderObject = RenderObject {
+  shaderProgram :: Maybe Shader,
   vertexBufferObject :: GL.BufferObject
 }
 
@@ -37,7 +39,14 @@ createROWithVertices vs =
      varr <- newListArray (0, length flts - 1) flts
      withStorableArray varr (\ptr ->
        GL.bufferData GL.ArrayBuffer GL.$= (ptrsize flts, ptr, GL.StaticDraw))
-     return RenderObject { vertexBufferObject = vbo }
+     prg <- loadShader (Just "simple.vs") (Just "simple.fs") Nothing
+     return RenderObject { shaderProgram = prg,
+                           vertexBufferObject = vbo }
+
+addShaderToRenderObject :: RenderObject -> Shader -> RenderObject
+addShaderToRenderObject ro shdr =
+  RenderObject { shaderProgram = Just shdr,
+                 vertexBufferObject = (vertexBufferObject ro) }
 
 class Renderable a where
   createRenderObject :: a -> IO (RenderObject)
@@ -49,6 +58,7 @@ render ro =
     vadesc = GL.VertexArrayDescriptor 3 GL.Float 0 (nullPtr :: Ptr Float)
   in
    do
+     GL.currentProgram GL.$= (shaderProgram ro)
      GL.vertexAttribArray vloc GL.$= GL.Enabled
      GL.bindBuffer GL.ArrayBuffer GL.$= (Just $ vertexBufferObject ro)
      GL.vertexAttribPointer vloc GL.$= (GL.ToFloat, vadesc)
