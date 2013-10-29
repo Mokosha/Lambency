@@ -12,6 +12,8 @@ import qualified Graphics.Rendering.OpenGL as GL
 import Graphics.Rendering.Lambency.Vertex
 import Graphics.Rendering.Lambency.Shader
 
+import Paths_lambency
+
 import Data.Array.IO
 import Data.Array.Storable
 import Foreign.Ptr
@@ -39,7 +41,10 @@ createROWithVertices vs =
      varr <- newListArray (0, length flts - 1) flts
      withStorableArray varr (\ptr ->
        GL.bufferData GL.ArrayBuffer GL.$= (ptrsize flts, ptr, GL.StaticDraw))
-     prg <- loadShader (Just "simple.vs") (Just "simple.fs") Nothing
+
+     defaultVertexShader <- getDataFileName "simple.vs"
+     defaultFragmentShader <- getDataFileName "simple.fs"
+     prg <- loadShader (Just defaultVertexShader) (Just defaultFragmentShader) Nothing
      return RenderObject { shaderProgram = prg,
                            vertexBufferObject = vbo }
 

@@ -8,8 +8,6 @@ module Graphics.Rendering.Lambency.Shader (
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Data.ByteString as BS
 
-import qualified Graphics.Rendering.Lambency.Utils as Utils
-
 --------------------------------------------------------------------------------
 
 type Shader = GL.Program
@@ -40,10 +38,11 @@ loadShader vss fss gss = do
      case ss
        of Nothing -> return Nothing
           (Just fp) -> do
-            putStrLn $ "Compiling " ++ (show sTy) ++ ": " ++ fp
+            putStr $ "Compiling " ++ (show sTy) ++ ": " ++ fp
             sid <- GL.createShader sTy
             fileSrc <- BS.readFile fp
             GL.shaderSourceBS sid GL.$= fileSrc
             GL.compileShader sid
-            putStrLn =<< (GL.get $ GL.shaderInfoLog sid)
+            shaderLog <- GL.get $ GL.shaderInfoLog sid
+            if shaderLog == "" then return () else putStrLn shaderLog
             return (Just sid)

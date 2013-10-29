@@ -16,15 +16,24 @@ import Control.Monad (unless)
 
 --------------------------------------------------------------------------------
 
+errorCallback :: GLFW.Error -> String -> IO()
+errorCallback e s = putStrLn $ "GLFW Error: " ++ (show e ++ s)
+
 makeWindow :: Int -> Int -> String -> IO (Maybe GLFW.Window)
 makeWindow width height title = do
+  putStr "Initializing GLFW..."
   r <- GLFW.init
   unless r $ return ()
+  putStrLn "Done"
+  GLFW.setErrorCallback $ Just errorCallback
+  putStr $ "Creating window of size (" ++ (show width) ++ ", " ++ (show height) ++ ")..."
   m <- GLFW.createWindow width height title Nothing Nothing
-  LR.initLambency
+  case m of Nothing -> ioError $ userError "Failed to create window!"
+            Just _ -> putStrLn "Done."
   case m of
     Nothing -> return ()
     (Just _) -> GLFW.makeContextCurrent m
+  LR.initLambency
   return m
 
 destroyWindow :: Maybe GLFW.Window -> IO ()
