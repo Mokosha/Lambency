@@ -38,7 +38,7 @@ loadShader vss fss gss = do
      case ss
        of Nothing -> return Nothing
           (Just fp) -> do
-            putStr $ "Compiling " ++ (show sTy) ++ ": " ++ fp
+            putStrLn $ "Compiling " ++ (show sTy) ++ ": " ++ fp
             sid <- GL.createShader sTy
             fileSrc <- BS.readFile fp
             GL.shaderSourceBS sid GL.$= fileSrc
