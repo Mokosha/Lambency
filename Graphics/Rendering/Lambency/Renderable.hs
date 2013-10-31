@@ -71,9 +71,7 @@ render c ro =
        Just prg -> do
          (GL.UniformLocation mvpLoc) <- GL.get $ GL.uniformLocation prg "mvpMatrix"
          mvpArr <- newListArray (0 :: Int, 15) (map realToFrac $ getViewProjMatrix c)
-         -- Transpose the matrix because we store it in row-major order,
-         -- but OpenGL wants it in column major...
-         withStorableArray mvpArr (\ptr -> GLRaw.glUniformMatrix4fv mvpLoc 1 1 ptr)
+         withStorableArray mvpArr (\ptr -> GLRaw.glUniformMatrix4fv mvpLoc 1 0 ptr)
 
      -- Enable vertex array
      GL.vertexAttribArray vloc GL.$= GL.Enabled

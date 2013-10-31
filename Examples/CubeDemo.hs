@@ -11,8 +11,7 @@ import Data.Vect.Float
 
 main :: IO ()
 main = let
-  pos = Vec3 0 4 (-3)
-  -- dir = toNormalUnsafe $ Vec3 0 0 1
+  pos = Vec3 4 3 3
   dir = (mkNormal . neg) pos
   camera =
     (flip LR.setDirection) dir

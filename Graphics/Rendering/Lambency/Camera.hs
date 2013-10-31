@@ -12,23 +12,8 @@ import Data.Vect.Float.Util.Dim4
 
 --------------------------------------------------------------------------------
 
-instance Eq Vec3 where
-  (==) (Vec3 a b c) (Vec3 d e f) = (a == d) && (b == e) && (c == f)
-
-genTransMatrix :: Vec3 -> Ortho4
-genTransMatrix p =
-  transpose . toOrthoUnsafe $ Mat4 vec4X vec4Y vec4Z (extendWith 1.0 $ neg p)
-
-genRotMatrix :: Normal3 -> Ortho4
-genRotMatrix n = let
-  nv = fromNormal n
-  axis = vec3Z &^ nv
-  agl = angle nv vec3Z
-  in
-   if axis == (Vec3 0 0 0) then
-     one
-   else
-     toOrthoUnsafe . (extendWith 1) $ rotMatrix3 axis agl
+instance Eq Vec4 where
+  (==) (Vec4 a b c g) (Vec4 d e f h) = (a == d) && (b == e) && (c == f) && (g == h)
 
 class Camera c where
   getPosition :: c -> Vec3
@@ -36,6 +21,9 @@ class Camera c where
 
   getDirection :: c -> Normal3
   setDirection :: c -> Normal3 -> c
+
+  getUpDirection :: c -> Normal3
+  setUpDirection :: c -> Normal3 -> c
 
   getNearPlane :: c -> Float
   setNearPlane :: c -> Float -> c
@@ -45,24 +33,30 @@ class Camera c where
 
   getProjMatrix :: c -> Mat4
 
+genViewMatrix :: Camera c => c -> Mat4
+genViewMatrix c = let
+  dir = (getDirection c)
+  side = crossprod dir $ getUpDirection c
+  up = side &^ dir
+  in
+   if (f side) == zero then
+     one
+   else
+     transpose $ Mat4 (f side) (f up) (neg $ f dir) (extendWith 1.0 $ neg (getPosition c))
+  where f = extendZero . fromNormal
+
 getViewProjMatrix :: Camera c => c -> [Float]
 getViewProjMatrix c = let
   pm = getProjMatrix c
-  pos = getPosition c
-  dir = getDirection c
-  -- !SPEED! We can probably construct this ourselves
-  -- instead of using utility functions to generate it...
-  viewMatrix = (genTransMatrix pos) .*. (genRotMatrix dir)
-  Mat4 r1 r2 r3 r4 = (.*.) pm $ fromOrtho viewMatrix
+  vm = genViewMatrix c
+  Mat4 r1 r2 r3 r4 = pm .*. vm
   in
-   (d [r1]) ++ (d [r2]) ++ (d [r3]) ++ (d [r4])
-   where d :: [Vec4] -> [Float]
-         d = destructVec4
---     pm .*. (genTransMatrix pos) .*. (genRotMatrix dir)
+   destructVec4 [r1, r2, r3, r4]
 
 data OrthoCamera = Ortho {
   position :: Vec3,
   direction :: Normal3,
+  upDirection :: Normal3,
   left :: Float,
   right :: Float,
   top :: Float,
@@ -73,8 +67,9 @@ data OrthoCamera = Ortho {
 
 simpleOrthoCamera :: OrthoCamera
 simpleOrthoCamera = Ortho {
-  position = Vec3 0 0 0,
-  direction = toNormalUnsafe $ Vec3 0 0 1,
+  position = zero,
+  direction = toNormalUnsafe $ neg vec3Z,
+  upDirection = toNormalUnsafe vec3Y,
   left = -10,
   right = 10,
   top = 10,
@@ -85,52 +80,19 @@ simpleOrthoCamera = Ortho {
 
 instance Camera OrthoCamera where
   getPosition = position
-  setPosition c pos = Ortho {
-    position = pos,
-    direction = direction c,
-    left = left c,
-    right = right c,
-    top = top c,
-    bottom = bottom c,
-    near = near c,
-    far = far c
-  }
+  setPosition c pos = (\cam -> cam { position = pos }) c
   
   getDirection = direction
-  setDirection c dir = Ortho {
-    position = position c,
-    direction = dir,
-    left = left c,
-    right = right c,
-    top = top c,
-    bottom = bottom c,
-    near = near c,
-    far = far c
-  }
+  setDirection c dir = (\cam -> cam { direction = dir}) c
+
+  getUpDirection = upDirection
+  setUpDirection c dir = (\cam -> cam { upDirection = dir}) c
   
   getNearPlane = near
-  setNearPlane c n = Ortho {
-    position = position c,
-    direction = direction c,
-    left = left c,
-    right = right c,
-    top = top c,
-    bottom = bottom c,
-    near = n,
-    far = far c
-  }
+  setNearPlane c n = (\cam -> cam { near = n }) c
 
   getFarPlane = far
-  setFarPlane c f = Ortho {
-    position = position c,
-    direction = direction c,
-    left = left c,
-    right = right c,
-    top = top c,
-    bottom = bottom c,
-    near = near c,
-    far = f
-  }
+  setFarPlane c f = (\cam -> cam { far = f }) c
 
   getProjMatrix c = let
     t = top c
