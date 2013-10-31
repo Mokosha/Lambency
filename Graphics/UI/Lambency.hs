@@ -2,7 +2,7 @@ module Graphics.UI.Lambency (
   makeWindow,
   destroyWindow,
   run
-  ) where
+) where
 
 --------------------------------------------------------------------------------
 
@@ -44,8 +44,8 @@ destroyWindow m = do
     Nothing -> return ()
   GLFW.terminate  
 
-run :: GLFW.Window -> [ LR.RenderObject ] -> IO ()
-run win objs = do
+run :: LR.Camera c => GLFW.Window -> c -> [ LR.RenderObject ] -> IO ()
+run win camera objs = do
   GLFW.pollEvents
   keyState <- GLFW.getKey win GLFW.Key'Q
   case keyState of
@@ -53,8 +53,8 @@ run win objs = do
     _ -> return ()
   GL.clearColor GL.$= GL.Color4 0.0 0.0 0.5 1
   GL.clear [GL.ColorBuffer]
-  sequence_ $ LR.render <$> objs
+  sequence_ $ LR.render camera <$> objs
   GL.flush
   GLFW.swapBuffers win
   q <- GLFW.windowShouldClose win
-  unless q $ run win objs
+  unless q $ run win camera objs

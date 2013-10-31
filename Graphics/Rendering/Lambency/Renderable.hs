@@ -9,8 +9,10 @@ module Graphics.Rendering.Lambency.Renderable (
 --------------------------------------------------------------------------------
 
 import qualified Graphics.Rendering.OpenGL as GL
+import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
 import Graphics.Rendering.Lambency.Vertex
 import Graphics.Rendering.Lambency.Shader
+import Graphics.Rendering.Lambency.Camera
 
 import Paths_lambency
 
@@ -53,18 +55,35 @@ addShaderToRenderObject ro shdr =
   RenderObject { shaderProgram = Just shdr,
                  vertexBufferObject = (vertexBufferObject ro) }
 
-render :: RenderObject -> IO ()
-render ro =
+render :: Camera c => c -> RenderObject -> IO ()
+render c ro =
   let
     vloc = GL.AttribLocation 0
     vadesc = GL.VertexArrayDescriptor 3 GL.Float 0 (nullPtr :: Ptr Float)
   in
    do
+     -- Set current shader program
      GL.currentProgram GL.$= (shaderProgram ro)
+
+     -- Allocate memory for float list for MVP matrix...
+     case (shaderProgram ro) of
+       Nothing -> return ()
+       Just prg -> do
+         (GL.UniformLocation mvpLoc) <- GL.get $ GL.uniformLocation prg "mvpMatrix"
+         mvpArr <- newListArray (0 :: Int, 15) (map realToFrac $ getViewProjMatrix c)
+         -- Transpose the matrix because we store it in row-major order,
+         -- but OpenGL wants it in column major...
+         withStorableArray mvpArr (\ptr -> GLRaw.glUniformMatrix4fv mvpLoc 1 1 ptr)
+
+     -- Enable vertex array
      GL.vertexAttribArray vloc GL.$= GL.Enabled
      GL.bindBuffer GL.ArrayBuffer GL.$= (Just $ vertexBufferObject ro)
      GL.vertexAttribPointer vloc GL.$= (GL.ToFloat, vadesc)
+
+     -- Render
      GL.drawArrays GL.Triangles 0 3
+
+     -- Disable vertex array
      GL.vertexAttribArray vloc GL.$= GL.Disabled
 
 class Renderable a where
