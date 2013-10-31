@@ -50,10 +50,12 @@ createROWithVertices vs =
      return RenderObject { shaderProgram = prg,
                            vertexBufferObject = vbo }
 
+{---
 addShaderToRenderObject :: RenderObject -> Shader -> RenderObject
 addShaderToRenderObject ro shdr =
   RenderObject { shaderProgram = Just shdr,
                  vertexBufferObject = (vertexBufferObject ro) }
+---}
 
 render :: Camera c => c -> RenderObject -> IO ()
 render c ro =
