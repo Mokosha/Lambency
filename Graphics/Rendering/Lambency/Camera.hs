@@ -1,6 +1,7 @@
 module Graphics.Rendering.Lambency.Camera (
   Camera(..),
-  OrthoCamera(..),
+  CameraType(..),
+  GameCamera,
   simpleOrthoCamera,
   getViewProjMatrix,
   renderCamera
@@ -63,68 +64,70 @@ getViewProjMatrix c = let
   in
    destructVec4 [r1, r2, r3, r4]
 
-data OrthoCamera = Ortho {
-  camObject :: GameObject (),
-  upDirection :: Normal3,
-  left :: Float,
-  right :: Float,
-  top :: Float,
-  bottom :: Float,
-  near :: Float,
-  far :: Float
+data CameraType =
+  Ortho {
+    upDirection :: Normal3,
+    left :: Float,
+    right :: Float,
+    top :: Float,
+    bottom :: Float,
+    near :: Float,
+    far :: Float
+    }
+
+newtype GameCamera = GameCamera (GameObject CameraType)
+
+simpleOrthoCamera :: GameCamera
+simpleOrthoCamera = GameCamera GameObject {
+  position = Vec3 0 0 0,
+  orientation = unitU,
+  renderObject = Nothing,
+  gameObject = Ortho {
+    upDirection = toNormalUnsafe vec3Y,
+    left = -10,
+    right = 10,
+    top = 10,
+    bottom = -10,
+    near = 0.1,
+    far = 1000.0
+    },
+  update = (\t a -> Just a),
+  collide = (\a as -> Just a)
 }
 
-simpleOrthoCamera :: OrthoCamera
-simpleOrthoCamera = Ortho {
-  camObject = GameObject {
-     position = Vec3 0 0 0,
-     orientation = unitU,
-     renderObject = Nothing,
-     gameObject = (),
-     update = (\t a -> Just a),
-     collide = (\a as -> Just a)
-  },
-  upDirection = toNormalUnsafe vec3Y,
-  left = -10,
-  right = 10,
-  top = 10,
-  bottom = -10,
-  near = 0.1,
-  far = 1000.0
-}
-
-instance Camera OrthoCamera where
-  getPosition = (position . camObject)
-  setPosition c pos = (\cam -> cam { camObject = (\obj -> obj {position = pos}) (camObject c) }) c
+instance Camera GameCamera where
+  getPosition (GameCamera c) = position c
+  setPosition (GameCamera c) pos = GameCamera $ (\cam -> cam {position = pos}) c
   
-  getDirection c = toNormalUnsafe $ actU (orientation . camObject $ c) (neg vec3Z)
-  setDirection c dir = (\cam -> cam { camObject = (\obj -> obj {orientation = dir2quat dir}) (camObject c) }) c
+  getDirection (GameCamera c) = toNormalUnsafe $ actU (orientation c) (neg vec3Z)
+  setDirection (GameCamera c) dir = GameCamera $ (\cam -> cam { orientation = dir2quat dir }) c
     where dir2quat :: Normal3 -> UnitQuaternion
-          dir2quat n = let m = toNormalUnsafe $ neg vec3Z
-                           cross = n &^ m
-                           cv = fromNormal cross
-                       in
-                        if (fromNormal cross) == zero then
-                          if _3 (fromNormal n) > 0 then rotU vec3Y pi else unitU
-                        else
-                          mkU . fromQ $ normalizeQ . toQ $ Vec4 (_1 cv) (_2 cv) (_3 cv) ((+1) $ n &. m)
+          dir2quat n =
+            let m = toNormalUnsafe $ neg vec3Z
+                cross = n &^ m
+                cv = fromNormal cross
+            in
+             if (fromNormal cross) == zero then
+               if _3 (fromNormal n) > 0 then rotU vec3Y pi else unitU
+             else
+               mkU . fromQ $ normalizeQ . toQ $ Vec4 (_1 cv) (_2 cv) (_3 cv) ((+1) $ n &. m)
 
-  getUpDirection = upDirection
-  setUpDirection c dir = (\cam -> cam { upDirection = dir}) c
+  getUpDirection (GameCamera c) = (upDirection . gameObject) c
+  setUpDirection (GameCamera c) dir = GameCamera $ (\cam -> cam { gameObject = (\go -> go {upDirection = dir}) $ gameObject c }) c
 
-  getNearPlane = near
-  setNearPlane c n = (\cam -> cam { near = n }) c
+  getNearPlane (GameCamera c) = (near . gameObject) c
+  setNearPlane (GameCamera c) n = GameCamera $ (\cam -> cam { gameObject = (\go -> go {near = n}) $ gameObject c }) c
 
-  getFarPlane = far
-  setFarPlane c f = (\cam -> cam { far = f }) c
+  getFarPlane (GameCamera c) = (far . gameObject) c
+  setFarPlane (GameCamera c) f = GameCamera $ (\cam -> cam { gameObject = (\go -> go {far = f}) $ gameObject c }) c
 
-  getProjMatrix c = let
-    t = top c
-    b = bottom c
-    l = left c
-    r = right c
-    n = near c
-    f = far c
+  getProjMatrix (GameCamera c) = let
+    t = (top . gameObject) c
+    b = (bottom . gameObject) c
+    l = (left . gameObject) c
+    r = (right . gameObject) c
+    n = (near . gameObject) c
+    f = (far . gameObject) c
     in
      Mat4
      (Vec4 (2.0 / (r - l)) 0 0 (-(r+l)/(r-l)))
