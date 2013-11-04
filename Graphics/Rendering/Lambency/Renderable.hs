@@ -1,15 +1,13 @@
 module Graphics.Rendering.Lambency.Renderable (
   Material(..),
   RenderObject(..),
-  Renderable,
+  Renderable(..),
   createROWithVertices,
-  createRenderObject,
   ) where
 
 --------------------------------------------------------------------------------
 
 import qualified Graphics.Rendering.OpenGL as GL
-import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
 import Graphics.Rendering.Lambency.Vertex
 import Graphics.Rendering.Lambency.Shader
 
@@ -17,7 +15,6 @@ import Paths_lambency
 
 import Data.Array.IO
 import Data.Array.Storable
-import Foreign.Ptr
 import Foreign.Storable
 
 --------------------------------------------------------------------------------

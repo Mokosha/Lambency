@@ -2,7 +2,6 @@ module Graphics.Rendering.Lambency.Camera (
   Camera(..),
   CameraType(..),
   GameCamera(..),
-  simpleOrthoCamera,
   mkOrthoCamera,
   renderCamera
 ) where
@@ -23,15 +22,6 @@ import Data.Array.Storable
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
 --------------------------------------------------------------------------------
-
-instance Eq Vec4 where
-  (==) (Vec4 a b c g) (Vec4 d e f h) = (a == d) && (b == e) && (c == f) && (g == h)
-
-instance Eq Vec3 where
-  (==) (Vec3 a b c) (Vec3 d e f) = (a == d) && (b == e) && (c == f)
-
-instance Eq Normal3 where
-  (==) n1 n2 = (fromNormal n1) == (fromNormal n2)
 
 data CameraType =
   Ortho {
@@ -81,7 +71,7 @@ genViewMatrix c = let
   side = crossprod dir $ getUpDirection c
   up = side &^ dir
   in
-   if (f side) == zero then
+   if compareZero side then
      one
    else
      transpose $ Mat4 (f side) (f up) (neg $ f dir) (extendWith 1.0 $ neg (getPosition c))
@@ -96,24 +86,6 @@ getViewProjMatrix c = let
    destructVec4 [r1, r2, r3, r4]
 
 newtype GameCamera = GameCamera (GameObject CameraType)
-
-simpleOrthoCamera :: GameCamera
-simpleOrthoCamera = GameCamera GameObject {
-  position = Vec3 0 0 0,
-  orientation = unitU,
-  renderObject = Nothing,
-  gameObject = Ortho {
-    upDirection = toNormalUnsafe vec3Y,
-    left = -10,
-    right = 10,
-    top = 10,
-    bottom = -10,
-    near = 0.1,
-    far = 1000.0
-    },
-  update = (\t a -> Just a),
-  collide = (\a as -> Just a)
-}
 
 instance Camera GameCamera where
   getPosition (GameCamera c) = position c

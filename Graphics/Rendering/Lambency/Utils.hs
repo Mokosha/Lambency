@@ -1,4 +1,5 @@
 module Graphics.Rendering.Lambency.Utils (
+  compareZero,
   quatFromVecs
 ) where
 
@@ -8,6 +9,9 @@ import Data.Vect.Float
 import Data.Vect.Float.Util.Quaternion
 
 --------------------------------------------------------------------------------
+
+compareZero :: (DotProd v) => v -> Bool
+compareZero v = (abs $ v &. v) < 1e-6
 
 quatFromVecs :: Normal3 -> Normal3 -> UnitQuaternion
 quatFromVecs n1 n2 =
