@@ -21,11 +21,12 @@ data-dir:            Graphics/Rendering/Lambency/Shaders
 library
   exposed-modules:     Graphics.UI.Lambency
                        Graphics.Rendering.Lambency
-  other-modules:       Graphics.Rendering.Lambency.Mesh
+  other-modules:       Graphics.Rendering.Lambency.Camera
+                       Graphics.Rendering.Lambency.Mesh
+                       Graphics.Rendering.Lambency.Object
                        Graphics.Rendering.Lambency.Renderable
-                       Graphics.Rendering.Lambency.Vertex
                        Graphics.Rendering.Lambency.Shader
-                       Graphics.Rendering.Lambency.Camera
+                       Graphics.Rendering.Lambency.Vertex
                        Paths_lambency
   ghc-options:         -Wall
   build-depends:       base == 4.5.*,

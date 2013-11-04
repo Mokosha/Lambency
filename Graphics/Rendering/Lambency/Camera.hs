@@ -3,17 +3,27 @@ module Graphics.Rendering.Lambency.Camera (
   OrthoCamera(..),
   simpleOrthoCamera,
   getViewProjMatrix,
+  renderCamera
 ) where
 
 --------------------------------------------------------------------------------
 
 import Data.Vect.Float
 import Data.Vect.Float.Util.Dim4
+import Data.Vect.Float.Util.Quaternion
 
+import Graphics.Rendering.Lambency.Object
+import Graphics.Rendering.Lambency.Renderable
 --------------------------------------------------------------------------------
 
 instance Eq Vec4 where
   (==) (Vec4 a b c g) (Vec4 d e f h) = (a == d) && (b == e) && (c == f) && (g == h)
+
+instance Eq Vec3 where
+  (==) (Vec3 a b c) (Vec3 d e f) = (a == d) && (b == e) && (c == f)
+
+instance Eq Normal3 where
+  (==) n1 n2 = (fromNormal n1) == (fromNormal n2)
 
 class Camera c where
   getPosition :: c -> Vec3
@@ -54,8 +64,7 @@ getViewProjMatrix c = let
    destructVec4 [r1, r2, r3, r4]
 
 data OrthoCamera = Ortho {
-  position :: Vec3,
-  direction :: Normal3,
+  camObject :: BaseObject,
   upDirection :: Normal3,
   left :: Float,
   right :: Float,
@@ -67,8 +76,11 @@ data OrthoCamera = Ortho {
 
 simpleOrthoCamera :: OrthoCamera
 simpleOrthoCamera = Ortho {
-  position = zero,
-  direction = toNormalUnsafe $ neg vec3Z,
+  camObject = BaseObject {
+     position = Vec3 0 0 0,
+     orientation = unitU,
+     renderObj = Nothing
+  },
   upDirection = toNormalUnsafe vec3Y,
   left = -10,
   right = 10,
@@ -79,15 +91,24 @@ simpleOrthoCamera = Ortho {
 }
 
 instance Camera OrthoCamera where
-  getPosition = position
-  setPosition c pos = (\cam -> cam { position = pos }) c
+  getPosition = (position . camObject)
+  setPosition c pos = (\cam -> cam { camObject = (\obj -> obj {position = pos}) (camObject c) }) c
   
-  getDirection = direction
-  setDirection c dir = (\cam -> cam { direction = dir}) c
+  getDirection c = toNormalUnsafe $ actU (orientation . camObject $ c) (neg vec3Z)
+  setDirection c dir = (\cam -> cam { camObject = (\obj -> obj {orientation = dir2quat dir}) (camObject c) }) c
+    where dir2quat :: Normal3 -> UnitQuaternion
+          dir2quat n = let m = toNormalUnsafe $ neg vec3Z
+                           cross = n &^ m
+                           cv = fromNormal cross
+                       in
+                        if (fromNormal cross) == zero then
+                          if _3 (fromNormal n) > 0 then rotU vec3Y pi else unitU
+                        else
+                          mkU . fromQ $ normalizeQ . toQ $ Vec4 (_1 cv) (_2 cv) (_3 cv) ((+1) $ n &. m)
 
   getUpDirection = upDirection
   setUpDirection c dir = (\cam -> cam { upDirection = dir}) c
-  
+
   getNearPlane = near
   setNearPlane c n = (\cam -> cam { near = n }) c
 
@@ -107,3 +128,10 @@ instance Camera OrthoCamera where
      (Vec4 0 (2.0 / (t - b)) 0 (-(t+b)/(t-b)))
      (Vec4 0 0 (2.0 / (f - n)) (-(f+n)/(f-n)))
      (Vec4 0 0 0 1)
+
+
+renderCamera :: Camera c => c -> RenderObject -> IO ()
+renderCamera c ro = do
+  (beforeRender . material) ro
+  (render ro) ro
+  (afterRender . material) ro

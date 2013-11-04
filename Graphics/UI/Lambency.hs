@@ -14,6 +14,8 @@ import qualified Graphics.Rendering.Lambency as LR
 import Control.Applicative
 import Control.Monad (unless)
 
+import Data.Maybe (catMaybes)
+
 --------------------------------------------------------------------------------
 
 errorCallback :: GLFW.Error -> String -> IO()
@@ -44,7 +46,7 @@ destroyWindow m = do
     Nothing -> return ()
   GLFW.terminate  
 
-run :: LR.Camera c => GLFW.Window -> c -> [ LR.RenderObject ] -> IO ()
+run :: LR.Camera c => GLFW.Window -> c -> [ LR.GameObject a ] -> IO ()
 run win camera objs = do
   GLFW.pollEvents
   keyState <- GLFW.getKey win GLFW.Key'Q
@@ -53,8 +55,8 @@ run win camera objs = do
     _ -> return ()
   GL.clearColor GL.$= GL.Color4 0.0 0.0 0.5 1
   GL.clear [GL.ColorBuffer]
-  sequence_ $ LR.render camera <$> objs
+  sequence_ $ (<$>) (LR.renderCamera camera) $ catMaybes $ LR.getRenderObject <$> objs
   GL.flush
   GLFW.swapBuffers win
   q <- GLFW.windowShouldClose win
-  unless q $ run win camera objs
+  unless q $ run win camera $ LR.interactObjs $ LR.updateObjs 0.1 objs

@@ -1,9 +1,9 @@
 module Graphics.Rendering.Lambency.Renderable (
-  RenderObject,
+  Material(..),
+  RenderObject(..),
   Renderable,
   createROWithVertices,
   createRenderObject,
-  render
   ) where
 
 --------------------------------------------------------------------------------
@@ -12,7 +12,6 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
 import Graphics.Rendering.Lambency.Vertex
 import Graphics.Rendering.Lambency.Shader
-import Graphics.Rendering.Lambency.Camera
 
 import Paths_lambency
 
@@ -23,13 +22,34 @@ import Foreign.Storable
 
 --------------------------------------------------------------------------------
 
+data Material =
+  SimpleMaterial { shaderProgram :: Maybe Shader,
+                   beforeRender :: IO (),
+                   afterRender :: IO () }
+
+createSimpleMaterial :: IO(Material)
+createSimpleMaterial = do
+  defaultVertexShader <- getDataFileName "simple.vs"
+  defaultFragmentShader <- getDataFileName "simple.fs"
+  prg <- loadShader (Just defaultVertexShader) (Just defaultFragmentShader) Nothing
+  return $ SimpleMaterial {
+    shaderProgram = prg,
+    beforeRender = do
+      GL.currentProgram GL.$= prg
+      GL.vertexAttribArray (GL.AttribLocation 0) GL.$= GL.Enabled,
+    afterRender = do
+      GL.vertexAttribArray (GL.AttribLocation 0) GL.$= GL.Disabled
+    }
+
 data RenderObject = RenderObject {
-  shaderProgram :: Maybe Shader,
-  vertexBufferObject :: GL.BufferObject
+  material :: Material,
+  nVerts :: GL.NumComponents,
+  vertexBufferObject :: GL.BufferObject,
+  render :: RenderObject -> IO ()
 }
 
-createROWithVertices :: [Vertex] -> IO (RenderObject)
-createROWithVertices vs =
+createROWithVertices :: [Vertex] -> (RenderObject -> IO ()) -> IO (RenderObject)
+createROWithVertices vs renderFunc =
   let
     flts :: [Float]
     flts = vs >>= toFloats
@@ -43,12 +63,11 @@ createROWithVertices vs =
      varr <- newListArray (0, length flts - 1) flts
      withStorableArray varr (\ptr ->
        GL.bufferData GL.ArrayBuffer GL.$= (ptrsize flts, ptr, GL.StaticDraw))
-
-     defaultVertexShader <- getDataFileName "simple.vs"
-     defaultFragmentShader <- getDataFileName "simple.fs"
-     prg <- loadShader (Just defaultVertexShader) (Just defaultFragmentShader) Nothing
-     return RenderObject { shaderProgram = prg,
-                           vertexBufferObject = vbo }
+     simpleMaterial <- createSimpleMaterial
+     return RenderObject { material = simpleMaterial,
+                           nVerts = fromIntegral (length vs),
+                           vertexBufferObject = vbo,
+                           render = renderFunc }
 
 {---
 addShaderToRenderObject :: RenderObject -> Shader -> RenderObject
@@ -56,35 +75,6 @@ addShaderToRenderObject ro shdr =
   RenderObject { shaderProgram = Just shdr,
                  vertexBufferObject = (vertexBufferObject ro) }
 ---}
-
-render :: Camera c => c -> RenderObject -> IO ()
-render c ro =
-  let
-    vloc = GL.AttribLocation 0
-    vadesc = GL.VertexArrayDescriptor 3 GL.Float 0 (nullPtr :: Ptr Float)
-  in
-   do
-     -- Set current shader program
-     GL.currentProgram GL.$= (shaderProgram ro)
-
-     -- Allocate memory for float list for MVP matrix...
-     case (shaderProgram ro) of
-       Nothing -> return ()
-       Just prg -> do
-         (GL.UniformLocation mvpLoc) <- GL.get $ GL.uniformLocation prg "mvpMatrix"
-         mvpArr <- newListArray (0 :: Int, 15) (map realToFrac $ getViewProjMatrix c)
-         withStorableArray mvpArr (\ptr -> GLRaw.glUniformMatrix4fv mvpLoc 1 0 ptr)
-
-     -- Enable vertex array
-     GL.vertexAttribArray vloc GL.$= GL.Enabled
-     GL.bindBuffer GL.ArrayBuffer GL.$= (Just $ vertexBufferObject ro)
-     GL.vertexAttribPointer vloc GL.$= (GL.ToFloat, vadesc)
-
-     -- Render
-     GL.drawArrays GL.Triangles 0 3
-
-     -- Disable vertex array
-     GL.vertexAttribArray vloc GL.$= GL.Disabled
 
 class Renderable a where
   createRenderObject :: a -> IO (RenderObject)
