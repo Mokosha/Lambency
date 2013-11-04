@@ -55,7 +55,7 @@ run win camera objs = do
     _ -> return ()
   GL.clearColor GL.$= GL.Color4 0.0 0.0 0.5 1
   GL.clear [GL.ColorBuffer]
-  sequence_ $ (<$>) (LR.renderCamera camera) $ catMaybes $ LR.getRenderObject <$> objs
+  sequence_ $ (<$>) (LR.renderCamera camera) $ catMaybes $ LR.renderObject <$> objs
   GL.flush
   GLFW.swapBuffers win
   q <- GLFW.windowShouldClose win

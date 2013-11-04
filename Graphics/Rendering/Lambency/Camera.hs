@@ -64,7 +64,7 @@ getViewProjMatrix c = let
    destructVec4 [r1, r2, r3, r4]
 
 data OrthoCamera = Ortho {
-  camObject :: BaseObject,
+  camObject :: GameObject (),
   upDirection :: Normal3,
   left :: Float,
   right :: Float,
@@ -76,10 +76,13 @@ data OrthoCamera = Ortho {
 
 simpleOrthoCamera :: OrthoCamera
 simpleOrthoCamera = Ortho {
-  camObject = BaseObject {
+  camObject = GameObject {
      position = Vec3 0 0 0,
      orientation = unitU,
-     renderObj = Nothing
+     renderObject = Nothing,
+     gameObject = (),
+     update = (\t a -> Just a),
+     collide = (\a as -> Just a)
   },
   upDirection = toNormalUnsafe vec3Y,
   left = -10,
@@ -131,7 +134,7 @@ instance Camera OrthoCamera where
 
 
 renderCamera :: Camera c => c -> RenderObject -> IO ()
-renderCamera c ro = do
+renderCamera cam ro = do
   (beforeRender . material) ro
   (render ro) ro
   (afterRender . material) ro

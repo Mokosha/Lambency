@@ -24,10 +24,9 @@ main = let
     let triangle = LR.makeTriangle
     renderTri <- LR.createRenderObject triangle
     let triObj = LR.GameObject {
-          LR.baseObject = LR.BaseObject {
-             LR.position = Vec3 0 0 0,
-             LR.orientation = unitU,
-             LR.renderObj = Just renderTri },
+          LR.position = Vec3 0 0 0,
+          LR.orientation = unitU,
+          LR.renderObject = Just renderTri,
           LR.gameObject = Triangle,
           LR.update = (\t a -> Just a),
           LR.collide = (\a as -> Just a)

@@ -1,7 +1,5 @@
 module Graphics.Rendering.Lambency.Object (
-  BaseObject(..),
   GameObject(..),
-  getRenderObject,
   updateObjs,
   interactObjs,
 ) where
@@ -19,21 +17,14 @@ import Control.Applicative
 
 type Time = Double
 
-data BaseObject = BaseObject {
+data GameObject a = GameObject {
   position :: Vec3,
   orientation :: UnitQuaternion,
-  renderObj :: Maybe RenderObject
-}
-
-data GameObject a = GameObject {
-  baseObject :: BaseObject,
+  renderObject :: Maybe RenderObject,
   gameObject :: a,
   update :: Time -> a -> Maybe a,
   collide :: a -> [a] -> Maybe a
 }
-
-getRenderObject :: GameObject a -> Maybe RenderObject
-getRenderObject go = renderObj $ baseObject go
 
 filterMaybe :: (GameObject a, Maybe a) -> [GameObject a]
 filterMaybe (_, Nothing) = []
