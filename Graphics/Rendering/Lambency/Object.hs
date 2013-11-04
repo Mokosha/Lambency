@@ -13,6 +13,8 @@ import Data.Vect.Float.Util.Quaternion
 
 import Control.Applicative
 
+import Data.Maybe (catMaybes)
+
 --------------------------------------------------------------------------------
 
 type Time = Double
@@ -22,20 +24,12 @@ data GameObject a = GameObject {
   orientation :: UnitQuaternion,
   renderObject :: Maybe RenderObject,
   gameObject :: a,
-  update :: Time -> a -> Maybe a,
-  collide :: a -> [a] -> Maybe a
+  update :: Time -> GameObject a -> Maybe (GameObject a),
+  collide :: GameObject a -> [GameObject a] -> Maybe (GameObject a)
 }
 
-filterMaybe :: (GameObject a, Maybe a) -> [GameObject a]
-filterMaybe (_, Nothing) = []
-filterMaybe (obj, Just go) = [(\o -> o { gameObject = go }) obj]
-
 updateObjs :: Time -> [GameObject a] -> [GameObject a]
-updateObjs dt objs = do
-  newMaybeObjs <- (\obj -> (obj, update obj dt $ gameObject obj)) <$> objs
-  filterMaybe newMaybeObjs
+updateObjs dt objs = catMaybes $ (\obj -> update obj dt obj) <$> objs
 
 interactObjs :: [GameObject a] -> [GameObject a]
-interactObjs allobjs = do
-  newMaybeObjs <- (\obj -> (obj, (collide obj) (gameObject obj) (gameObject <$> allobjs))) <$> allobjs
-  filterMaybe newMaybeObjs
+interactObjs allobjs = catMaybes $ (\obj -> (collide obj) obj allobjs) <$> allobjs
