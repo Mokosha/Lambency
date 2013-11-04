@@ -27,6 +27,7 @@ library
                        Graphics.Rendering.Lambency.Renderable
                        Graphics.Rendering.Lambency.Shader
                        Graphics.Rendering.Lambency.Vertex
+                       Graphics.Rendering.Lambency.Utils
                        Paths_lambency
   ghc-options:         -Wall
   build-depends:       base == 4.5.*,

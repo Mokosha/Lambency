@@ -14,7 +14,7 @@ import qualified Graphics.Rendering.Lambency as LR
 import Control.Applicative
 import Control.Monad (unless)
 
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromJust)
 
 --------------------------------------------------------------------------------
 
@@ -46,7 +46,7 @@ destroyWindow m = do
     Nothing -> return ()
   GLFW.terminate  
 
-run :: LR.Camera c => GLFW.Window -> c -> [ LR.GameObject a ] -> IO ()
+run :: GLFW.Window -> LR.GameCamera -> [ LR.GameObject a ] -> IO ()
 run win camera objs = do
   GLFW.pollEvents
   keyState <- GLFW.getKey win GLFW.Key'Q
@@ -59,4 +59,9 @@ run win camera objs = do
   GL.flush
   GLFW.swapBuffers win
   q <- GLFW.windowShouldClose win
-  unless q $ run win camera $ LR.interactObjs $ LR.updateObjs 0.1 objs
+  unless q $ run win (updateCamera camera) $ LR.interactObjs $ LR.updateObjs dt objs
+  where
+    dt :: Double
+    dt = 0.05
+    updateCamera :: LR.GameCamera -> LR.GameCamera
+    updateCamera (LR.GameCamera c) = LR.GameCamera $ fromJust $ (LR.update c) dt c

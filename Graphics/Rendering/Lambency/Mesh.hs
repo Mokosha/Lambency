@@ -50,9 +50,6 @@ instance Renderable Mesh where
      case (shaderProgram ro) of
        Nothing -> return ()
        Just prg -> do
-         (GL.UniformLocation mvpLoc) <- GL.get $ GL.uniformLocation prg "mvpMatrix"
-         mvpArr <- newListArray (0 :: Int, 15) (map realToFrac $ getViewProjMatrix c)
-         withStorableArray mvpArr (\ptr -> GLRaw.glUniformMatrix4fv mvpLoc 1 0 ptr)
 --}
 
 
