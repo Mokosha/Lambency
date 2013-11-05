@@ -1,5 +1,6 @@
 module Graphics.Rendering.Lambency.Mesh (
-  makeTriangle
+  makeTriangle,
+  makeCube
 ) where
 
 --------------------------------------------------------------------------------
@@ -12,45 +13,83 @@ import Control.Applicative
 import qualified Graphics.Rendering.OpenGL as GL
 import Foreign.Ptr
 
+import Data.Int
 
 --------------------------------------------------------------------------------
 
-data Mesh = Mesh { vertices :: [Vec3] }
------          | NMesh { vertices :: [Vec3], normals :: [Vec3] } deriving (Show)
+data Mesh = Mesh { vertices :: [Vertex],
+                   indices :: [Int16] }
 
 makeTriangle :: Mesh
-makeTriangle = Mesh{vertices = mkVec3 <$> [ (-1, -1, 0), (1, -1, 0), (0, 1, 0)]}
+makeTriangle = Mesh {
+  vertices = mkVertex3 . mkVec3 <$> [ (-1, -1, 0), (1, -1, 0), (0, 1, 0)],
+  indices = [0, 1, 2]
+}
+
+makeCube :: Mesh
+makeCube = Mesh {
+  vertices = mkVertex3 . mkVec3 <$> [ 
+    -- Front face
+    (-1.0, -1.0,  1.0),
+    ( 1.0, -1.0,  1.0),
+    ( 1.0,  1.0,  1.0),
+    (-1.0,  1.0,  1.0),
+
+    -- Back face
+    (-1.0, -1.0, -1.0),
+    (-1.0,  1.0, -1.0),
+    ( 1.0,  1.0, -1.0),
+    ( 1.0, -1.0, -1.0),
+
+    -- Top face
+    (-1.0,  1.0, -1.0),
+    (-1.0,  1.0,  1.0),
+    ( 1.0,  1.0,  1.0),
+    ( 1.0,  1.0, -1.0),
+
+    -- Bottom face
+    (-1.0, -1.0, -1.0),
+    ( 1.0, -1.0, -1.0),
+    ( 1.0, -1.0,  1.0),
+    (-1.0, -1.0,  1.0),
+
+    -- Right face
+    ( 1.0, -1.0, -1.0),
+    ( 1.0,  1.0, -1.0),
+    ( 1.0,  1.0,  1.0),
+    ( 1.0, -1.0,  1.0),
+
+    -- Left face
+    (-1.0, -1.0, -1.0),
+    (-1.0, -1.0,  1.0),
+    (-1.0,  1.0,  1.0),
+    (-1.0,  1.0, -1.0)
+  ],
+  
+  indices = [
+    0,  1,  2,      0,  2,  3,    -- front
+    4,  5,  6,      4,  6,  7,    -- back
+    8,  9,  10,     8,  10, 11,   -- top
+    12, 13, 14,     12, 14, 15,   -- bottom
+    16, 17, 18,     16, 18, 19,   -- right
+    20, 21, 22,     20, 22, 23    -- left
+  ]
+}
 
 renderMesh :: RenderObject -> IO ()
-renderMesh ro = let
-  nv = nVerts ro
-  vloc = GL.AttribLocation 0
-  vadesc = GL.VertexArrayDescriptor 3 GL.Float 0 (nullPtr :: Ptr Float)
-  in
-   do
-     -- Bind appropriate buffers
-     GL.bindBuffer GL.ArrayBuffer GL.$= (Just $ vertexBufferObject ro)
-     GL.vertexAttribPointer vloc GL.$= (GL.ToFloat, vadesc)
+renderMesh ro =
+  let vadesc = GL.VertexArrayDescriptor 3 GL.Float 0 (nullPtr :: Ptr Float) in
+  do
+    -- Bind appropriate buffers
+    GL.bindBuffer GL.ArrayBuffer GL.$= (Just $ vertexBufferObject ro)
+    GL.vertexAttribPointer (GL.AttribLocation 0) GL.$= (GL.ToFloat, vadesc)
 
-     -- Render
-     GL.drawArrays GL.Triangles 0 nv
+    GL.bindBuffer GL.ElementArrayBuffer GL.$= (Just $ indexBufferObject ro)
+
+    -- Render
+    GL.drawElements GL.Triangles (nIndices ro) GL.UnsignedShort nullPtr
 
 instance Renderable Mesh where
   createRenderObject m = do
-    ro <- createROWithVertices (map mkVertex3 $ vertices m) renderMesh
+    ro <- createBasicRO (vertices m) (indices m) renderMesh
     return ro
-
-{--
-  let
-    SimpleMaterial{ shaderProgram = prog,
-                    beforeRender = br,
-                    afterRender = ar }  in
-   do
-     -- Allocate memory for float list for MVP matrix...
-     case (shaderProgram ro) of
-       Nothing -> return ()
-       Just prg -> do
---}
-
-
-
