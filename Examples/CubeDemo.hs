@@ -49,11 +49,11 @@ stationaryCamera = LR.GameCamera LR.GameObject {
 main :: IO ()
 main = do
   m <- L.makeWindow 640 480 "Cube Demo"
-  renderTriangle <- LR.createRenderObject LR.makeTriangle
+  ro <- LR.createRenderObject LR.makeTriangle
   let triObj = LR.GameObject {
         LR.position = Vec3 0 0 0,
         LR.orientation = unitU,
-        LR.renderObject = Just renderTriangle,
+        LR.renderObject = Just ro,
         LR.gameObject = Triangle,
         LR.update = (\t a -> Just a),
         LR.collide = (\a as -> Just a)}
