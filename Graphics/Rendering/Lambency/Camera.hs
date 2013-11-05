@@ -74,7 +74,7 @@ genViewMatrix c = let
    if compareZero side then
      one
    else
-     Mat4 (f side) (f up) (neg $ f dir) (extendWith 1.0 $ neg (getPosition c))
+     Mat4 (f side) (f up) (neg $ f dir) (extendWith 1.0 $ neg $ getPosition c)
   where f = extendZero . fromNormal
 
 getViewProjMatrix :: Camera c => c -> [Float]
@@ -94,7 +94,7 @@ instance Camera GameCamera where
   getDirection (GameCamera c) = toNormalUnsafe $ actU (orientation c) (neg vec3Z)
   setDirection (GameCamera c) dir = GameCamera $ (\cam -> cam { orientation = dir2quat dir }) c
     where dir2quat :: Normal3 -> UnitQuaternion
-          dir2quat n = quatFromVecs n $ (toNormalUnsafe . neg) vec3Z
+          dir2quat = quatFromVecs $ (toNormalUnsafe . neg) vec3Z
 
   getUpDirection (GameCamera c) = (upDirection . gameObject) c
   setUpDirection (GameCamera c) dir = GameCamera $ (\cam -> cam { gameObject = (\go -> go {upDirection = dir}) $ gameObject c }) c

@@ -18,7 +18,7 @@ kInitialCameraPosition = Vec3 0 0 5
 
 kInitialCameraDirection :: UnitQuaternion
 kInitialCameraDirection =
-  LR.quatFromVecs (mkNormal . neg $ kInitialCameraPosition) (toNormalUnsafe . neg $ vec3Z)
+  LR.quatFromVecs (toNormalUnsafe . neg $ vec3Z) (mkNormal . neg $ kInitialCameraPosition)
 
 kInitialOrthoCamera :: LR.CameraType
 kInitialOrthoCamera = LR.mkOrthoCamera (toNormalUnsafe vec3Y) (-10) 10 10 (-10) 0.1 1000.0
