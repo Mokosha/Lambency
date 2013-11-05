@@ -118,7 +118,7 @@ instance Camera GameCamera where
      Mat4
      (Vec4 (2.0 / (r - l)) 0 0 (-(r+l)/(r-l)))
      (Vec4 0 (2.0 / (t - b)) 0 (-(t+b)/(t-b)))
-     (Vec4 0 0 (2.0 / (f - n)) (-(f+n)/(f-n)))
+     (Vec4 0 0 ((-2.0) / (f - n)) (-(f+n)/(f-n)))
      (Vec4 0 0 0 1)
 
 
