@@ -74,14 +74,14 @@ genViewMatrix c = let
    if compareZero side then
      one
    else
-     transpose $ Mat4 (f side) (f up) (neg $ f dir) (extendWith 1.0 $ neg (getPosition c))
+     Mat4 (f side) (f up) (neg $ f dir) (extendWith 1.0 $ neg (getPosition c))
   where f = extendZero . fromNormal
 
 getViewProjMatrix :: Camera c => c -> [Float]
 getViewProjMatrix c = let
   pm = getProjMatrix c
   vm = genViewMatrix c
-  Mat4 r1 r2 r3 r4 = pm .*. vm
+  Mat4 r1 r2 r3 r4 = vm .*. pm
   in
    destructVec4 [r1, r2, r3, r4]
 
@@ -116,11 +116,10 @@ instance Camera GameCamera where
     f = (far . gameObject) c
     in
      Mat4
-     (Vec4 (2.0 / (r - l)) 0 0 (-(r+l)/(r-l)))
-     (Vec4 0 (2.0 / (t - b)) 0 (-(t+b)/(t-b)))
-     (Vec4 0 0 ((-2.0) / (f - n)) (-(f+n)/(f-n)))
-     (Vec4 0 0 0 1)
-
+     (Vec4 (2.0 / (r - l)) 0 0 0)
+     (Vec4 0 (2.0 / (t - b)) 0 0)
+     (Vec4 0 0 ((-2.0) / (f - n)) 0)
+     (Vec4 (-(r+l)/(r-l)) (-(t+b)/(t-b)) (-(f+n)/(f-n)) 1)
 
 renderCamera :: Camera c => c -> RenderObject -> IO ()
 renderCamera cam ro = do
