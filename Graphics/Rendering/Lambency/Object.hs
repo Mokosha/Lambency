@@ -1,5 +1,6 @@
 module Graphics.Rendering.Lambency.Object (
   GameObject(..),
+  updateGameObject,
   updateObjs,
   interactObjs,
 ) where
@@ -27,6 +28,9 @@ data GameObject a = GameObject {
   update :: Time -> GameObject a -> Maybe (GameObject a),
   collide :: GameObject a -> [GameObject a] -> Maybe (GameObject a)
 }
+
+updateGameObject :: GameObject a -> a -> GameObject a
+updateGameObject go val = (\obj -> obj { gameObject = val }) go
 
 updateObjs :: Time -> [GameObject a] -> [GameObject a]
 updateObjs dt objs = catMaybes $ (\obj -> update obj dt obj) <$> objs

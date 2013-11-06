@@ -99,21 +99,31 @@ newtype GameCamera = GameCamera (GameObject CameraType)
 
 instance Camera GameCamera where
   getPosition (GameCamera c) = position c
-  setPosition (GameCamera c) pos = GameCamera $ (\cam -> cam {position = pos}) c
+  setPosition (GameCamera c) pos =
+    GameCamera $ (\cam -> cam {position = pos}) c
   
-  getDirection (GameCamera c) = toNormalUnsafe $ actU (orientation c) (neg vec3Z)
-  setDirection (GameCamera c) dir = GameCamera $ (\cam -> cam { orientation = dir2quat dir }) c
+  getDirection (GameCamera c) =
+    toNormalUnsafe $ actU (orientation c) (neg vec3Z)
+
+  setDirection (GameCamera c) dir =
+    GameCamera $ (\cam -> cam { orientation = dir2quat dir }) c
     where dir2quat :: Normal3 -> UnitQuaternion
           dir2quat = quatFromVecs $ (toNormalUnsafe . neg) vec3Z
 
   getUpDirection (GameCamera c) = (upDirection . gameObject) c
-  setUpDirection (GameCamera c) dir = GameCamera $ (\cam -> cam { gameObject = (\go -> go {upDirection = dir}) $ gameObject c }) c
+  setUpDirection (GameCamera c) dir =
+    GameCamera $
+    updateGameObject c $ (\go -> go {upDirection = dir}) $ gameObject c
 
   getNearPlane (GameCamera c) = (near . gameObject) c
-  setNearPlane (GameCamera c) n = GameCamera $ (\cam -> cam { gameObject = (\go -> go {near = n}) $ gameObject c }) c
+  setNearPlane (GameCamera c) n =
+    GameCamera $
+    updateGameObject c $ (\go -> go {near = n}) $ gameObject c
 
   getFarPlane (GameCamera c) = (far . gameObject) c
-  setFarPlane (GameCamera c) f = GameCamera $ (\cam -> cam { gameObject = (\go -> go {far = f}) $ gameObject c }) c
+  setFarPlane (GameCamera c) f =
+    GameCamera $
+    updateGameObject c $ (\go -> go {far = f}) $ gameObject c
 
   getGameObject (GameCamera c) = c
 
