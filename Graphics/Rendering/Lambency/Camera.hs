@@ -70,12 +70,22 @@ genViewMatrix c = let
   dir = (getDirection c)
   side = crossprod dir $ getUpDirection c
   up = side &^ dir
+  te :: Normal3 -> Float
+  te n = neg (getPosition c) &. (fn n)
   in
    if compareZero side then
      one
    else
-     Mat4 (f side) (f up) (neg $ f dir) (extendWith 1.0 $ neg $ getPosition c)
-  where f = extendZero . fromNormal
+     -- rotation part
+     Mat4 (en side) (en up) (neg $ en dir) $
+     -- translation part
+     Vec4 (te side) (te up) (- te dir) 1.0
+  where
+    ez :: Vec3 -> Vec4
+    ez = extendZero
+    fn :: Normal3 -> Vec3
+    fn = fromNormal
+    en = ez . fn
 
 getViewProjMatrix :: Camera c => c -> [Float]
 getViewProjMatrix c = let

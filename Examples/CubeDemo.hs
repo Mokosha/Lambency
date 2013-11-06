@@ -14,7 +14,7 @@ import GHC.Float (double2Float)
 data CubeDemoObject = Triangle
 
 kInitialCameraPosition :: Vec3
-kInitialCameraPosition = Vec3 0 0 5
+kInitialCameraPosition = Vec3 4 3 3
 
 kInitialCameraDirection :: UnitQuaternion
 kInitialCameraDirection =
@@ -49,7 +49,7 @@ stationaryCamera = LR.GameCamera LR.GameObject {
 main :: IO ()
 main = do
   m <- L.makeWindow 640 480 "Cube Demo"
-  ro <- LR.createRenderObject LR.makeTriangle
+  ro <- LR.createRenderObject LR.makeCube
   let triObj = LR.GameObject {
         LR.position = Vec3 0 0 0,
         LR.orientation = unitU,
