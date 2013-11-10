@@ -1,16 +1,96 @@
 module Graphics.Rendering.Lambency.Shader (
   Shader,
+  ShaderVarTy(..),
+  ShaderVarValue(..),
+  UniformVar(..),
+  AttribVar(..),
+  ShaderVar(..),
+  isUniform,
+  getUniforms,
+  setUniformVar,
   loadShader
 ) where
 
 --------------------------------------------------------------------------------
 
+import Graphics.Rendering.Lambency.Texture
+import Graphics.Rendering.Lambency.Utils
+
 import qualified Graphics.Rendering.OpenGL as GL
+import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
 import qualified Data.ByteString as BS
 
+import Data.Vect.Float
+
+import Data.Array.IO
+import Data.Array.Storable
 --------------------------------------------------------------------------------
 
 type Shader = GL.Program
+
+data ShaderVarTy = Matrix3Ty
+                 | Matrix4Ty
+                 | Matrix3ListTy
+                 | Matrix4ListTy
+                 | Vector3Ty
+                 | Vector4Ty
+                 | Vector3ListTy
+                 | Vector4ListTy
+                 | IntTy
+                 | IntListTy
+                 | FloatTy
+                 | FloatListTy
+                 | TextureTy
+                 deriving (Show, Eq)
+
+data ShaderVarValue = Matrix3Val Mat3
+                    | Matrix4Val Mat4
+                    | Matrix3ListVal [Mat3]
+                    | Matrix4ListVal [Mat4]
+                    | Vector3Val Vec3
+                    | Vector4Val Vec4
+                    | Vector3ListVal [Vec3]
+                    | Vector4ListVal [Vec4]
+                    | IntVal Int
+                    | IntListVal [Int]
+                    | FloatVal Float
+                    | FloatListVal [Float]
+                    | TextureVal TextureHandle
+                    deriving (Show)
+
+data UniformVar = UniformVar ShaderVarTy String deriving (Show, Eq)
+data AttribVar = AttribVar ShaderVarTy GL.AttribLocation deriving (Show, Eq)
+
+data ShaderVar = Uniform UniformVar
+               | Attribute AttribVar
+               deriving (Show, Eq)
+
+instance Ord ShaderVar where
+  s1 `compare` s2 = (show s1) `compare` (show s2)
+
+isUniform :: ShaderVar -> Bool
+isUniform (Uniform _) = True
+isUniform (Attribute _) = False
+
+getUniforms :: [ShaderVar] -> [UniformVar]
+getUniforms vs = do
+  us <- filter isUniform vs
+  (\x -> case x of Uniform u -> [u]
+                   Attribute _ -> []) us
+
+setUniformVar :: UniformVar -> ShaderVarValue -> IO ()
+setUniformVar (UniformVar Matrix4Ty varName) (Matrix4Val mat)  = do
+  mprg <- GL.get GL.currentProgram
+  case mprg of
+    Nothing -> return ()
+    Just prg -> do
+      (GL.UniformLocation matLoc) <- GL.get $ GL.uniformLocation prg varName
+      if matLoc == (-1) then return ()
+        else do
+        matArr <- newListArray (0 :: Int, 15) (map realToFrac (destructMat4 mat))
+        withStorableArray matArr (\ptr -> GLRaw.glUniformMatrix4fv matLoc 1 0 ptr)
+
+setUniformVar _ _ = ioError $ userError "Uniform not supported"
 
 loadShader :: (Maybe FilePath) -> (Maybe FilePath) -> (Maybe FilePath) -> IO(Maybe Shader)
 loadShader vss fss gss = do

@@ -1,12 +1,14 @@
 module Graphics.Rendering.Lambency.Utils (
   compareZero,
-  quatFromVecs
+  quatFromVecs,
+  destructMat4
 ) where
 
 --------------------------------------------------------------------------------
 
 import Data.Vect.Float
 import Data.Vect.Float.Util.Quaternion
+import Data.Vect.Float.Util.Dim4
 
 --------------------------------------------------------------------------------
 
@@ -33,3 +35,9 @@ quatFromVecs n1 n2
                  else
                    rotU nv pi
       | otherwise = unitU     
+
+destructMat4 :: Mat4 -> [Float]
+destructMat4 mat = let
+  Mat4 r1 r2 r3 r4 = mat
+  in
+   destructVec4 [r1, r2, r3, r4]

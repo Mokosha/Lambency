@@ -1,77 +1,147 @@
 module Graphics.Rendering.Lambency.Camera (
+  CameraLocation(..),
+  CameraViewDistance(..),
   Camera(..),
-  CameraType(..),
   GameCamera(..),
   mkOrthoCamera,
-  renderCamera
+  getViewProjMatrix,
+
+  getCamLoc,
+  setCamLoc,
+  getCamDist,
+  setCamDist,
+  getCamPos,
+  setCamPos,
+  getCamDir,
+  setCamDir,
+  getCamUp,
+  setCamUp,
+  getCamNear,
+  setCamNear,
+  getCamFar,
+  setCamFar
 ) where
-
 --------------------------------------------------------------------------------
-
-import Data.Vect.Float
-import Data.Vect.Float.Util.Dim4
-import Data.Vect.Float.Util.Quaternion
-
-import Graphics.Rendering.Lambency.Object
-import Graphics.Rendering.Lambency.Renderable
 import Graphics.Rendering.Lambency.Utils
 
-import Data.Array.IO
-import Data.Array.Storable
-
-import qualified Graphics.Rendering.OpenGL as GL
-import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
+import Data.Vect.Float
 --------------------------------------------------------------------------------
 
-data CameraType =
+data CameraLocation = CameraLocation {
+  camPos :: Vec3,
+  camDir :: Normal3,
+  camUp :: Normal3
+} deriving (Show)
+
+data CameraViewDistance = CameraViewDistance {
+  near :: Float,
+  far :: Float
+} deriving (Show)
+
+data Camera =
   Ortho {
-    upDirection :: Normal3,
+    orthoPos :: CameraLocation,
     left :: Float,
     right :: Float,
     top :: Float,
     bottom :: Float,
-    near :: Float,
-    far :: Float
-    }
+    orthoDist :: CameraViewDistance
+  } deriving (Show)
 
-mkOrthoCamera :: Normal3 -> Float -> Float -> Float -> Float -> Float -> Float -> CameraType
-mkOrthoCamera up l r t b n f = Ortho {
-  upDirection = up,
+type Time = Double
+data GameCamera = GameCamera Camera (Time -> Camera -> Camera)
+
+mkOrthoCamera :: Vec3 -> Normal3 -> Normal3 ->
+                 Float -> Float -> Float -> Float -> Float -> Float ->
+                 Camera
+mkOrthoCamera pos dir up l r t b n f = Ortho {
+  orthoPos = CameraLocation {
+     camPos = pos,
+     camDir = dir,
+     camUp = up
+  },
   left = l,
   right = r,
   top = t,
   bottom = b,
-  near = n,
-  far = f
+  orthoDist = CameraViewDistance {
+    near = n,
+    far = f
+  }
 }
 
-class Camera c where
-  getPosition :: c -> Vec3
-  setPosition :: c -> Vec3 -> c
+getCamLoc :: Camera -> CameraLocation
+getCamLoc c = case c of
+  Ortho { orthoPos = p, left = _, right = _, top = _, bottom = _, orthoDist = _} ->
+    p
 
-  getDirection :: c -> Normal3
-  setDirection :: c -> Normal3 -> c
+setCamLoc :: Camera -> CameraLocation -> Camera
+setCamLoc c loc = case c of 
+  Ortho { orthoPos = _, left = _, right = _, top = _, bottom = _, orthoDist = _} ->
+    (\cam -> cam { orthoPos = loc }) c
 
-  getUpDirection :: c -> Normal3
-  setUpDirection :: c -> Normal3 -> c
+getCamDist :: Camera -> CameraViewDistance
+getCamDist c = case c of
+  Ortho { orthoPos = _, left = _, right = _, top = _, bottom = _, orthoDist = d} ->
+    d
 
-  getNearPlane :: c -> Float
-  setNearPlane :: c -> Float -> c
+setCamDist :: Camera -> CameraViewDistance -> Camera
+setCamDist c dist = case c of 
+  Ortho { orthoPos = _, left = _, right = _, top = _, bottom = _, orthoDist = _} ->
+    (\cam -> cam { orthoDist = dist }) c
 
-  getFarPlane :: c -> Float
-  setFarPlane :: c -> Float -> c
+getCamPos :: Camera -> Vec3
+getCamPos = (camPos . getCamLoc)
 
-  getGameObject :: c -> GameObject CameraType
+setCamPos :: Camera -> Vec3 -> Camera
+setCamPos c p = let
+  loc = getCamLoc c
+  in
+   setCamLoc c $ (\l -> l { camPos = p }) loc
 
-  getProjMatrix :: c -> Mat4
+getCamDir :: Camera -> Normal3
+getCamDir = (camDir . getCamLoc)
 
-genViewMatrix :: Camera c => c -> Mat4
-genViewMatrix c = let
-  dir = (getDirection c)
-  side = crossprod dir $ getUpDirection c
+setCamDir :: Camera -> Normal3 -> Camera
+setCamDir c d = let
+  loc = getCamLoc c
+  in
+   setCamLoc c $ (\l -> l { camDir = d }) loc
+
+getCamUp :: Camera -> Normal3
+getCamUp = (camUp . getCamLoc)
+
+setCamUp :: Camera -> Normal3 -> Camera
+setCamUp c u = let
+  loc = getCamLoc c
+  in
+   setCamLoc c $ (\l -> l { camUp = u }) loc
+
+getCamNear :: Camera -> Float
+getCamNear = (near . getCamDist)
+
+setCamNear :: Camera -> Float -> Camera
+setCamNear c n = let
+  dist = getCamDist c
+  in
+   setCamDist c $ (\d -> d { near = n }) dist
+
+getCamFar :: Camera -> Float
+getCamFar = (far . getCamDist)
+
+setCamFar :: Camera -> Float -> Camera
+setCamFar c f = let
+  dist = getCamDist c
+  in
+   setCamDist c $ (\d -> d { far = f }) dist
+
+getViewMatrix :: Camera -> Mat4
+getViewMatrix c = let
+  dir = getCamDir c
+  side = crossprod dir $ getCamUp c
   up = side &^ dir
   te :: Normal3 -> Float
-  te n = neg (getPosition c) &. (fn n)
+  te n = neg (getCamPos c) &. (fn n)
   in
    if compareZero side then
      one
@@ -87,72 +157,16 @@ genViewMatrix c = let
     fn = fromNormal
     en = ez . fn
 
-getViewProjMatrix :: Camera c => c -> [Float]
-getViewProjMatrix c = let
-  pm = getProjMatrix c
-  vm = genViewMatrix c
-  Mat4 r1 r2 r3 r4 = vm .*. pm
+getProjMatrix :: Camera -> Mat4
+getProjMatrix Ortho { orthoPos = _, top = t, bottom = b, left = l, right = r, orthoDist = dist } = let
+  n = near dist
+  f = far dist
   in
-   destructVec4 [r1, r2, r3, r4]
+   Mat4
+   (Vec4 (2.0 / (r - l)) 0 0 0)
+   (Vec4 0 (2.0 / (t - b)) 0 0)
+   (Vec4 0 0 ((-2.0) / (f - n)) 0)
+   (Vec4 (-(r+l)/(r-l)) (-(t+b)/(t-b)) (-(f+n)/(f-n)) 1)
 
-newtype GameCamera = GameCamera (GameObject CameraType)
-
-instance Camera GameCamera where
-  getPosition (GameCamera c) = position c
-  setPosition (GameCamera c) pos =
-    GameCamera $ (\cam -> cam {position = pos}) c
-  
-  getDirection (GameCamera c) =
-    toNormalUnsafe $ actU (orientation c) (neg vec3Z)
-
-  setDirection (GameCamera c) dir =
-    GameCamera $ (\cam -> cam { orientation = dir2quat dir }) c
-    where dir2quat :: Normal3 -> UnitQuaternion
-          dir2quat = quatFromVecs $ (toNormalUnsafe . neg) vec3Z
-
-  getUpDirection (GameCamera c) = (upDirection . gameObject) c
-  setUpDirection (GameCamera c) dir =
-    GameCamera $
-    updateGameObject c $ (\go -> go {upDirection = dir}) $ gameObject c
-
-  getNearPlane (GameCamera c) = (near . gameObject) c
-  setNearPlane (GameCamera c) n =
-    GameCamera $
-    updateGameObject c $ (\go -> go {near = n}) $ gameObject c
-
-  getFarPlane (GameCamera c) = (far . gameObject) c
-  setFarPlane (GameCamera c) f =
-    GameCamera $
-    updateGameObject c $ (\go -> go {far = f}) $ gameObject c
-
-  getGameObject (GameCamera c) = c
-
-  getProjMatrix (GameCamera c) = let
-    t = (top . gameObject) c
-    b = (bottom . gameObject) c
-    l = (left . gameObject) c
-    r = (right . gameObject) c
-    n = (near . gameObject) c
-    f = (far . gameObject) c
-    in
-     Mat4
-     (Vec4 (2.0 / (r - l)) 0 0 0)
-     (Vec4 0 (2.0 / (t - b)) 0 0)
-     (Vec4 0 0 ((-2.0) / (f - n)) 0)
-     (Vec4 (-(r+l)/(r-l)) (-(t+b)/(t-b)) (-(f+n)/(f-n)) 1)
-
-renderCamera :: Camera c => c -> RenderObject -> IO ()
-renderCamera cam ro = do
-  (beforeRender . material) ro
-
-  case (shaderProgram . material) ro of
-    Nothing -> return ()
-    Just prg -> do
-      (GL.UniformLocation mvpLoc) <- GL.get $ GL.uniformLocation prg "mvpMatrix"
-      if mvpLoc == (-1) then return ()
-        else do
-        mvpArr <- newListArray (0 :: Int, 15) (map realToFrac $ getViewProjMatrix cam)
-        withStorableArray mvpArr (\ptr -> GLRaw.glUniformMatrix4fv mvpLoc 1 0 ptr)
-
-  (render ro) ro
-  (afterRender . material) ro
+getViewProjMatrix :: Camera -> Mat4
+getViewProjMatrix c = (getViewMatrix c) .*. (getProjMatrix c)

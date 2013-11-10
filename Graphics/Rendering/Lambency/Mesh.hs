@@ -10,9 +10,6 @@ import Graphics.Rendering.Lambency.Vertex
 import Data.Vect.Float
 import Control.Applicative
 
-import qualified Graphics.Rendering.OpenGL as GL
-import Foreign.Ptr
-
 import Data.Int
 
 --------------------------------------------------------------------------------
@@ -76,20 +73,7 @@ makeCube = Mesh {
   ]
 }
 
-renderMesh :: RenderObject -> IO ()
-renderMesh ro =
-  let vadesc = GL.VertexArrayDescriptor 3 GL.Float 0 (nullPtr :: Ptr Float) in
-  do
-    -- Bind appropriate buffers
-    GL.bindBuffer GL.ArrayBuffer GL.$= (Just $ vertexBufferObject ro)
-    GL.vertexAttribPointer (GL.AttribLocation 0) GL.$= (GL.ToFloat, vadesc)
-
-    GL.bindBuffer GL.ElementArrayBuffer GL.$= (Just $ indexBufferObject ro)
-
-    -- Render
-    GL.drawElements GL.Triangles (nIndices ro) GL.UnsignedShort nullPtr
-
 instance Renderable Mesh where
   createRenderObject m = do
-    ro <- createBasicRO (vertices m) (indices m) renderMesh
+    ro <- createBasicRO (vertices m) (indices m)
     return ro

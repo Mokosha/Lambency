@@ -3,28 +3,29 @@ module Graphics.Rendering.Lambency.Object (
   updateGameObject,
   updateObjs,
   interactObjs,
+  renderCamera
 ) where
 
 --------------------------------------------------------------------------------
 
+import Graphics.Rendering.Lambency.Camera
+import Graphics.Rendering.Lambency.Material
 import Graphics.Rendering.Lambency.Renderable
-
-import Data.Vect.Float
-import Data.Vect.Float.Util.Quaternion
+import Graphics.Rendering.Lambency.Shader
 
 import Control.Applicative
 
 import Data.Maybe (catMaybes)
+import qualified Data.Map as Map
 
 --------------------------------------------------------------------------------
 
 type Time = Double
 
 data GameObject a = GameObject {
-  position :: Vec3,
-  orientation :: UnitQuaternion,
   renderObject :: Maybe RenderObject,
   gameObject :: a,
+  objSVMap :: Map.Map ShaderVar (a -> Camera -> ShaderVarValue),
   update :: Time -> GameObject a -> Maybe (GameObject a),
   collide :: GameObject a -> [GameObject a] -> Maybe (GameObject a)
 }
@@ -37,3 +38,30 @@ updateObjs dt objs = catMaybes $ (\obj -> update obj dt obj) <$> objs
 
 interactObjs :: [GameObject a] -> [GameObject a]
 interactObjs allobjs = catMaybes $ (\obj -> (collide obj) obj allobjs) <$> allobjs
+
+renderCamera :: Camera -> [GameObject a] -> IO ()
+renderCamera cam objs = mapM_ renderObj objs
+  where renderObj :: GameObject a -> IO ()
+        renderObj obj = let
+          
+          setShaderVar :: ShaderVar -> IO ()
+          setShaderVar v = case v of
+            Attribute _ -> return ()
+            Uniform u ->
+              let eval = (objSVMap obj) Map.! v
+                  val = eval (gameObject obj) cam
+              in setUniformVar u val
+
+          setShaderVars :: [ShaderVar] -> IO ()
+          setShaderVars = mapM_ setShaderVar
+
+          in
+           case renderObject obj of
+             Nothing -> return ()
+             Just ro -> do
+               let RenderPath mat prepasses = renderPath ro
+               -- !FIXME! actually render the prepasses
+               beforeRender mat
+               setShaderVars $ shaderVars mat
+               render ro
+               afterRender mat

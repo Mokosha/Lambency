@@ -8,56 +8,53 @@ import qualified Graphics.Rendering.Lambency as LR
 import Data.Vect.Float
 import Data.Vect.Float.Util.Quaternion
 
+import qualified Data.Map as Map
+
 import GHC.Float (double2Float)
 ---------------------------------------------------------------------------------
 
 data CubeDemoObject = Triangle
 
-kInitialCameraPosition :: Vec3
-kInitialCameraPosition = Vec3 4 3 3
+rotateCamera :: Double -> LR.Camera -> LR.Camera
+rotateCamera dt cam =
+  let newPos = actU (rotU vec3Y (double2Float dt)) (LR.getCamPos cam)
+      newDir = (mkNormal . neg) newPos
+  in flip LR.setCamDir newDir $ LR.setCamPos cam newPos
 
-kInitialCameraDirection :: UnitQuaternion
-kInitialCameraDirection =
-  LR.quatFromVecs (toNormalUnsafe . neg $ vec3Z) (mkNormal . neg $ kInitialCameraPosition)
+stillCamera :: Double -> LR.Camera -> LR.Camera
+stillCamera = \t c -> c
 
-kInitialOrthoCamera :: LR.CameraType
-kInitialOrthoCamera = LR.mkOrthoCamera (toNormalUnsafe vec3Y) (-10) 10 10 (-10) 0.1 1000.0
+kCamPos :: Vec3
+kCamPos = Vec3 4 3 3
 
-rotatingCamera :: LR.GameCamera
-rotatingCamera = LR.GameCamera LR.GameObject {
-  LR.position = kInitialCameraPosition,
-  LR.orientation = kInitialCameraDirection,
-  LR.renderObject = Nothing,
-  LR.gameObject = kInitialOrthoCamera,
-  LR.update = \t a -> let newPos = actU (rotU vec3Y (double2Float t)) (LR.position a)
-                          newDir = (mkNormal . neg) newPos
-                          (LR.GameCamera newCam) = flip LR.setDirection newDir $ LR.setPosition (LR.GameCamera a) newPos
-                      in Just newCam,
-  LR.collide = (\a as -> Just a)
-}
+kCamDir :: Normal3
+kCamDir = (mkNormal . neg) kCamPos
 
-stationaryCamera :: LR.GameCamera
-stationaryCamera = LR.GameCamera LR.GameObject {
-  LR.position = kInitialCameraPosition,
-  LR.orientation = kInitialCameraDirection,
-  LR.renderObject = Nothing,
-  LR.gameObject = kInitialOrthoCamera,
-  LR.update = \t a -> Just a,
-  LR.collide = (\a as -> Just a)
-}
+kCamUp :: Normal3
+kCamUp = mkNormal vec3Y
+
+demoCam :: LR.GameCamera
+demoCam = LR.GameCamera
+          (LR.mkOrthoCamera kCamPos kCamDir kCamUp (-10) 10 10 (-10) 0.1 1000.0)
+          rotateCamera
+
+demoSVMap :: Map.Map LR.ShaderVar (CubeDemoObject -> LR.Camera -> LR.ShaderVarValue)
+demoSVMap =
+  Map.insert (LR.Uniform (LR.UniformVar LR.Matrix4Ty "mvpMatrix"))
+             (\o c -> LR.Matrix4Val $ LR.getViewProjMatrix c)
+  Map.empty
 
 main :: IO ()
 main = do
   m <- L.makeWindow 640 480 "Cube Demo"
   ro <- LR.createRenderObject LR.makeCube
   let triObj = LR.GameObject {
-        LR.position = Vec3 0 0 0,
-        LR.orientation = unitU,
         LR.renderObject = Just ro,
         LR.gameObject = Triangle,
+        LR.objSVMap = demoSVMap,
         LR.update = (\t a -> Just a),
         LR.collide = (\a as -> Just a)}
   case m of
-    (Just win) -> L.run win rotatingCamera [triObj]
+    (Just win) -> L.run win demoCam [triObj]
     Nothing -> return ()
   L.destroyWindow m
