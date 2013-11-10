@@ -2,8 +2,6 @@ module Graphics.Rendering.Lambency.Shader (
   Shader,
   ShaderVarTy(..),
   ShaderVarValue(..),
-  UniformVar(..),
-  AttribVar(..),
   ShaderVar(..),
   isUniform,
   getUniforms,
@@ -58,28 +56,25 @@ data ShaderVarValue = Matrix3Val Mat3
                     | TextureVal TextureHandle
                     deriving (Show)
 
-data UniformVar = UniformVar ShaderVarTy String deriving (Show, Eq)
-data AttribVar = AttribVar ShaderVarTy GL.AttribLocation deriving (Show, Eq)
-
-data ShaderVar = Uniform UniformVar
-               | Attribute AttribVar
+data ShaderVar = Uniform ShaderVarTy String
+               | Attribute ShaderVarTy GL.AttribLocation
                deriving (Show, Eq)
 
 instance Ord ShaderVar where
   s1 `compare` s2 = (show s1) `compare` (show s2)
 
 isUniform :: ShaderVar -> Bool
-isUniform (Uniform _) = True
-isUniform (Attribute _) = False
+isUniform (Uniform _ _) = True
+isUniform _ = False
 
-getUniforms :: [ShaderVar] -> [UniformVar]
+getUniforms :: [ShaderVar] -> [ShaderVar]
 getUniforms vs = do
   us <- filter isUniform vs
-  (\x -> case x of Uniform u -> [u]
-                   Attribute _ -> []) us
+  (\x -> case x of (Uniform _ _) -> [x]
+                   _ -> []) us
 
-setUniformVar :: UniformVar -> ShaderVarValue -> IO ()
-setUniformVar (UniformVar Matrix4Ty varName) (Matrix4Val mat)  = do
+setUniformVar :: ShaderVar -> ShaderVarValue -> IO ()
+setUniformVar (Uniform Matrix4Ty varName) (Matrix4Val mat)  = do
   mprg <- GL.get GL.currentProgram
   case mprg of
     Nothing -> return ()

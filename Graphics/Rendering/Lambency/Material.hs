@@ -18,7 +18,7 @@ import Paths_lambency
 import Data.Maybe
 --------------------------------------------------------------------------------
 
-data MaterialRenderInput = MaterialRenderInput UniformVar TextureFormat Material
+data MaterialRenderInput = MaterialRenderInput ShaderVar TextureFormat Material
 data Material = Material Shader [ShaderVar] [MaterialRenderInput]
 
 shaderVars :: Material -> [ShaderVar]
@@ -31,8 +31,8 @@ createSimpleMaterial = do
   prg <- loadShader (Just defaultVertexShader) (Just defaultFragmentShader) Nothing
   return $ Material
     (fromJust prg)
-    [Uniform $ UniformVar Matrix4Ty "mvpMatrix",
-     Attribute $ AttribVar FloatListTy (GL.AttribLocation 0)]
+    [Uniform Matrix4Ty "mvpMatrix",
+     Attribute FloatListTy (GL.AttribLocation 0)]
     []
 
 beforeRender :: Material -> IO ()
@@ -44,8 +44,8 @@ beforeRender (Material shdr vars _) = do
   mapM_ enableAttribute vars
   where enableAttribute :: ShaderVar -> IO ()
         enableAttribute v = case v of
-          Uniform _ -> return ()
-          Attribute (AttribVar _ loc) -> GL.vertexAttribArray loc GL.$= GL.Enabled
+          Uniform _ _ -> return ()
+          Attribute _ loc -> GL.vertexAttribArray loc GL.$= GL.Enabled
 
 afterRender :: Material -> IO ()
 afterRender mat = do
@@ -53,5 +53,5 @@ afterRender mat = do
   mapM_ disableAttribute (shaderVars mat)
   where disableAttribute :: ShaderVar -> IO ()
         disableAttribute v = case v of
-          Uniform _ -> return ()
-          Attribute (AttribVar _ loc) -> GL.vertexAttribArray loc GL.$= GL.Disabled
+          Uniform _ _ -> return ()
+          Attribute _ loc -> GL.vertexAttribArray loc GL.$= GL.Disabled

@@ -20,7 +20,7 @@ import Foreign.Storable
 import Foreign.Ptr
 --------------------------------------------------------------------------------
 
-data BoundRender = BoundRender UniformVar TextureHandle RenderPath
+data BoundRender = BoundRender ShaderVar TextureHandle RenderPath
 data RenderPath = RenderPath Material [BoundRender]
 
 constructRenderPath :: Material -> IO(RenderPath)

@@ -40,7 +40,7 @@ demoCam = LR.GameCamera
 
 demoSVMap :: Map.Map LR.ShaderVar (CubeDemoObject -> LR.Camera -> LR.ShaderVarValue)
 demoSVMap =
-  Map.insert (LR.Uniform (LR.UniformVar LR.Matrix4Ty "mvpMatrix"))
+  Map.insert (LR.Uniform LR.Matrix4Ty "mvpMatrix")
              (\o c -> LR.Matrix4Val $ LR.getViewProjMatrix c)
   Map.empty
 

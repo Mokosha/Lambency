@@ -46,11 +46,11 @@ renderCamera cam objs = mapM_ renderObj objs
           
           setShaderVar :: ShaderVar -> IO ()
           setShaderVar v = case v of
-            Attribute _ -> return ()
-            Uniform u ->
+            Attribute _ _ -> return ()
+            Uniform _ _ ->
               let eval = (objSVMap obj) Map.! v
                   val = eval (gameObject obj) cam
-              in setUniformVar u val
+              in setUniformVar v val
 
           setShaderVars :: [ShaderVar] -> IO ()
           setShaderVars = mapM_ setShaderVar
