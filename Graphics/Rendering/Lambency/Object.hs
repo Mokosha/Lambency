@@ -25,7 +25,7 @@ type Time = Double
 data GameObject a = GameObject {
   renderObject :: Maybe RenderObject,
   gameObject :: a,
-  objSVMap :: Map.Map ShaderVar (a -> Camera -> ShaderVarValue),
+  objSVMap :: Map.Map ShaderVar (a -> Camera -> ShaderValue),
   update :: Time -> GameObject a -> Maybe (GameObject a),
   collide :: GameObject a -> [GameObject a] -> Maybe (GameObject a)
 }
@@ -59,9 +59,7 @@ renderCamera cam objs = mapM_ renderObj objs
            case renderObject obj of
              Nothing -> return ()
              Just ro -> do
-               let RenderPath mat prepasses = renderPath ro
-               -- !FIXME! actually render the prepasses
-               beforeRender mat
-               setShaderVars $ shaderVars mat
+               beforeRender (material ro)
+               setShaderVars $ getShaderVars $ (getShader . material) ro
                render ro
-               afterRender mat
+               afterRender (material ro)

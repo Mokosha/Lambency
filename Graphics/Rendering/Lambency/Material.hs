@@ -1,7 +1,6 @@
 module Graphics.Rendering.Lambency.Material (
   Material(..),
-  MaterialRenderInput(..),
-  shaderVars,
+  getShader,
   createSimpleMaterial,
   beforeRender,
   afterRender
@@ -11,46 +10,39 @@ module Graphics.Rendering.Lambency.Material (
 import qualified Graphics.Rendering.OpenGL as GL
 
 import Graphics.Rendering.Lambency.Shader
-import Graphics.Rendering.Lambency.Texture
-
-import Paths_lambency
-
-import Data.Maybe
+import qualified Data.Map as Map
 --------------------------------------------------------------------------------
 
-data MaterialRenderInput = MaterialRenderInput ShaderVar TextureFormat Material
-data Material = Material Shader [ShaderVar] [MaterialRenderInput]
+-- Material consists of a shader and the variables specified by the
+-- engine for the shader.
+data Material = Material Shader ShaderMap
 
-shaderVars :: Material -> [ShaderVar]
-shaderVars (Material _ vars _) = vars
+getShader :: Material -> Shader
+getShader (Material s _) = s
 
 createSimpleMaterial :: IO(Material)
 createSimpleMaterial = do
-  defaultVertexShader <- getDataFileName "simple.vs"
-  defaultFragmentShader <- getDataFileName "simple.fs"
-  prg <- loadShader (Just defaultVertexShader) (Just defaultFragmentShader) Nothing
+  shdr <- createSimpleShader
   return $ Material
-    (fromJust prg)
-    [Uniform Matrix4Ty "mvpMatrix",
-     Attribute FloatListTy (GL.AttribLocation 0)]
-    []
+    shdr
+    Map.empty
 
 beforeRender :: Material -> IO ()
-beforeRender (Material shdr vars _) = do
+beforeRender (Material shdr _) = do
   -- Enable the program
-  GL.currentProgram GL.$= Just shdr
+  GL.currentProgram GL.$= Just (getProgram shdr)
 
   -- Enable each vertex attribute that this material needs
-  mapM_ enableAttribute vars
+  mapM_ enableAttribute (getShaderVars shdr)
   where enableAttribute :: ShaderVar -> IO ()
         enableAttribute v = case v of
           Uniform _ _ -> return ()
           Attribute _ loc -> GL.vertexAttribArray loc GL.$= GL.Enabled
 
 afterRender :: Material -> IO ()
-afterRender mat = do
+afterRender (Material shdr _) = do
   -- Disable each vertex attribute that this material needs
-  mapM_ disableAttribute (shaderVars mat)
+  mapM_ disableAttribute (getShaderVars shdr)
   where disableAttribute :: ShaderVar -> IO ()
         disableAttribute v = case v of
           Uniform _ _ -> return ()

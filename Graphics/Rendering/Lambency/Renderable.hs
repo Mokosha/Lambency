@@ -1,6 +1,4 @@
 module Graphics.Rendering.Lambency.Renderable (
-  BoundRender(..),
-  RenderPath(..),
   RenderObject(..),
   Renderable(..),
   createBasicRO
@@ -10,8 +8,6 @@ module Graphics.Rendering.Lambency.Renderable (
 import qualified Graphics.Rendering.OpenGL as GL
 import Graphics.Rendering.Lambency.Material
 import Graphics.Rendering.Lambency.Vertex
-import Graphics.Rendering.Lambency.Shader
-import Graphics.Rendering.Lambency.Texture
 
 import Data.Array.IO
 import Data.Array.Storable
@@ -20,21 +16,8 @@ import Foreign.Storable
 import Foreign.Ptr
 --------------------------------------------------------------------------------
 
-data BoundRender = BoundRender ShaderVar TextureHandle RenderPath
-data RenderPath = RenderPath Material [BoundRender]
-
-constructRenderPath :: Material -> IO(RenderPath)
-constructRenderPath (Material shdr vars inputs) = do
-  renderInputs <- mapM bindRender inputs
-  return $ RenderPath (Material shdr vars inputs) renderInputs
-  where bindRender :: MaterialRenderInput -> IO(BoundRender)
-        bindRender (MaterialRenderInput uniform fmt mat) = do
-          handle <- createFramebufferObject fmt
-          path <- constructRenderPath mat
-          return $ BoundRender uniform handle path
-
 data RenderObject = RenderObject {
-  renderPath :: RenderPath,
+  material :: Material,
   render :: IO ()
 }
 
@@ -46,9 +29,9 @@ createBasicRO vs idxs =
   in do
     vbo <- setupBuffer GL.ArrayBuffer flts
     ibo <- setupBuffer GL.ElementArrayBuffer idxs
-    path <- constructRenderPath =<< createSimpleMaterial
+    mat <- createSimpleMaterial
     return $ RenderObject {
-      renderPath = path,
+      material = mat,
       render = renderTris vbo ibo $ fromIntegral (length idxs)
     }
   where

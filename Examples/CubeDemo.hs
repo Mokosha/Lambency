@@ -38,10 +38,10 @@ demoCam = LR.GameCamera
           (LR.mkOrthoCamera kCamPos kCamDir kCamUp (-10) 10 10 (-10) 0.1 1000.0)
           rotateCamera
 
-demoSVMap :: Map.Map LR.ShaderVar (CubeDemoObject -> LR.Camera -> LR.ShaderVarValue)
+demoSVMap :: Map.Map LR.ShaderVar (CubeDemoObject -> LR.Camera -> LR.ShaderValue)
 demoSVMap =
   Map.insert (LR.Uniform LR.Matrix4Ty "mvpMatrix")
-             (\o c -> LR.Matrix4Val $ LR.getViewProjMatrix c)
+             (\_ c -> LR.Matrix4Val $ LR.getViewProjMatrix c)
   Map.empty
 
 main :: IO ()

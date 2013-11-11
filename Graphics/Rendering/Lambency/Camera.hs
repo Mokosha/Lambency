@@ -38,15 +38,19 @@ data CameraViewDistance = CameraViewDistance {
   far :: Float
 } deriving (Show)
 
-data Camera =
+data CameraType =
   Ortho {
-    orthoPos :: CameraLocation,
     left :: Float,
     right :: Float,
     top :: Float,
-    bottom :: Float,
-    orthoDist :: CameraViewDistance
-  } deriving (Show)
+    bottom :: Float
+    }
+--  | Persp {
+--    fovY :: Float,
+--    aspect :: Float
+--    }
+
+data Camera = Camera CameraLocation CameraType CameraViewDistance
 
 type Time = Double
 data GameCamera = GameCamera Camera (Time -> Camera -> Camera)
@@ -54,41 +58,36 @@ data GameCamera = GameCamera Camera (Time -> Camera -> Camera)
 mkOrthoCamera :: Vec3 -> Normal3 -> Normal3 ->
                  Float -> Float -> Float -> Float -> Float -> Float ->
                  Camera
-mkOrthoCamera pos dir up l r t b n f = Ortho {
-  orthoPos = CameraLocation {
+mkOrthoCamera pos dir up l r t b n f = Camera
+  CameraLocation {
      camPos = pos,
      camDir = dir,
      camUp = up
-  },
-  left = l,
-  right = r,
-  top = t,
-  bottom = b,
-  orthoDist = CameraViewDistance {
+  }
+
+  Ortho {
+    left = l,
+    right = r,
+    top = t,
+    bottom = b
+  }
+
+  CameraViewDistance {
     near = n,
     far = f
   }
-}
 
 getCamLoc :: Camera -> CameraLocation
-getCamLoc c = case c of
-  Ortho { orthoPos = p, left = _, right = _, top = _, bottom = _, orthoDist = _} ->
-    p
+getCamLoc (Camera loc _ _) = loc
 
 setCamLoc :: Camera -> CameraLocation -> Camera
-setCamLoc c loc = case c of 
-  Ortho { orthoPos = _, left = _, right = _, top = _, bottom = _, orthoDist = _} ->
-    (\cam -> cam { orthoPos = loc }) c
+setCamLoc (Camera _ cam dist) loc = Camera loc cam dist
 
 getCamDist :: Camera -> CameraViewDistance
-getCamDist c = case c of
-  Ortho { orthoPos = _, left = _, right = _, top = _, bottom = _, orthoDist = d} ->
-    d
+getCamDist (Camera _ _ dist) = dist
 
 setCamDist :: Camera -> CameraViewDistance -> Camera
-setCamDist c dist = case c of 
-  Ortho { orthoPos = _, left = _, right = _, top = _, bottom = _, orthoDist = _} ->
-    (\cam -> cam { orthoDist = dist }) c
+setCamDist (Camera loc cam _) dist = Camera loc cam dist
 
 getCamPos :: Camera -> Vec3
 getCamPos = (camPos . getCamLoc)
@@ -158,7 +157,7 @@ getViewMatrix c = let
     en = ez . fn
 
 getProjMatrix :: Camera -> Mat4
-getProjMatrix Ortho { orthoPos = _, top = t, bottom = b, left = l, right = r, orthoDist = dist } = let
+getProjMatrix (Camera _ (Ortho {top = t, bottom = b, left = l, right = r}) dist) = let
   n = near dist
   f = far dist
   in
