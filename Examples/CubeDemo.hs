@@ -10,6 +10,10 @@ import Data.Vect.Float.Util.Quaternion
 
 import qualified Data.Map as Map
 
+import System.Directory
+import System.FilePath
+import Paths_lambency_examples
+
 import GHC.Float (double2Float)
 ---------------------------------------------------------------------------------
 
@@ -48,13 +52,20 @@ main :: IO ()
 main = do
   m <- L.makeWindow 640 480 "Cube Demo"
   ro <- LR.createRenderObject LR.makeCube
-  let triObj = LR.GameObject {
-        LR.renderObject = Just ro,
-        LR.gameObject = Triangle,
-        LR.objSVMap = demoSVMap,
-        LR.update = (\t a -> Just a),
-        LR.collide = (\a as -> Just a)}
-  case m of
-    (Just win) -> L.run win demoCam [triObj]
+  dir <- getCurrentDirectory
+  mtex <- LR.loadTextureFromPNG $ dir </> "Examples" </> "Assets" </> "crate" <.> "png"
+--  mtex <- getDataFileName "crate1_diffuse.png" >>= LR.loadTextureFromPNG
+  case mtex of
     Nothing -> return ()
+    Just tex -> do
+      mat <- LR.createTexturedMaterial tex
+      let triObj = LR.GameObject {
+            LR.renderObject = Just (LR.assignMaterial ro mat),
+            LR.gameObject = Triangle,
+            LR.objSVMap = demoSVMap,
+            LR.update = (\t a -> Just a),
+            LR.collide = (\a as -> Just a)}
+      case m of
+        (Just win) -> L.run win demoCam [triObj]
+        Nothing -> return ()
   L.destroyWindow m

@@ -3,6 +3,7 @@ module Graphics.Rendering.Lambency.Material (
   getShader,
   getShaderMap,
   createSimpleMaterial,
+  createTexturedMaterial,
   beforeRender,
   afterRender
 ) where

@@ -14,6 +14,8 @@ maintainer:          krajcevski@gmail.com
 category:            Graphics
 build-type:          Simple
 cabal-version:       >=1.8
+data-files:          crate.png
+data-dir:            Assets
 
 executable lambcubedemo
   main-is:        CubeDemo.hs
@@ -22,4 +24,6 @@ executable lambcubedemo
                   OpenGL >2.8,
                   lambency,
                   vect == 0.4.7,
-                  containers
+                  containers,
+                  directory,
+                  filepath

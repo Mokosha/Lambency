@@ -44,7 +44,7 @@ initializeTexture ptr (w, h) fmt = do
       pd = GL.PixelData (fmt2glpfmt fmt) GL.UnsignedByte ptr
   GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 size 0 pd
 
-  GL.textureFilter GL.Texture2D GL.$= ((GL.Nearest, Nothing), GL.Nearest)
+  GL.textureFilter GL.Texture2D GL.$= ((GL.Linear', Nothing), GL.Linear')
   putStrLn $ "Loaded texture with dimensions " ++ (show (w, h))
   return $ Texture handle fmt
 

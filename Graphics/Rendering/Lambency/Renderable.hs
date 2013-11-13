@@ -1,6 +1,7 @@
 module Graphics.Rendering.Lambency.Renderable (
   RenderObject(..),
   Renderable(..),
+  assignMaterial,
   createBasicRO
   ) where
 
@@ -20,6 +21,9 @@ data RenderObject = RenderObject {
   material :: Material,
   render :: IO ()
 }
+
+assignMaterial :: RenderObject -> Material -> RenderObject
+assignMaterial o m = (\ro -> ro { material = m }) o
 
 createBasicRO :: [Vertex] -> [Int16] -> IO (RenderObject)
 createBasicRO [] _ = do

@@ -1,10 +1,12 @@
 module Graphics.Rendering.Lambency (
   initLambency,
   module Graphics.Rendering.Lambency.Camera,
+  module Graphics.Rendering.Lambency.Material,
   module Graphics.Rendering.Lambency.Mesh,
   module Graphics.Rendering.Lambency.Object,
   module Graphics.Rendering.Lambency.Renderable,
   module Graphics.Rendering.Lambency.Shader,
+  module Graphics.Rendering.Lambency.Texture,
   module Graphics.Rendering.Lambency.Utils,
 ) where
 
@@ -13,10 +15,12 @@ module Graphics.Rendering.Lambency (
 import qualified Graphics.Rendering.OpenGL as GL
 
 import Graphics.Rendering.Lambency.Camera
+import Graphics.Rendering.Lambency.Material
 import Graphics.Rendering.Lambency.Mesh
 import Graphics.Rendering.Lambency.Object
 import Graphics.Rendering.Lambency.Renderable
 import Graphics.Rendering.Lambency.Shader
+import Graphics.Rendering.Lambency.Texture
 import Graphics.Rendering.Lambency.Utils
 --------------------------------------------------------------------------------
 
