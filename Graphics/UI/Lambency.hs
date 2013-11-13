@@ -31,7 +31,12 @@ makeWindow width height title = do
             Just _ -> putStrLn "Done."
   case m of
     Nothing -> return ()
-    (Just _) -> GLFW.makeContextCurrent m
+    (Just _) -> do
+      GLFW.makeContextCurrent m
+
+      -- Initial defaults
+      GL.depthFunc GL.$= Just GL.Lequal
+      GL.cullFace GL.$= Just GL.Back
   LR.initLambency
   return m
 
@@ -52,7 +57,7 @@ run win (LR.GameCamera cam updCam) objs = do
     GLFW.KeyState'Pressed -> GLFW.setWindowShouldClose win True
     _ -> return ()
   GL.clearColor GL.$= GL.Color4 0.0 0.0 0.5 1
-  GL.clear [GL.ColorBuffer]
+  GL.clear [GL.ColorBuffer, GL.DepthBuffer]
   LR.renderCamera cam objs
   GL.flush
   GLFW.swapBuffers win
