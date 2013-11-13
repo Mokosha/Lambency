@@ -39,4 +39,6 @@ library
                        vect == 0.4.7,
                        containers,
                        bytestring,
-                       array
+                       array,
+                       -- Eventually replace these...
+                       pngload

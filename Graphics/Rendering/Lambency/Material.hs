@@ -1,6 +1,7 @@
 module Graphics.Rendering.Lambency.Material (
   Material(..),
   getShader,
+  getShaderMap,
   createSimpleMaterial,
   beforeRender,
   afterRender
@@ -10,6 +11,8 @@ module Graphics.Rendering.Lambency.Material (
 import qualified Graphics.Rendering.OpenGL as GL
 
 import Graphics.Rendering.Lambency.Shader
+import Graphics.Rendering.Lambency.Texture
+
 import qualified Data.Map as Map
 --------------------------------------------------------------------------------
 
@@ -20,12 +23,18 @@ data Material = Material Shader ShaderMap
 getShader :: Material -> Shader
 getShader (Material s _) = s
 
+getShaderMap :: Material -> ShaderMap
+getShaderMap (Material _ m) = m
+
 createSimpleMaterial :: IO(Material)
-createSimpleMaterial = do
+createSimpleMaterial =
+  createSolidTexture (255, 0, 255, 255) >>= createTexturedMaterial
+
+createTexturedMaterial :: Texture -> IO(Material)
+createTexturedMaterial tex = do
   shdr <- createSimpleShader
-  return $ Material
-    shdr
-    Map.empty
+  let shdrMap = Map.singleton (Uniform TextureTy "sampler") (TextureVal $ getHandle tex)
+  return $ Material shdr shdrMap
 
 beforeRender :: Material -> IO ()
 beforeRender (Material shdr _) = do
@@ -45,5 +54,8 @@ afterRender (Material shdr _) = do
   mapM_ disableAttribute (getShaderVars shdr)
   where disableAttribute :: ShaderVar -> IO ()
         disableAttribute v = case v of
+          Uniform TextureTy _ -> do
+            GL.activeTexture GL.$= GL.TextureUnit 0
+            GL.textureBinding GL.Texture2D GL.$= Nothing
           Uniform _ _ -> return ()
           Attribute _ loc -> GL.vertexAttribArray loc GL.$= GL.Disabled

@@ -25,7 +25,7 @@ makeTriangle = Mesh {
 
 makeCube :: Mesh
 makeCube = Mesh {
-  vertices = mkVertex3 . mkVec3 <$> [ 
+  vertices = zipWith mkTVertex3 (mkVec3 <$> [ 
     -- Front face
     (-1.0, -1.0,  1.0),
     ( 1.0, -1.0,  1.0),
@@ -61,7 +61,7 @@ makeCube = Mesh {
     (-1.0, -1.0,  1.0),
     (-1.0,  1.0,  1.0),
     (-1.0,  1.0, -1.0)
-  ],
+  ]) ((concat . (replicate 6)) [Vec2 0 0, Vec2 1 0, Vec2 1 1, Vec2 0 1]),
   
   indices = [
     0,  1,  2,      0,  2,  3,    -- front

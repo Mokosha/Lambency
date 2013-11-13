@@ -22,17 +22,27 @@ data RenderObject = RenderObject {
 }
 
 createBasicRO :: [Vertex] -> [Int16] -> IO (RenderObject)
-createBasicRO vs idxs =
+createBasicRO [] _ = do
+  mat <- createSimpleMaterial
+  return $ RenderObject {
+    material = mat,
+    render = return ()
+  }
+createBasicRO (v:vs) idxs =
   let
     flts :: [Float]
-    flts = vs >>= toFloats
+    flts = (v:vs) >>= toFloats
   in do
+    putStrLn . show $ (length (v:vs))
+    putStrLn . show $ (length flts)
     vbo <- setupBuffer GL.ArrayBuffer flts
     ibo <- setupBuffer GL.ElementArrayBuffer idxs
     mat <- createSimpleMaterial
     return $ RenderObject {
       material = mat,
-      render = renderTris vbo ibo $ fromIntegral (length idxs)
+      render = do
+        let f = if isTextured v then renderTexturedTris else renderTris
+        f vbo ibo $ fromIntegral (length idxs)
     }
   where
     ptrsize :: (Storable a) => [a] -> GL.GLsizeiptr
@@ -55,6 +65,21 @@ createBasicRO vs idxs =
         -- Bind appropriate buffers
         GL.bindBuffer GL.ArrayBuffer GL.$= Just vbo
         GL.vertexAttribPointer (GL.AttribLocation 0) GL.$= (GL.ToFloat, vadesc)
+
+        GL.bindBuffer GL.ElementArrayBuffer GL.$= Just ibo
+
+        -- Render
+        GL.drawElements GL.Triangles nIndices GL.UnsignedShort nullPtr
+
+    renderTexturedTris :: GL.BufferObject -> GL.BufferObject -> GL.NumArrayIndices -> IO ()
+    renderTexturedTris vbo ibo nIndices = let
+      posdesc = GL.VertexArrayDescriptor 3 GL.Float 20 (nullPtr :: Ptr Float)
+      uvdesc = GL.VertexArrayDescriptor 2 GL.Float 20 (plusPtr (nullPtr :: Ptr Float) 12)
+      in do
+        -- Bind appropriate buffers
+        GL.bindBuffer GL.ArrayBuffer GL.$= Just vbo
+        GL.vertexAttribPointer (GL.AttribLocation 0) GL.$= (GL.ToFloat, posdesc)
+        GL.vertexAttribPointer (GL.AttribLocation 1) GL.$= (GL.ToFloat, uvdesc)
 
         GL.bindBuffer GL.ElementArrayBuffer GL.$= Just ibo
 

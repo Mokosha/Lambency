@@ -43,23 +43,21 @@ renderCamera :: Camera -> [GameObject a] -> IO ()
 renderCamera cam objs = mapM_ renderObj objs
   where renderObj :: GameObject a -> IO ()
         renderObj obj = let
-          
-          setShaderVar :: ShaderVar -> IO ()
-          setShaderVar v = case v of
-            Attribute _ _ -> return ()
-            Uniform _ _ ->
-              let eval = (objSVMap obj) Map.! v
-                  val = eval (gameObject obj) cam
-              in setUniformVar v val
 
-          setShaderVars :: [ShaderVar] -> IO ()
-          setShaderVars = mapM_ setShaderVar
+          setShaderVar :: ShaderMap -> ShaderVar -> IO ()
+          setShaderVar _ (Attribute _ _) = return ()
+          setShaderVar m v = setUniformVar v $ m Map.! v
+
+          setShaderVars :: ShaderMap -> [ShaderVar] -> IO ()
+          setShaderVars m = mapM_ (setShaderVar m)
 
           in
            case renderObject obj of
              Nothing -> return ()
              Just ro -> do
                beforeRender (material ro)
-               setShaderVars $ getShaderVars $ (getShader . material) ro
+               let objMap = Map.map (\f -> f (gameObject obj) cam) (objSVMap obj)
+                   finalMap = Map.union objMap $ (getShaderMap . material) ro
+               setShaderVars finalMap $ getShaderVars $ (getShader . material) ro
                render ro
                afterRender (material ro)

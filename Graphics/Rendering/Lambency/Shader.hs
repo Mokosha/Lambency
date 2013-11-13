@@ -98,6 +98,18 @@ setUniformVar (Uniform Matrix4Ty varName) (Matrix4Val mat)  = do
         matArr <- newListArray (0 :: Int, 15) (map realToFrac (destructMat4 mat))
         withStorableArray matArr (\ptr -> GLRaw.glUniformMatrix4fv matLoc 1 0 ptr)
 
+setUniformVar (Uniform TextureTy varName) (TextureVal tex) = do
+  mprg <- GL.get GL.currentProgram
+  case mprg of
+    Nothing -> return ()
+    Just prg -> do
+      texLoc <- GL.get $ GL.uniformLocation prg varName
+      if texLoc == (GL.UniformLocation (-1)) then return ()
+        else do
+        GL.activeTexture GL.$= (GL.TextureUnit 0)
+        GL.textureBinding GL.Texture2D GL.$= Just tex
+        GL.uniform texLoc GL.$= (GL.TextureUnit 0)
+
 setUniformVar _ _ = ioError $ userError "Uniform not supported"
 
 loadProgram :: (Maybe FilePath) -> (Maybe FilePath) -> (Maybe FilePath) -> IO(Maybe GL.Program)
@@ -140,4 +152,6 @@ createSimpleShader = do
   prg <- loadProgram (Just defaultVertexShader) (Just defaultFragmentShader) Nothing
   return $ Shader (fromJust prg)
     [Attribute FloatListTy (GL.AttribLocation 0),
+     Attribute FloatListTy (GL.AttribLocation 1),
+     Uniform TextureTy "sampler",
      Uniform Matrix4Ty "mvpMatrix"]
