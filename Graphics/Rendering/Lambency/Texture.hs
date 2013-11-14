@@ -38,11 +38,13 @@ createFramebufferObject fmt = do
 initializeTexture :: Ptr a -> (Word32, Word32) -> TextureFormat -> IO(Texture)
 initializeTexture ptr (w, h) fmt = do
   handle <- GL.genObjectName
+  GL.activeTexture GL.$= GL.TextureUnit 0
   GL.textureBinding GL.Texture2D GL.$= Just handle
 
   let size = GL.TextureSize2D (fromIntegral w) (fromIntegral h)
       pd = GL.PixelData (fmt2glpfmt fmt) GL.UnsignedByte ptr
   GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 size 0 pd
+  GL.generateMipmap GL.Texture2D GL.$= GL.Enable
 
   GL.textureFilter GL.Texture2D GL.$= ((GL.Linear', Nothing), GL.Linear')
   putStrLn $ "Loaded texture with dimensions " ++ (show (w, h))
@@ -64,6 +66,7 @@ loadTextureFromPNG filename = do
           initializeTexture ptr (PNG.dimensions img) RGBA8
         else
           initializeTexture ptr (PNG.dimensions img) RGB8)
+      
       return $ Just tex
 
 createSolidTexture :: (Word8, Word8, Word8, Word8) -> IO(Texture)
