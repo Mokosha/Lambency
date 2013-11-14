@@ -25,6 +25,7 @@ makeWindow width height title = do
   unless r $ return ()
   putStrLn "Done"
   GLFW.setErrorCallback $ Just errorCallback
+  GL.initialDisplayMode GL.$= [GL.DoubleBuffered]
   putStr $ "Creating window of size (" ++ (show width) ++ ", " ++ (show height) ++ ")..."
   m <- GLFW.createWindow width height title Nothing Nothing
   case m of Nothing -> ioError $ userError "Failed to create window!"
