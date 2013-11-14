@@ -37,8 +37,6 @@ createBasicRO (v:vs) idxs =
     flts :: [Float]
     flts = (v:vs) >>= toFloats
   in do
-    putStrLn . show $ (length (v:vs))
-    putStrLn . show $ (length flts)
     vbo <- setupBuffer GL.ArrayBuffer flts
     ibo <- setupBuffer GL.ElementArrayBuffer idxs
     mat <- createSimpleMaterial

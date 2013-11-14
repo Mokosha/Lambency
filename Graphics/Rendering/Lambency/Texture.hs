@@ -44,9 +44,9 @@ initializeTexture ptr (w, h) fmt = do
   let size = GL.TextureSize2D (fromIntegral w) (fromIntegral h)
       pd = GL.PixelData (fmt2glpfmt fmt) GL.UnsignedByte ptr
   GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 size 0 pd
-  GL.generateMipmap GL.Texture2D GL.$= GL.Enable
 
   GL.textureFilter GL.Texture2D GL.$= ((GL.Linear', Nothing), GL.Linear')
+  GL.generateMipmap GL.Texture2D GL.$= GL.Enabled
   putStrLn $ "Loaded texture with dimensions " ++ (show (w, h))
   return $ Texture handle fmt
 

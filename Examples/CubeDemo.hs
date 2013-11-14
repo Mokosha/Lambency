@@ -26,7 +26,7 @@ rotateCamera dt cam =
   in flip LR.setCamDir newDir $ LR.setCamPos cam newPos
 
 stillCamera :: Double -> LR.Camera -> LR.Camera
-stillCamera = \t c -> c
+stillCamera = flip const
 
 kCamPos :: Vec3
 kCamPos = Vec3 4 3 3
@@ -52,8 +52,7 @@ main :: IO ()
 main = do
   m <- L.makeWindow 640 480 "Cube Demo"
   ro <- LR.createRenderObject LR.makeCube
-  dir <- getCurrentDirectory
-  mtex <- LR.loadTextureFromPNG $ dir </> "Examples" </> "Assets" </> "crate" <.> "png"
+  mtex <- LR.loadTextureFromPNG =<< (getDataFileName $ "crate" <.> "png")
 --  mtex <- getDataFileName "crate1_diffuse.png" >>= LR.loadTextureFromPNG
   case mtex of
     Nothing -> return ()
