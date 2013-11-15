@@ -57,9 +57,8 @@ main = do
   case mtex of
     Nothing -> return ()
     Just tex -> do
-      mat <- LR.createTexturedMaterial tex
       let triObj = LR.GameObject {
-            LR.renderObject = Just (LR.assignMaterial ro mat),
+            LR.renderObject = Just (LR.switchMaterialTexture ro "sampler" tex),
             LR.gameObject = Triangle,
             LR.objSVMap = demoSVMap,
             LR.update = (\t a -> Just a),

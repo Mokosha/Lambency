@@ -2,12 +2,14 @@ module Graphics.Rendering.Lambency.Renderable (
   RenderObject(..),
   Renderable(..),
   assignMaterial,
+  switchMaterialTexture,
   createBasicRO
   ) where
 
 --------------------------------------------------------------------------------
 import qualified Graphics.Rendering.OpenGL as GL
 import Graphics.Rendering.Lambency.Material
+import Graphics.Rendering.Lambency.Texture
 import Graphics.Rendering.Lambency.Vertex
 
 import Data.Array.IO
@@ -24,6 +26,10 @@ data RenderObject = RenderObject {
 
 assignMaterial :: RenderObject -> Material -> RenderObject
 assignMaterial o m = (\ro -> ro { material = m }) o
+
+switchMaterialTexture :: RenderObject -> String -> Texture -> RenderObject
+switchMaterialTexture ro name tex =
+  (\o -> o { material = switchTexture (material ro) name tex }) ro
 
 createBasicRO :: [Vertex] -> [Int16] -> IO (RenderObject)
 createBasicRO [] _ = do

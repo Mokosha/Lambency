@@ -4,6 +4,7 @@ module Graphics.Rendering.Lambency.Material (
   getShaderMap,
   createSimpleMaterial,
   createTexturedMaterial,
+  switchTexture,
   beforeRender,
   afterRender
 ) where
@@ -36,6 +37,13 @@ createTexturedMaterial tex = do
   shdr <- createSimpleShader
   let shdrMap = Map.singleton (Uniform TextureTy "sampler") (TextureVal $ getHandle tex)
   return $ Material shdr shdrMap
+
+switchTexture :: Material -> String -> Texture -> Material
+switchTexture (Material shdr shdrMap) name tex =
+  let shdrVar = Uniform TextureTy name
+      shdrVal = TextureVal $ getHandle tex
+  in
+   Material shdr $ Map.adjust (\_ -> shdrVal) shdrVar shdrMap
 
 beforeRender :: Material -> IO ()
 beforeRender (Material shdr _) = do
