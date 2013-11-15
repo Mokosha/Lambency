@@ -26,6 +26,7 @@ import Data.Vect.Float
 import qualified Data.ByteString as BS
 import qualified Control.Monad as M
 
+import Data.Maybe (catMaybes)
 import Data.Array.IO
 import Data.Array.Storable
 
@@ -163,5 +164,5 @@ createSimpleShader = do
         constructMap vs = foldl (\m (n, sv) -> Map.insert n sv m) Map.empty (gatherValid vs)
 
         gatherValid :: [(String, Maybe ShaderVar)] -> [(String, ShaderVar)]
-        gatherValid = (=<<) (\(n, msv) -> case msv of Nothing -> []
-                                                      Just sv -> [(n, sv)])
+        gatherValid vs = catMaybes $ map (\(n, msv) -> case msv of Nothing -> Nothing
+                                                                   Just sv -> Just (n, sv)) vs
