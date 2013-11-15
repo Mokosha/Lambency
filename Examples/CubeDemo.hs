@@ -42,12 +42,6 @@ demoCam = LR.GameCamera
           (LR.mkOrthoCamera kCamPos kCamDir kCamUp (-10) 10 10 (-10) 0.1 1000.0)
           rotateCamera
 
-demoSVMap :: Map.Map LR.ShaderVar (CubeDemoObject -> LR.Camera -> LR.ShaderValue)
-demoSVMap =
-  Map.insert (LR.Uniform LR.Matrix4Ty "mvpMatrix")
-             (\_ c -> LR.Matrix4Val $ LR.getViewProjMatrix c)
-  Map.empty
-
 main :: IO ()
 main = do
   m <- L.makeWindow 640 480 "Cube Demo"
@@ -57,10 +51,13 @@ main = do
   case mtex of
     Nothing -> return ()
     Just tex -> do
-      let triObj = LR.GameObject {
+      let mvpSV = (LR.getMaterialVar (LR.material ro) "mvpMatrix")
+          cameraUpdate = (\_ c -> LR.Matrix4Val $ LR.getViewProjMatrix c)
+          svMap = Map.singleton mvpSV cameraUpdate
+          triObj = LR.GameObject {
             LR.renderObject = Just (LR.switchMaterialTexture ro "sampler" tex),
             LR.gameObject = Triangle,
-            LR.objSVMap = demoSVMap,
+            LR.objSVMap = svMap,
             LR.update = (\t a -> Just a),
             LR.collide = (\a as -> Just a)}
       case m of

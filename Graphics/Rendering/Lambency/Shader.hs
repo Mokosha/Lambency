@@ -26,7 +26,6 @@ import Data.Vect.Float
 import qualified Data.ByteString as BS
 import qualified Control.Monad as M
 
-import Data.Maybe (fromJust)
 import Data.Array.IO
 import Data.Array.Storable
 
@@ -63,52 +62,40 @@ data ShaderValue = Matrix3Val Mat3
                  | TextureVal TextureHandle
                  deriving (Show)
 
-data ShaderVar = Uniform ShaderVarTy String
+data ShaderVar = Uniform ShaderVarTy GL.UniformLocation
                | Attribute ShaderVarTy GL.AttribLocation
                deriving (Show, Eq)
+
+type ShaderVarMap = Map.Map String ShaderVar
 
 instance Ord ShaderVar where
   s1 `compare` s2 = (show s1) `compare` (show s2)
 
 type ShaderMap = Map.Map ShaderVar ShaderValue
-data Shader = Shader GL.Program [ShaderVar]
+data Shader = Shader GL.Program ShaderVarMap
 
 getProgram :: Shader -> GL.Program
 getProgram (Shader prg _) = prg
 
-getShaderVars :: Shader -> [ShaderVar]
+getShaderVars :: Shader -> ShaderVarMap
 getShaderVars (Shader _ vars) = vars
 
 isUniform :: ShaderVar -> Bool
 isUniform (Uniform _ _) = True
 isUniform _ = False
 
-getUniforms :: Shader -> [ShaderVar]
-getUniforms = (filter isUniform) . getShaderVars
+getUniforms :: Shader -> ShaderVarMap
+getUniforms = (Map.filter isUniform) . getShaderVars
 
 setUniformVar :: ShaderVar -> ShaderValue -> IO ()
-setUniformVar (Uniform Matrix4Ty varName) (Matrix4Val mat)  = do
-  mprg <- GL.get GL.currentProgram
-  case mprg of
-    Nothing -> return ()
-    Just prg -> do
-      (GL.UniformLocation matLoc) <- GL.get $ GL.uniformLocation prg varName
-      if matLoc == (-1) then return ()
-        else do
-        matArr <- newListArray (0 :: Int, 15) (map realToFrac (destructMat4 mat))
-        withStorableArray matArr (\ptr -> GLRaw.glUniformMatrix4fv matLoc 1 0 ptr)
+setUniformVar (Uniform Matrix4Ty (GL.UniformLocation loc)) (Matrix4Val mat)  = do
+  arr <- newListArray (0 :: Int, 15) (map realToFrac (destructMat4 mat))
+  withStorableArray arr (\ptr -> GLRaw.glUniformMatrix4fv loc 1 0 ptr)
 
-setUniformVar (Uniform TextureTy varName) (TextureVal tex) = do
-  mprg <- GL.get GL.currentProgram
-  case mprg of
-    Nothing -> return ()
-    Just prg -> do
-      texLoc <- GL.get $ GL.uniformLocation prg varName
-      if texLoc == (GL.UniformLocation (-1)) then return ()
-        else do
-        GL.activeTexture GL.$= (GL.TextureUnit 0)
-        GL.textureBinding GL.Texture2D GL.$= Just tex
-        GL.uniform texLoc GL.$= (GL.TextureUnit 0)
+setUniformVar (Uniform TextureTy loc) (TextureVal tex) = do
+  GL.activeTexture GL.$= (GL.TextureUnit 0)
+  GL.textureBinding GL.Texture2D GL.$= Just tex
+  GL.uniform loc GL.$= (GL.TextureUnit 0)
 
 setUniformVar _ _ = ioError $ userError "Uniform not supported"
 
@@ -145,13 +132,36 @@ loadProgram vss fss gss = do
      M.unless (shaderLog == "") $ putStrLn shaderLog
      return (Just sid)
 
+lookupShaderVar :: GL.Program -> ShaderVarTy -> String -> IO((String, Maybe ShaderVar))
+lookupShaderVar prg ty name = do
+  uloc <- GL.get $ GL.uniformLocation prg name
+  if uloc == (GL.UniformLocation (-1)) then
+    do
+      aloc <- GL.get $ GL.attribLocation prg name
+      if aloc == (GL.AttribLocation (-1)) then
+        return (name, Nothing)
+        else
+        return $ (name, Just $ Attribute ty aloc)
+    else
+    return $ (name, Just $ Uniform ty uloc)
+
 createSimpleShader :: IO (Shader)
 createSimpleShader = do
   defaultVertexShader <- getDataFileName "simple.vs"
   defaultFragmentShader <- getDataFileName "simple.fs"
-  prg <- loadProgram (Just defaultVertexShader) (Just defaultFragmentShader) Nothing
-  return $ Shader (fromJust prg)
-    [Attribute FloatListTy (GL.AttribLocation 0),
-     Attribute FloatListTy (GL.AttribLocation 1),
-     Uniform TextureTy "sampler",
-     Uniform Matrix4Ty "mvpMatrix"]
+  (Just prg) <- loadProgram (Just defaultVertexShader) (Just defaultFragmentShader) Nothing
+  vars <- extractVars $ map (uncurry (lookupShaderVar prg))
+    [(FloatListTy, "vertexPosition_modelspace"),
+     (FloatListTy, "vertexTexCoord"),
+     (TextureTy, "sampler"),
+     (Matrix4Ty, "mvpMatrix")]
+  return $ Shader prg vars
+  where extractVars :: [IO(String, Maybe ShaderVar)] -> IO ShaderVarMap
+        extractVars iomvars = M.liftM constructMap $ sequence iomvars
+
+        constructMap :: [(String, Maybe ShaderVar)] -> ShaderVarMap
+        constructMap vs = foldl (\m (n, sv) -> Map.insert n sv m) Map.empty (gatherValid vs)
+
+        gatherValid :: [(String, Maybe ShaderVar)] -> [(String, ShaderVar)]
+        gatherValid = (=<<) (\(n, msv) -> case msv of Nothing -> []
+                                                      Just sv -> [(n, sv)])

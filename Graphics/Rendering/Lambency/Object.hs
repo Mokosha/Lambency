@@ -58,6 +58,6 @@ renderCamera cam objs = mapM_ renderObj objs
                beforeRender (material ro)
                let objMap = Map.map (\f -> f (gameObject obj) cam) (objSVMap obj)
                    finalMap = Map.union objMap $ (getShaderMap . material) ro
-               setShaderVars finalMap $ getShaderVars $ (getShader . material) ro
+               setShaderVars finalMap $ Map.elems . getShaderVars $ (getShader . material) ro
                render ro
                afterRender (material ro)

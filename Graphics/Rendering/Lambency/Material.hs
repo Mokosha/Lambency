@@ -4,6 +4,7 @@ module Graphics.Rendering.Lambency.Material (
   getShaderMap,
   createSimpleMaterial,
   createTexturedMaterial,
+  getMaterialVar,
   switchTexture,
   beforeRender,
   afterRender
@@ -28,6 +29,9 @@ getShader (Material s _) = s
 getShaderMap :: Material -> ShaderMap
 getShaderMap (Material _ m) = m
 
+getMaterialVar :: Material -> String -> ShaderVar
+getMaterialVar m = (Map.!) $ (getShaderVars . getShader) m
+
 createSimpleMaterial :: IO(Material)
 createSimpleMaterial =
   createSolidTexture (255, 0, 255, 255) >>= createTexturedMaterial
@@ -35,12 +39,13 @@ createSimpleMaterial =
 createTexturedMaterial :: Texture -> IO(Material)
 createTexturedMaterial tex = do
   shdr <- createSimpleShader
-  let shdrMap = Map.singleton (Uniform TextureTy "sampler") (TextureVal $ getHandle tex)
+  let varMap = getShaderVars shdr
+      shdrMap = Map.singleton (varMap Map.! "sampler") (TextureVal $ getHandle tex)
   return $ Material shdr shdrMap
 
 switchTexture :: Material -> String -> Texture -> Material
 switchTexture (Material shdr shdrMap) name tex =
-  let shdrVar = Uniform TextureTy name
+  let shdrVar = (getShaderVars shdr) Map.! name
       shdrVal = TextureVal $ getHandle tex
   in
    Material shdr $ Map.adjust (\_ -> shdrVal) shdrVar shdrMap
@@ -51,7 +56,7 @@ beforeRender (Material shdr _) = do
   GL.currentProgram GL.$= Just (getProgram shdr)
 
   -- Enable each vertex attribute that this material needs
-  mapM_ enableAttribute (getShaderVars shdr)
+  mapM_ enableAttribute $ (Map.elems . getShaderVars) shdr
   where enableAttribute :: ShaderVar -> IO ()
         enableAttribute v = case v of
           Uniform _ _ -> return ()
@@ -60,7 +65,7 @@ beforeRender (Material shdr _) = do
 afterRender :: Material -> IO ()
 afterRender (Material shdr _) = do
   -- Disable each vertex attribute that this material needs
-  mapM_ disableAttribute (getShaderVars shdr)
+  mapM_ disableAttribute $ (Map.elems . getShaderVars) shdr
   where disableAttribute :: ShaderVar -> IO ()
         disableAttribute v = case v of
           Uniform TextureTy _ -> do
