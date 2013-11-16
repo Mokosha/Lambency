@@ -8,6 +8,7 @@ module Graphics.Rendering.Lambency.Renderable (
 
 --------------------------------------------------------------------------------
 import qualified Graphics.Rendering.OpenGL as GL
+import Graphics.Rendering.Lambency.Shader
 import Graphics.Rendering.Lambency.Material
 import Graphics.Rendering.Lambency.Texture
 import Graphics.Rendering.Lambency.Vertex
@@ -49,7 +50,14 @@ createBasicRO (v:vs) idxs =
     return $ RenderObject {
       material = mat,
       render = do
-        let f = if isTextured v then renderTexturedTris else renderTris
+        let lu name =
+              case getMaterialVar mat name of
+                Attribute _ loc -> loc
+                Uniform _ _ -> GL.AttribLocation (-1)
+            f = if isTextured v then
+                  renderTexturedTris (lu "position") (lu "texCoord")
+                else
+                  renderTris (lu "position")
         f vbo ibo $ fromIntegral (length idxs)
     }
   where
@@ -66,28 +74,31 @@ createBasicRO (v:vs) idxs =
         GL.bufferData tgt GL.$= (ptrsize xs, ptr, GL.StaticDraw))
       return buf
 
-    renderTris :: GL.BufferObject -> GL.BufferObject -> GL.NumArrayIndices -> IO ()
-    renderTris vbo ibo nIndices = let
+    renderTris :: GL.AttribLocation -> GL.BufferObject -> GL.BufferObject -> GL.NumArrayIndices -> IO ()
+    renderTris posLoc vbo ibo nIndices = let
       vadesc = GL.VertexArrayDescriptor 3 GL.Float 0 (nullPtr :: Ptr Float)
       in do
         -- Bind appropriate buffers
         GL.bindBuffer GL.ArrayBuffer GL.$= Just vbo
-        GL.vertexAttribPointer (GL.AttribLocation 0) GL.$= (GL.ToFloat, vadesc)
+        GL.vertexAttribPointer posLoc GL.$= (GL.ToFloat, vadesc)
 
         GL.bindBuffer GL.ElementArrayBuffer GL.$= Just ibo
 
         -- Render
         GL.drawElements GL.Triangles nIndices GL.UnsignedShort nullPtr
 
-    renderTexturedTris :: GL.BufferObject -> GL.BufferObject -> GL.NumArrayIndices -> IO ()
-    renderTexturedTris vbo ibo nIndices = let
+    renderTexturedTris :: GL.AttribLocation -> GL.AttribLocation ->
+                          GL.BufferObject -> GL.BufferObject ->
+                          GL.NumArrayIndices ->
+                          IO ()
+    renderTexturedTris posLoc texCoordLoc vbo ibo nIndices = let
       posdesc = GL.VertexArrayDescriptor 3 GL.Float 20 (nullPtr :: Ptr Float)
       uvdesc = GL.VertexArrayDescriptor 2 GL.Float 20 (plusPtr (nullPtr :: Ptr Float) 12)
       in do
         -- Bind appropriate buffers
         GL.bindBuffer GL.ArrayBuffer GL.$= Just vbo
-        GL.vertexAttribPointer (GL.AttribLocation 0) GL.$= (GL.ToFloat, posdesc)
-        GL.vertexAttribPointer (GL.AttribLocation 1) GL.$= (GL.ToFloat, uvdesc)
+        GL.vertexAttribPointer posLoc GL.$= (GL.ToFloat, posdesc)
+        GL.vertexAttribPointer texCoordLoc GL.$= (GL.ToFloat, uvdesc)
 
         GL.bindBuffer GL.ElementArrayBuffer GL.$= Just ibo
 

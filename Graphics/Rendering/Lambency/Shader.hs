@@ -136,13 +136,12 @@ loadProgram vss fss gss = do
 lookupShaderVar :: GL.Program -> ShaderVarTy -> String -> IO((String, Maybe ShaderVar))
 lookupShaderVar prg ty name = do
   uloc <- GL.get $ GL.uniformLocation prg name
-  if uloc == (GL.UniformLocation (-1)) then
-    do
-      aloc <- GL.get $ GL.attribLocation prg name
-      if aloc == (GL.AttribLocation (-1)) then
-        return (name, Nothing)
-        else
-        return $ (name, Just $ Attribute ty aloc)
+  if uloc == (GL.UniformLocation (-1)) then do
+    aloc <- GL.get $ GL.attribLocation prg name
+    if aloc == (GL.AttribLocation (-1)) then
+      return (name, Nothing)
+      else
+      return $ (name, Just $ Attribute ty aloc)
     else
     return $ (name, Just $ Uniform ty uloc)
 
@@ -152,8 +151,8 @@ createSimpleShader = do
   defaultFragmentShader <- getDataFileName "simple.fs"
   (Just prg) <- loadProgram (Just defaultVertexShader) (Just defaultFragmentShader) Nothing
   vars <- extractVars $ map (uncurry (lookupShaderVar prg))
-    [(FloatListTy, "vertexPosition_modelspace"),
-     (FloatListTy, "vertexTexCoord"),
+    [(FloatListTy, "position"),
+     (FloatListTy, "texCoord"),
      (TextureTy, "sampler"),
      (Matrix4Ty, "mvpMatrix")]
   return $ Shader prg vars
