@@ -8,6 +8,7 @@ import qualified Graphics.Rendering.Lambency as LR
 import Data.Vect.Float
 import Data.Vect.Float.Util.Quaternion
 
+import Data.Maybe (fromJust)
 import qualified Data.Map as Map
 
 import System.Directory
@@ -47,20 +48,16 @@ main = do
   m <- L.makeWindow 640 480 "Cube Demo"
   ro <- LR.createRenderObject LR.makeCube
   mtex <- LR.loadTextureFromPNG =<< (getDataFileName $ "crate" <.> "png")
---  mtex <- getDataFileName "crate1_diffuse.png" >>= LR.loadTextureFromPNG
-  case mtex of
+  let mvpSV = (LR.getMaterialVar (LR.material ro) "mvpMatrix")
+      cameraUpdate = (\_ c -> LR.Matrix4Val $ LR.getViewProjMatrix c)
+      svMap = Map.singleton mvpSV cameraUpdate
+      triObj = LR.GameObject {
+        LR.renderObject = Just (LR.switchMaterialTexture ro "sampler" $ fromJust mtex),
+        LR.gameObject = Triangle,
+        LR.objSVMap = svMap,
+        LR.update = (\t a -> Just a),
+        LR.collide = (\a as -> Just a)}
+  case m of
+    (Just win) -> L.run win demoCam [triObj]
     Nothing -> return ()
-    Just tex -> do
-      let mvpSV = (LR.getMaterialVar (LR.material ro) "mvpMatrix")
-          cameraUpdate = (\_ c -> LR.Matrix4Val $ LR.getViewProjMatrix c)
-          svMap = Map.singleton mvpSV cameraUpdate
-          triObj = LR.GameObject {
-            LR.renderObject = Just (LR.switchMaterialTexture ro "sampler" tex),
-            LR.gameObject = Triangle,
-            LR.objSVMap = svMap,
-            LR.update = (\t a -> Just a),
-            LR.collide = (\a as -> Just a)}
-      case m of
-        (Just win) -> L.run win demoCam [triObj]
-        Nothing -> return ()
   L.destroyWindow m
