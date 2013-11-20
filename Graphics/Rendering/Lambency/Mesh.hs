@@ -19,13 +19,13 @@ data Mesh = Mesh { vertices :: [Vertex],
 
 makeTriangle :: Mesh
 makeTriangle = Mesh {
-  vertices = mkVertex3 . mkVec3 <$> [ (-1, -1, 0), (1, -1, 0), (0, 1, 0)],
+  vertices = Vertex3 . mkVec3 <$> [ (-1, -1, 0), (1, -1, 0), (0, 1, 0)],
   indices = [0, 1, 2]
 }
 
 makeCube :: Mesh
 makeCube = Mesh {
-  vertices = zipWith mkTVertex3 (mkVec3 <$> [ 
+  vertices = zipWith3 OTVertex3 (mkVec3 <$> [ 
     -- Front face
     (-1.0, -1.0,  1.0),
     ( 1.0, -1.0,  1.0),
@@ -61,7 +61,16 @@ makeCube = Mesh {
     (-1.0, -1.0,  1.0),
     (-1.0,  1.0,  1.0),
     (-1.0,  1.0, -1.0)
-  ]) ((concat . (replicate 6)) [Vec2 0 0, Vec2 1 0, Vec2 1 1, Vec2 0 1]),
+  ])
+  -- Normals
+  (concat [ replicate 4 (Vec3 0 0 1),
+            replicate 4 (Vec3 0 0 (-1)),
+            replicate 4 (Vec3 0 1 0),
+            replicate 4 (Vec3 0 (-1) 0),
+            replicate 4 (Vec3 1 0 0),
+            replicate 4 (Vec3 (-1) 0 0)])
+  -- Texture Coordinates
+  ((concat . (replicate 6)) [Vec2 0 0, Vec2 1 0, Vec2 1 1, Vec2 0 1]),
   
   indices = [
     0,  1,  2,      0,  2,  3,    -- front
@@ -74,6 +83,4 @@ makeCube = Mesh {
 }
 
 instance Renderable Mesh where
-  createRenderObject m = do
-    ro <- createBasicRO (vertices m) (indices m)
-    return ro
+  createRenderObject m = createBasicRO (vertices m) (indices m)
