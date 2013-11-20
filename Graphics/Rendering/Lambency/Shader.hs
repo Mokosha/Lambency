@@ -98,6 +98,12 @@ setUniformVar (Uniform TextureTy loc) (TextureVal tex) = do
   GL.textureBinding GL.Texture2D GL.$= Just tex
   GL.uniform loc GL.$= (GL.TextureUnit 0)
 
+setUniformVar (Uniform Vector3Ty loc) (Vector3Val (Vec3 x y z)) = do
+  GL.uniform loc GL.$= GL.Vertex3 (f x) (f y) (f z)
+  where
+    f :: Float -> GL.GLfloat
+    f = realToFrac
+
 setUniformVar _ _ = ioError $ userError "Uniform not supported"
 
 loadProgram :: (Maybe FilePath) -> (Maybe FilePath) -> (Maybe FilePath) -> IO(Maybe GL.Program)
