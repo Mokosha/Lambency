@@ -46,7 +46,12 @@ renderCamera cam objs = mapM_ renderObj objs
 
           setShaderVar :: ShaderMap -> ShaderVar -> IO ()
           setShaderVar _ (Attribute _ _) = return ()
-          setShaderVar m v = setUniformVar v $ m Map.! v
+          setShaderVar m v =
+            if Map.member v m then
+              setUniformVar v $ m Map.! v
+            else do
+              putStrLn $ "Warning: Shader variable uninitialized: " ++ (show v)
+              return ()
 
           setShaderVars :: ShaderMap -> [ShaderVar] -> IO ()
           setShaderVars m = mapM_ (setShaderVar m)
