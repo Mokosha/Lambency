@@ -4,6 +4,7 @@ module Graphics.Rendering.Lambency.Material (
   getShaderMap,
   createSimpleMaterial,
   createTexturedMaterial,
+  createSpotlightMaterial,
   getMaterialVar,
   switchTexture,
   beforeRender,
@@ -15,6 +16,8 @@ import qualified Graphics.Rendering.OpenGL as GL
 
 import Graphics.Rendering.Lambency.Shader
 import Graphics.Rendering.Lambency.Texture
+
+import Data.Vect.Float
 
 import qualified Data.Map as Map
 --------------------------------------------------------------------------------
@@ -41,6 +44,19 @@ createTexturedMaterial tex = do
   shdr <- createSimpleShader
   let varMap = getShaderVars shdr
       shdrMap = Map.singleton (varMap Map.! "sampler") (TextureVal $ getHandle tex)
+  return $ Material shdr shdrMap
+
+createSpotlightMaterial :: Maybe Texture -> IO(Material)
+createSpotlightMaterial mtex = do
+  shdr <- createSpotlightShader
+  t <- case mtex of
+    Nothing -> createSolidTexture (255, 0, 255, 255)
+    Just tex -> return tex
+  let varMap = getShaderVars shdr
+      shdrMap = Map.fromList [
+        (varMap Map.! "diffuseTex", TextureVal $ getHandle t),
+        (varMap Map.! "lightDir", Vector3Val $ Vec3 0 (-1) 0),
+        (varMap Map.! "ambient", Vector3Val $ Vec3 0.5 0.5 0.5)]
   return $ Material shdr shdrMap
 
 switchTexture :: Material -> String -> Texture -> Material

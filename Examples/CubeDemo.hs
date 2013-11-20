@@ -47,12 +47,14 @@ main :: IO ()
 main = do
   m <- L.makeWindow 640 480 "Cube Demo"
   ro <- LR.createRenderObject LR.makeCube
-  mtex <- LR.loadTextureFromPNG =<< (getDataFileName $ "crate" <.> "png")
+  (Just tex) <- LR.loadTextureFromPNG =<< (getDataFileName $ "crate" <.> "png")
   let mvpSV = (LR.getMaterialVar (LR.material ro) "mvpMatrix")
-      cameraUpdate = (\_ c -> LR.Matrix4Val $ LR.getViewProjMatrix c)
-      svMap = Map.singleton mvpSV cameraUpdate
+      mSV = (LR.getMaterialVar (LR.material ro) "m2wMatrix")
+      svMap = Map.union
+              (Map.singleton mvpSV (\_ c -> LR.Matrix4Val $ LR.getViewProjMatrix c))
+              (Map.singleton mSV (\_ c -> LR.Matrix4Val one))
       triObj = LR.GameObject {
-        LR.renderObject = Just (LR.switchMaterialTexture ro "sampler" $ fromJust mtex),
+        LR.renderObject = Just (LR.switchMaterialTexture ro "diffuseTex" tex),
         LR.gameObject = Triangle,
         LR.objSVMap = svMap,
         LR.update = (\t a -> Just a),

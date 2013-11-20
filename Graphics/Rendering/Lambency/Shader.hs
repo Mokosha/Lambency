@@ -9,7 +9,8 @@ module Graphics.Rendering.Lambency.Shader (
   isUniform,
   getUniforms,
   setUniformVar,
-  createSimpleShader
+  createSimpleShader,
+  createSpotlightShader,
 ) where
 
 --------------------------------------------------------------------------------
@@ -151,6 +152,16 @@ lookupShaderVar prg ty name = do
     else
     return $ (name, Just $ Uniform ty uloc)
 
+extractVars :: [IO(String, Maybe ShaderVar)] -> IO ShaderVarMap
+extractVars iomvars = M.liftM constructMap $ sequence iomvars
+  where
+    constructMap :: [(String, Maybe ShaderVar)] -> ShaderVarMap
+    constructMap vs = foldl (\m (n, sv) -> Map.insert n sv m) Map.empty (gatherValid vs)
+
+    gatherValid :: [(String, Maybe ShaderVar)] -> [(String, ShaderVar)]
+    gatherValid vs = catMaybes $ map (\(n, msv) -> case msv of Nothing -> Nothing
+                                                               Just sv -> Just (n, sv)) vs
+
 createSimpleShader :: IO (Shader)
 createSimpleShader = do
   defaultVertexShader <- getDataFileName "simple.vs"
@@ -162,12 +173,20 @@ createSimpleShader = do
      (TextureTy, "sampler"),
      (Matrix4Ty, "mvpMatrix")]
   return $ Shader prg vars
-  where extractVars :: [IO(String, Maybe ShaderVar)] -> IO ShaderVarMap
-        extractVars iomvars = M.liftM constructMap $ sequence iomvars
 
-        constructMap :: [(String, Maybe ShaderVar)] -> ShaderVarMap
-        constructMap vs = foldl (\m (n, sv) -> Map.insert n sv m) Map.empty (gatherValid vs)
-
-        gatherValid :: [(String, Maybe ShaderVar)] -> [(String, ShaderVar)]
-        gatherValid vs = catMaybes $ map (\(n, msv) -> case msv of Nothing -> Nothing
-                                                                   Just sv -> Just (n, sv)) vs
+createSpotlightShader :: IO (Shader)
+createSpotlightShader = do
+  vs <- getDataFileName "standard.vs"
+  fs <- getDataFileName "spotlight.fs"
+  (Just prg) <- loadProgram (Just vs) (Just fs) Nothing
+  vars <- extractVars $ map (uncurry (lookupShaderVar prg))
+    [(FloatListTy, "position"),
+     (FloatListTy, "texCoord"),
+     (FloatListTy, "norm"),
+     (Matrix4Ty, "m2wMatrix"),
+     (Matrix4Ty, "mvpMatrix"),
+     (TextureTy, "diffuseTex"),
+     (Vector3Ty, "ambient"),
+     (Vector3Ty, "lightPos"),
+     (Vector3Ty, "lightDir")]
+  return $ Shader prg vars

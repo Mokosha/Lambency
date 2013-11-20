@@ -46,7 +46,7 @@ createBasicRO (v:vs) idxs =
   in do
     vbo <- setupBuffer GL.ArrayBuffer flts
     ibo <- setupBuffer GL.ElementArrayBuffer idxs
-    mat <- createSimpleMaterial
+    mat <- vertexMaterial
     return $ RenderObject {
       material = mat,
       render = vertexRenderer mat vbo ibo $ fromIntegral (length idxs)
@@ -64,6 +64,12 @@ createBasicRO (v:vs) idxs =
       withStorableArray varr (\ptr ->
         GL.bufferData tgt GL.$= (ptrsize xs, ptr, GL.StaticDraw))
       return buf
+
+    -- !FIXME!
+    vertexMaterial :: IO (Material)
+    vertexMaterial = case v of
+      (OTVertex3 _ _ _) -> createSpotlightMaterial Nothing
+      _ -> createSimpleMaterial
 
     vertexRenderer :: Material -> (GL.BufferObject -> GL.BufferObject -> GL.NumArrayIndices -> IO ())
     vertexRenderer mat = case v of
