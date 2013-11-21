@@ -20,19 +20,17 @@ import GHC.Float (double2Float)
 
 type CubeDemoObject = UnitQuaternion
 
-demoCam :: LR.GameCamera
-demoCam = LR.GameCamera
-          (LR.mkOrthoCamera
-           -- Pos          Dir              Up
-           ((-5) *& vec3Z) (mkNormal vec3Z) (mkNormal vec3Y)
-           -- l  r  t  b
-           (-10) 10 10 (-10)
+demoCam :: LR.Camera
+demoCam = LR.mkPerspCamera
+           -- Pos           Dir              Up
+           ((-10) *& vec3Z) (mkNormal vec3Z) (mkNormal vec3Y)
+           (pi / 6) (4.0 / 3.0)
            -- near far
-           0.1 1000.0)
-          (flip const)
+           0.1 1000.0
 
 cubeObj :: IO (LR.GameObject CubeDemoObject)
 cubeObj = do
+  putStrLn . show $ LR.getViewProjMatrix demoCam
   ro <- LR.createRenderObject LR.makeCube
   (Just tex) <- LR.loadTextureFromPNG =<< (getDataFileName $ "crate" <.> "png")
   let lu = LR.getMaterialVar (LR.material ro)
@@ -44,7 +42,7 @@ cubeObj = do
     LR.renderObject = Just (LR.switchMaterialTexture ro "diffuseTex" tex),
     LR.gameObject = rotU (Vec3 1 0 1) 0.6,
     LR.objSVMap = svMap,
-    LR.update = \t go -> Just . (LR.updateGameObject go) $ (LR.gameObject go) .*. (rotU vec3Y $ double2Float t),
+    LR.update = \t go -> Just . (LR.updateGameObject go) $ (LR.gameObject go) .*. (rotU vec3Y $ (*0.1) $ double2Float t),
     LR.collide = \a _ -> Just a
   }
 
@@ -53,6 +51,6 @@ main = do
   m <- L.makeWindow 640 480 "Cube Demo"
   obj <- cubeObj
   case m of
-    (Just win) -> L.run win demoCam [obj]
+    (Just win) -> L.run win (LR.GameCamera demoCam $ flip const) [obj]
     Nothing -> return ()
   L.destroyWindow m
