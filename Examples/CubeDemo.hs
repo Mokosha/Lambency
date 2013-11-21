@@ -18,48 +18,41 @@ import Paths_lambency_examples
 import GHC.Float (double2Float)
 ---------------------------------------------------------------------------------
 
-data CubeDemoObject = Triangle
-
-rotateCamera :: Double -> LR.Camera -> LR.Camera
-rotateCamera dt cam =
-  let newPos = actU (rotU vec3Y (double2Float dt)) (LR.getCamPos cam)
-      newDir = (mkNormal . neg) newPos
-  in flip LR.setCamDir newDir $ LR.setCamPos cam newPos
-
-stillCamera :: Double -> LR.Camera -> LR.Camera
-stillCamera = flip const
-
-kCamPos :: Vec3
-kCamPos = Vec3 4 3 3
-
-kCamDir :: Normal3
-kCamDir = (mkNormal . neg) kCamPos
-
-kCamUp :: Normal3
-kCamUp = mkNormal vec3Y
+type CubeDemoObject = UnitQuaternion
 
 demoCam :: LR.GameCamera
 demoCam = LR.GameCamera
-          (LR.mkOrthoCamera kCamPos kCamDir kCamUp (-10) 10 10 (-10) 0.1 1000.0)
-          rotateCamera
+          (LR.mkOrthoCamera
+           -- Pos          Dir              Up
+           ((-5) *& vec3Z) (mkNormal vec3Z) (mkNormal vec3Y)
+           -- l  r  t  b
+           (-10) 10 10 (-10)
+           -- near far
+           0.1 1000.0)
+          (flip const)
+
+cubeObj :: IO (LR.GameObject CubeDemoObject)
+cubeObj = do
+  ro <- LR.createRenderObject LR.makeCube
+  (Just tex) <- LR.loadTextureFromPNG =<< (getDataFileName $ "crate" <.> "png")
+  let lu = LR.getMaterialVar (LR.material ro)
+      quatToMat = (extendWith 1.0) . fromOrtho . leftOrthoU
+      svMap = Map.fromList [
+        (lu "mvpMatrix", (\uq c -> LR.Matrix4Val $ (quatToMat uq) .*. (LR.getViewProjMatrix c))),
+        (lu "m2wMatrix", (\uq c -> LR.Matrix4Val $ (quatToMat uq)))]
+  return LR.GameObject {
+    LR.renderObject = Just (LR.switchMaterialTexture ro "diffuseTex" tex),
+    LR.gameObject = rotU (Vec3 1 0 1) 0.6,
+    LR.objSVMap = svMap,
+    LR.update = \t go -> Just . (LR.updateGameObject go) $ (LR.gameObject go) .*. (rotU vec3Y $ double2Float t),
+    LR.collide = \a _ -> Just a
+  }
 
 main :: IO ()
 main = do
   m <- L.makeWindow 640 480 "Cube Demo"
-  ro <- LR.createRenderObject LR.makeCube
-  (Just tex) <- LR.loadTextureFromPNG =<< (getDataFileName $ "crate" <.> "png")
-  let mvpSV = (LR.getMaterialVar (LR.material ro) "mvpMatrix")
-      mSV = (LR.getMaterialVar (LR.material ro) "m2wMatrix")
-      svMap = Map.union
-              (Map.singleton mvpSV (\_ c -> LR.Matrix4Val $ LR.getViewProjMatrix c))
-              (Map.singleton mSV (\_ c -> LR.Matrix4Val one))
-      triObj = LR.GameObject {
-        LR.renderObject = Just (LR.switchMaterialTexture ro "diffuseTex" tex),
-        LR.gameObject = Triangle,
-        LR.objSVMap = svMap,
-        LR.update = (\t a -> Just a),
-        LR.collide = (\a as -> Just a)}
+  obj <- cubeObj
   case m of
-    (Just win) -> L.run win demoCam [triObj]
+    (Just win) -> L.run win demoCam [obj]
     Nothing -> return ()
   L.destroyWindow m
