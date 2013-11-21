@@ -44,7 +44,7 @@ initializeTexture ptr (w, h) fmt = do
   let size = GL.TextureSize2D (fromIntegral w) (fromIntegral h)
       pd = GL.PixelData (fmt2glpfmt fmt) GL.UnsignedByte ptr
   GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 size 0 pd
-  GL.generateMipmap GL.Texture2D
+  GL.generateMipmap' GL.Texture2D
   GL.textureFilter GL.Texture2D GL.$= ((GL.Linear', Just GL.Linear'), GL.Linear')
   GL.textureWrapMode GL.Texture2D GL.S GL.$= (GL.Repeated, GL.Repeat)
   GL.textureWrapMode GL.Texture2D GL.T GL.$= (GL.Repeated, GL.Repeat)
