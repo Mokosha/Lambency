@@ -1,9 +1,8 @@
 module Graphics.Rendering.Lambency.Camera (
-  CameraLocation(..),
-  CameraViewDistance(..),
-  Camera(..),
+  Camera,
   GameCamera(..),
   mkOrthoCamera,
+  mkPerspCamera,
   getViewProjMatrix,
 
   getCamLoc,
@@ -44,11 +43,11 @@ data CameraType =
     right :: Float,
     top :: Float,
     bottom :: Float
-    }
---  | Persp {
---    fovY :: Float,
---    aspect :: Float
---    }
+  }
+  | Persp {
+    fovY :: Float,
+    aspect :: Float
+  }
 
 data Camera = Camera CameraLocation CameraType CameraViewDistance
 
@@ -70,6 +69,25 @@ mkOrthoCamera pos dir up l r t b n f = Camera
     right = r,
     top = t,
     bottom = b
+  }
+
+  CameraViewDistance {
+    near = n,
+    far = f
+  }
+
+mkPerspCamera :: Vec3 -> Normal3 -> Normal3 ->
+                 Float -> Float -> Float -> Float -> Camera
+mkPerspCamera pos dir up fovy aspratio n f = Camera
+  CameraLocation {
+     camPos = pos,
+     camDir = dir,
+     camUp = up
+  }
+
+  Persp {
+    fovY = fovy,
+    aspect = aspratio
   }
 
   CameraViewDistance {
@@ -150,9 +168,7 @@ getViewMatrix c = let
      -- translation part
      Vec4 (te side) (te up) (- te dir) 1.0
   where
-    ez :: Vec3 -> Vec4
     ez = extendZero
-    fn :: Normal3 -> Vec3
     fn = fromNormal
     en = ez . fn
 
@@ -166,6 +182,18 @@ getProjMatrix (Camera _ (Ortho {top = t, bottom = b, left = l, right = r}) dist)
    (Vec4 0 (2.0 / (t - b)) 0 0)
    (Vec4 0 0 ((-2.0) / (f - n)) 0)
    (Vec4 (-(r+l)/(r-l)) (-(t+b)/(t-b)) (-(f+n)/(f-n)) 1)
+
+getProjMatrix (Camera _ (Persp {fovY = fovy, aspect = a}) dist) = let
+  n = near dist
+  f = far dist
+  t = n * (atan (fovy * 0.5))
+  r = t * a
+  in
+   Mat4
+   (Vec4 (n / r) 0 0 0)
+   (Vec4 0 (n / t) 0 0)
+   (Vec4 0 0 (-(f+n)/(f-n)) (-1))
+   (Vec4 0 0 (-(2*f*n)/(f-n)) 0)
 
 getViewProjMatrix :: Camera -> Mat4
 getViewProjMatrix c = (getViewMatrix c) .*. (getProjMatrix c)
