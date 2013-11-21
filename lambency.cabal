@@ -14,10 +14,10 @@ maintainer:          krajcevski@gmail.com
 category:            Graphics
 build-type:          Simple
 cabal-version:       >=1.8
-data-files:          simple.vs
-                     simple.fs
-                     standard.vs
-                     spotlight.fs
+data-files:          simple.vert
+                     simple.frag
+                     standard.vert
+                     spotlight.frag
 data-dir:            Graphics/Rendering/Lambency/Shaders
 
 library
@@ -42,5 +42,6 @@ library
                        containers,
                        bytestring,
                        array,
+                       filepath,
                        -- Eventually replace these...
                        pngload

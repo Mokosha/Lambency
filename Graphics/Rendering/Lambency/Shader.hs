@@ -24,6 +24,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
 import Data.Vect.Float
 
+import qualified Data.Map as Map
 import qualified Data.ByteString as BS
 import qualified Control.Monad as M
 
@@ -31,7 +32,7 @@ import Data.Maybe (catMaybes)
 import Data.Array.IO
 import Data.Array.Storable
 
-import qualified Data.Map as Map
+import System.FilePath
 --------------------------------------------------------------------------------
 
 data ShaderVarTy = Matrix3Ty
@@ -107,38 +108,45 @@ setUniformVar (Uniform Vector3Ty loc) (Vector3Val (Vec3 x y z)) = do
 
 setUniformVar _ _ = ioError $ userError "Uniform not supported"
 
-loadProgram :: (Maybe FilePath) -> (Maybe FilePath) -> (Maybe FilePath) -> IO(Maybe GL.Program)
-loadProgram vss fss gss = do
-  vsid <- compileShader GL.VertexShader vss
-  fsid <- compileShader GL.FragmentShader fss
-  gsid <- compileShader GL.GeometryShader gss
-  case (vsid, fsid, gsid) of
-    (Nothing, Nothing, Nothing) -> return Nothing
-    (_, _, _) -> do
+getShaderExt :: GL.ShaderType -> String
+getShaderExt GL.FragmentShader = ".frag"
+getShaderExt GL.VertexShader = ".vert"
+getShaderExt _ = ".glsl"
+
+getShaderForExt :: String -> Maybe GL.ShaderType
+getShaderForExt ".frag" = Just GL.FragmentShader
+getShaderForExt ".vert" = Just GL.VertexShader
+getShaderForExt _ = Nothing
+
+getShaderPath :: String -> GL.ShaderType -> IO(FilePath)
+getShaderPath name ty = getDataFileName $ name <.> (getShaderExt ty)
+
+loadProgram :: [FilePath] -> IO(Maybe GL.Program)
+loadProgram paths = do
+  sids <- mapM compileShader paths
+  case (catMaybes sids) of
+    [] -> return Nothing
+    ids -> do
       prg <- GL.createProgram
-      let
-        attachShader :: Maybe GL.Shader -> IO ()
-        attachShader shdr = case shdr of
-            Nothing -> return ()
-            Just s -> GL.attachShader prg s
-        in do
-        attachShader vsid
-        attachShader fsid
-        attachShader gsid
+      mapM_ (GL.attachShader prg) ids
       GL.linkProgram prg
       return $ Just prg
   where
-   compileShader :: GL.ShaderType -> (Maybe FilePath) -> IO(Maybe GL.Shader)
-   compileShader _ Nothing = return Nothing
-   compileShader sTy (Just fp) = do
-     putStrLn $ "Compiling " ++ (show sTy) ++ ": " ++ fp
-     sid <- GL.createShader sTy
-     fileSrc <- BS.readFile fp
-     GL.shaderSourceBS sid GL.$= fileSrc
-     GL.compileShader sid
-     shaderLog <- GL.get $ GL.shaderInfoLog sid
-     M.unless (shaderLog == "") $ putStrLn shaderLog
-     return (Just sid)
+    compileShader :: FilePath -> IO(Maybe GL.Shader)
+    compileShader fp = do
+      putStrLn $ "Compiling " ++ fp
+      fileSrc <- BS.readFile fp
+      msid <- case (getShaderForExt . takeExtension) fp of
+        Just shdrTy -> return . Just =<< GL.createShader shdrTy
+        Nothing -> return Nothing
+      case msid of
+        Just sid -> do
+          GL.shaderSourceBS sid GL.$= fileSrc
+          GL.compileShader sid
+          shaderLog <- GL.get $ GL.shaderInfoLog sid
+          M.unless (shaderLog == []) $ putStrLn shaderLog
+          return (Just sid)
+        Nothing -> return Nothing
 
 lookupShaderVar :: GL.Program -> ShaderVarTy -> String -> IO((String, Maybe ShaderVar))
 lookupShaderVar prg ty name = do
@@ -161,12 +169,9 @@ extractVars iomvars = M.liftM constructMap $ sequence iomvars
     gatherValid :: [(String, Maybe ShaderVar)] -> [(String, ShaderVar)]
     gatherValid vs = catMaybes $ map (\(n, msv) -> case msv of Nothing -> Nothing
                                                                Just sv -> Just (n, sv)) vs
-
 createSimpleShader :: IO (Shader)
 createSimpleShader = do
-  defaultVertexShader <- getDataFileName "simple.vs"
-  defaultFragmentShader <- getDataFileName "simple.fs"
-  (Just prg) <- loadProgram (Just defaultVertexShader) (Just defaultFragmentShader) Nothing
+  (Just prg) <- loadProgram =<< mapM (getShaderPath "simple") [GL.VertexShader, GL.FragmentShader]
   vars <- extractVars $ map (uncurry (lookupShaderVar prg))
     [(FloatListTy, "position"),
      (FloatListTy, "texCoord"),
@@ -176,9 +181,9 @@ createSimpleShader = do
 
 createSpotlightShader :: IO (Shader)
 createSpotlightShader = do
-  vs <- getDataFileName "standard.vs"
-  fs <- getDataFileName "spotlight.fs"
-  (Just prg) <- loadProgram (Just vs) (Just fs) Nothing
+  vs <- getShaderPath "standard" GL.VertexShader
+  fs <- getShaderPath "spotlight" GL.FragmentShader
+  (Just prg) <- loadProgram [vs, fs]
   vars <- extractVars $ map (uncurry (lookupShaderVar prg))
     [(FloatListTy, "position"),
      (FloatListTy, "texCoord"),
