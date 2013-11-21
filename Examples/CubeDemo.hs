@@ -18,7 +18,7 @@ import Paths_lambency_examples
 import GHC.Float (double2Float)
 ---------------------------------------------------------------------------------
 
-type CubeDemoObject = UnitQuaternion
+data CubeDemoObject = DemoObject Float Vec3 UnitQuaternion
 
 demoCam :: LR.Camera
 demoCam = LR.mkPerspCamera
@@ -28,29 +28,51 @@ demoCam = LR.mkPerspCamera
            -- near far
            0.1 1000.0
 
-cubeObj :: IO (LR.GameObject CubeDemoObject)
-cubeObj = do
-  putStrLn . show $ LR.getViewProjMatrix demoCam
-  ro <- LR.createRenderObject LR.makeCube
-  (Just tex) <- LR.loadTextureFromPNG =<< (getDataFileName $ "crate" <.> "png")
-  let lu = LR.getMaterialVar (LR.material ro)
-      quatToMat = (extendWith 1.0) . fromOrtho . leftOrthoU
-      svMap = Map.fromList [
-        (lu "mvpMatrix", (\uq c -> LR.Matrix4Val $ (quatToMat uq) .*. (LR.getViewProjMatrix c))),
-        (lu "m2wMatrix", (\uq c -> LR.Matrix4Val $ (quatToMat uq)))]
+demoSVMap :: LR.RenderObject -> Map.Map LR.ShaderVar (CubeDemoObject -> LR.Camera -> LR.ShaderValue)
+demoSVMap ro = Map.fromList [
+  (lu "mvpMatrix", updateMVPMatrix),
+  (lu "m2wMatrix", updateModelMatrix)]
+  where
+    updateModelMatrix :: CubeDemoObject -> LR.Camera -> LR.ShaderValue
+    updateModelMatrix (DemoObject scale pos rot) c =
+      LR.Matrix4Val $ LR.sprToMatrix scale pos rot
+
+    updateMVPMatrix :: CubeDemoObject -> LR.Camera -> LR.ShaderValue
+    updateMVPMatrix obj c = LR.Matrix4Val $ model .*. (LR.getViewProjMatrix c)
+      where (LR.Matrix4Val model) = updateModelMatrix obj c
+      
+    lu = LR.getMaterialVar (LR.material ro)
+
+planeObj :: IO (LR.GameObject CubeDemoObject)
+planeObj = do
+  ro <- LR.createRenderObject LR.makePlane
   return LR.GameObject {
-    LR.renderObject = Just (LR.switchMaterialTexture ro "diffuseTex" tex),
-    LR.gameObject = rotU (Vec3 1 0 1) 0.6,
-    LR.objSVMap = svMap,
-    LR.update = \t go -> Just . (LR.updateGameObject go) $ (LR.gameObject go) .*. (rotU vec3Y $ (*0.1) $ double2Float t),
-    LR.collide = \a _ -> Just a
+    LR.renderObject = Just ro,
+    LR.gameObject = DemoObject 10 (Vec3 0 (-2) 0) unitU,
+    LR.objSVMap = demoSVMap ro,
+    LR.update = \_ go -> Just go,
+    LR.collide = \go _ -> Just go
   }
+
+cubeObj :: IO (LR.GameObject CubeDemoObject)
+cubeObj = let
+  rotateObj dt (DemoObject s p u) = DemoObject s p $ u .*. (rotU vec3Y $ double2Float dt)
+  in do
+    ro <- LR.createRenderObject LR.makeCube
+    (Just tex) <- LR.loadTextureFromPNG =<< (getDataFileName $ "crate" <.> "png")
+    return LR.GameObject {
+      LR.renderObject = Just (LR.switchMaterialTexture ro "diffuseTex" tex),
+      LR.gameObject = DemoObject 1 zero $ rotU (Vec3 1 0 1) 0.6,
+      LR.objSVMap = demoSVMap ro,
+      LR.update = \t go -> Just . (LR.updateGameObject go) $ rotateObj t $ LR.gameObject go,
+      LR.collide = \a _ -> Just a
+    }
 
 main :: IO ()
 main = do
   m <- L.makeWindow 640 480 "Cube Demo"
-  obj <- cubeObj
+  objs <- sequence [cubeObj, planeObj]
   case m of
-    (Just win) -> L.run win (LR.GameCamera demoCam $ flip const) [obj]
+    (Just win) -> L.run win (LR.GameCamera demoCam $ flip const) objs
     Nothing -> return ()
   L.destroyWindow m
