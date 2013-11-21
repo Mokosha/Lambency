@@ -55,18 +55,18 @@ planeObj = do
   }
 
 cubeObj :: IO (LR.GameObject CubeDemoObject)
-cubeObj = let
+cubeObj = do
+  ro <- LR.createRenderObject LR.makeCube
+  (Just tex) <- LR.loadTextureFromPNG =<< (getDataFileName $ "crate" <.> "png")
+  return LR.GameObject {
+    LR.renderObject = Just (LR.switchMaterialTexture ro "diffuseTex" tex),
+    LR.gameObject = DemoObject 1 zero $ rotU (Vec3 1 0 1) 0.6,
+    LR.objSVMap = demoSVMap ro,
+    LR.update = \t go -> Just . (LR.updateGameObject go) $ rotateObj t $ LR.gameObject go,
+    LR.collide = \a _ -> Just a
+  }
+  where 
   rotateObj dt (DemoObject s p u) = DemoObject s p $ u .*. (rotU vec3Y $ double2Float dt)
-  in do
-    ro <- LR.createRenderObject LR.makeCube
-    (Just tex) <- LR.loadTextureFromPNG =<< (getDataFileName $ "crate" <.> "png")
-    return LR.GameObject {
-      LR.renderObject = Just (LR.switchMaterialTexture ro "diffuseTex" tex),
-      LR.gameObject = DemoObject 1 zero $ rotU (Vec3 1 0 1) 0.6,
-      LR.objSVMap = demoSVMap ro,
-      LR.update = \t go -> Just . (LR.updateGameObject go) $ rotateObj t $ LR.gameObject go,
-      LR.collide = \a _ -> Just a
-    }
 
 main :: IO ()
 main = do

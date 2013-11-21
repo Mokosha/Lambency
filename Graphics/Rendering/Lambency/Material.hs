@@ -56,7 +56,7 @@ createSpotlightMaterial mtex = do
       shdrMap = Map.fromList [
         (varMap Map.! "diffuseTex", TextureVal $ getHandle t),
         (varMap Map.! "lightDir", Vector3Val $ Vec3 0.57735 (-0.57735) 0.57735),
-        (varMap Map.! "ambient", Vector3Val $ Vec3 0.5 0.5 0.5)]
+        (varMap Map.! "ambient", Vector3Val $ Vec3 0.15 0.15 0.15)]
   return $ Material shdr shdrMap
 
 switchTexture :: Material -> String -> Texture -> Material
