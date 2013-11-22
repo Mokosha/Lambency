@@ -56,7 +56,9 @@ run win (LR.GameCamera cam updCam) objs = do
   case keyState of
     GLFW.KeyState'Pressed -> GLFW.setWindowShouldClose win True
     _ -> return ()
-  GL.clearColor GL.$= GL.Color4 0.0 0.0 0.5 1
+
+  -- !FIXME! This should be moved to the camera...
+  GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
   GL.clear [GL.ColorBuffer, GL.DepthBuffer]
   LR.renderCamera cam objs
   GL.flush

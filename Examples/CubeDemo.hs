@@ -23,8 +23,8 @@ data CubeDemoObject = DemoObject Float Vec3 UnitQuaternion
 demoCam :: LR.Camera
 demoCam = LR.mkPerspCamera
            -- Pos           Dir              Up
-           ((-10) *& vec3Z) (mkNormal vec3Z) (mkNormal vec3Y)
-           (pi / 6) (4.0 / 3.0)
+           ((-15) *& vec3Z) (mkNormal vec3Z) (mkNormal vec3Y)
+           (pi / 4) (4.0 / 3.0)
            -- near far
            0.1 1000.0
 
