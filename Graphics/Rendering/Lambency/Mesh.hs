@@ -90,4 +90,4 @@ makePlane = Mesh {
         idxOf x y = y * 21 + x
 
 instance Renderable Mesh where
-  createRenderObject m = createBasicRO (vertices m) (indices m)
+  createRenderObject m mat = createBasicRO (vertices m) (indices m) mat

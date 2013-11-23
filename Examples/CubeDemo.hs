@@ -45,7 +45,8 @@ demoSVMap ro = Map.fromList [
 
 planeObj :: IO (LR.GameObject CubeDemoObject)
 planeObj = do
-  ro <- LR.createRenderObject LR.makePlane
+  mat <- LR.createSpotlightMaterial . Just =<< (LR.createSolidTexture (128, 128, 128, 255))
+  ro <- LR.createRenderObject LR.makePlane mat
   return LR.GameObject {
     LR.renderObject = Just ro,
     LR.gameObject = DemoObject 10 (Vec3 0 (-2) 0) unitU,
@@ -55,10 +56,12 @@ planeObj = do
 
 cubeObj :: IO (LR.GameObject CubeDemoObject)
 cubeObj = do
-  ro <- LR.createRenderObject LR.makeCube
-  (Just tex) <- LR.loadTextureFromPNG =<< (getDataFileName $ "crate" <.> "png")
+  ro <- (getDataFileName $ "crate" <.> "png") >>=
+        LR.loadTextureFromPNG >>=
+        LR.createSpotlightMaterial >>=
+        LR.createRenderObject LR.makeCube
   return LR.GameObject {
-    LR.renderObject = Just (LR.switchMaterialTexture ro "diffuseTex" tex),
+    LR.renderObject = Just ro,
     LR.gameObject = DemoObject 1 zero $ rotU (Vec3 1 0 1) 0.6,
     LR.objSVMap = demoSVMap ro,
     LR.update = \t obj _ -> Just $ rotateObj t obj
