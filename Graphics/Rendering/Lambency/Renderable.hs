@@ -32,21 +32,19 @@ switchMaterialTexture :: RenderObject -> String -> Texture -> RenderObject
 switchMaterialTexture ro name tex =
   (\o -> o { material = switchTexture (material ro) name tex }) ro
 
-createBasicRO :: [Vertex] -> [Int16] -> IO (RenderObject)
-createBasicRO [] _ = do
-  mat <- createSimpleMaterial
+createBasicRO :: [Vertex] -> [Int16] -> Material -> IO (RenderObject)
+createBasicRO [] _ mat = do
   return $ RenderObject {
     material = mat,
     render = return ()
   }
-createBasicRO (v:vs) idxs =
+createBasicRO (v:vs) idxs mat =
   let
     flts :: [Float]
     flts = (v:vs) >>= toFloats
   in do
     vbo <- setupBuffer GL.ArrayBuffer flts
     ibo <- setupBuffer GL.ElementArrayBuffer idxs
-    mat <- vertexMaterial
     return $ RenderObject {
       material = mat,
       render = vertexRenderer mat vbo ibo $ fromIntegral (length idxs)
@@ -65,24 +63,21 @@ createBasicRO (v:vs) idxs =
         GL.bufferData tgt GL.$= (ptrsize xs, ptr, GL.StaticDraw))
       return buf
 
-    -- !FIXME!
-    vertexMaterial :: IO (Material)
-    vertexMaterial = case v of
-      (OTVertex3 _ _ _) -> createSpotlightMaterial Nothing
-      _ -> createSimpleMaterial
-
-    vertexRenderer :: Material -> (GL.BufferObject -> GL.BufferObject -> GL.NumArrayIndices -> IO ())
-    vertexRenderer mat = case v of
+    vertexRenderer :: Material ->
+                      (GL.BufferObject -> GL.BufferObject -> GL.NumArrayIndices -> IO ())
+    vertexRenderer m = case v of
       (TVertex3 _ _) -> renderTTris (lu "position") (lu "texCoord")
       (OTVertex3 _ _ _) -> renderOTTris (lu "position") (lu "norm") (lu "texCoord")
       _ -> renderTris (lu "position")
      where
        lu :: String -> GL.AttribLocation
-       lu name = case getMaterialVar mat name of
+       lu name = case getMaterialVar m name of
          Attribute _ loc -> loc
          Uniform _ _ -> GL.AttribLocation (-1)
 
-    renderTris :: GL.AttribLocation -> GL.BufferObject -> GL.BufferObject -> GL.NumArrayIndices -> IO ()
+    renderTris :: GL.AttribLocation ->
+                  GL.BufferObject -> GL.BufferObject ->
+                  GL.NumArrayIndices -> IO ()
     renderTris posLoc vbo ibo nIndices = let
       vadesc = GL.VertexArrayDescriptor 3 GL.Float 0 (nullPtr :: Ptr Float)
       in do
@@ -134,4 +129,7 @@ createBasicRO (v:vs) idxs =
         GL.drawElements GL.Triangles nIndices GL.UnsignedShort nullPtr
 
 class Renderable a where
-  createRenderObject :: a -> IO (RenderObject)
+  createRenderObject :: a -> Material -> IO (RenderObject)
+
+  defaultRenderObject :: a -> IO (RenderObject)
+  defaultRenderObject m = createRenderObject m =<< createSimpleMaterial
