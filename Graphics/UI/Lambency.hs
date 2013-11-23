@@ -64,7 +64,7 @@ run win (LR.GameCamera cam updCam) objs = do
   GL.flush
   GLFW.swapBuffers win
   q <- GLFW.windowShouldClose win
-  unless q $ run win updateCamera $ LR.interactObjs $ LR.updateObjs dt objs
+  unless q $ run win updateCamera $ LR.updateObjs dt objs
   where
     dt :: Double
     dt = 0.05

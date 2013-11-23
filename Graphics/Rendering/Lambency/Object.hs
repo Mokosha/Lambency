@@ -2,7 +2,6 @@ module Graphics.Rendering.Lambency.Object (
   GameObject(..),
   updateGameObject,
   updateObjs,
-  interactObjs,
   renderCamera
 ) where
 
@@ -12,8 +11,6 @@ import Graphics.Rendering.Lambency.Camera
 import Graphics.Rendering.Lambency.Material
 import Graphics.Rendering.Lambency.Renderable
 import Graphics.Rendering.Lambency.Shader
-
-import Control.Applicative
 
 import Data.Maybe (catMaybes)
 import qualified Data.Map as Map
@@ -26,18 +23,21 @@ data GameObject a = GameObject {
   renderObject :: Maybe RenderObject,
   gameObject :: a,
   objSVMap :: Map.Map ShaderVar (a -> Camera -> ShaderValue),
-  update :: Time -> GameObject a -> Maybe (GameObject a),
-  collide :: GameObject a -> [GameObject a] -> Maybe (GameObject a)
+  update :: Time -> a -> [a] -> Maybe a
 }
 
 updateGameObject :: GameObject a -> a -> GameObject a
 updateGameObject go val = (\obj -> obj { gameObject = val }) go
 
 updateObjs :: Time -> [GameObject a] -> [GameObject a]
-updateObjs dt objs = catMaybes $ (\obj -> update obj dt obj) <$> objs
-
-interactObjs :: [GameObject a] -> [GameObject a]
-interactObjs allobjs = catMaybes $ (\obj -> (collide obj) obj allobjs) <$> allobjs
+updateObjs dt objs = catMaybes $
+                     zipWith3 (\upd obj go ->
+                                case upd dt obj os of
+                                  Nothing -> Nothing
+                                  Just o -> Just $ updateGameObject go o)
+                     upds os objs
+  where upds = map update objs
+        os = map gameObject objs
 
 renderCamera :: Camera -> [GameObject a] -> IO ()
 renderCamera cam objs = mapM_ renderObj objs

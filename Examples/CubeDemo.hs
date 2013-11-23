@@ -50,8 +50,7 @@ planeObj = do
     LR.renderObject = Just ro,
     LR.gameObject = DemoObject 10 (Vec3 0 (-2) 0) unitU,
     LR.objSVMap = demoSVMap ro,
-    LR.update = \_ go -> Just go,
-    LR.collide = \go _ -> Just go
+    LR.update = \_ o _ -> Just o
   }
 
 cubeObj :: IO (LR.GameObject CubeDemoObject)
@@ -62,8 +61,7 @@ cubeObj = do
     LR.renderObject = Just (LR.switchMaterialTexture ro "diffuseTex" tex),
     LR.gameObject = DemoObject 1 zero $ rotU (Vec3 1 0 1) 0.6,
     LR.objSVMap = demoSVMap ro,
-    LR.update = \t go -> Just . (LR.updateGameObject go) $ rotateObj t $ LR.gameObject go,
-    LR.collide = \a _ -> Just a
+    LR.update = \t obj _ -> Just $ rotateObj t obj
   }
   where 
   rotateObj dt (DemoObject s p u) = DemoObject s p $ u .*. (rotU vec3Y $ double2Float dt)
