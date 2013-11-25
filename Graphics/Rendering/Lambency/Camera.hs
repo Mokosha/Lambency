@@ -162,20 +162,16 @@ getViewMatrix c = let
   dir = getCamDir c
   side = dir &^ (getCamUp c)
   up = side &^ dir
-  te :: Normal3 -> Float
-  te n = neg (getCamPos c) &. (fn n)
+  te :: Normal3 -> Vec4
+  te n = extendWith (neg (getCamPos c) &. (fromNormal n)) (fromNormal n)
   in
    if compareZero side then
+     -- !FIXME! the user put something bogus... should we still
+     -- try to figure out a good value for the view matrix?
      one
    else
      -- rotation part
-     Mat4 (en side) (en up) (neg $ en dir) $
-     -- translation part
-     Vec4 (te side) (te up) ((0-) $ te dir) 1.0
-  where
-    ez = extendZero
-    fn = fromNormal
-    en = ez . fn
+     transpose $ Mat4 (te side) (te up) (neg $ te dir) (Vec4 0 0 0 1)
 
 getProjMatrix :: Camera -> Mat4
 getProjMatrix (Camera _ (Ortho {top = t, bottom = b, left = l, right = r}) dist) = let
