@@ -14,6 +14,8 @@ import Graphics.Rendering.Lambency.Shader
 import Graphics.Rendering.Lambency.Texture
 
 import Data.Maybe (catMaybes)
+import Data.List (nubBy)
+import Data.Function (on)
 import qualified Data.Map as Map
 
 --------------------------------------------------------------------------------
@@ -75,7 +77,7 @@ renderObj maybeMat cam obj = let
 
 renderCamera :: Camera -> [GameObject a] -> IO ()
 renderCamera cam objs = do
-  sequence_ $
+  mapM_ renderCameraTexture $ nubBy ((==) `on` snd) $
     (catMaybes $ renderObject `map` objs) >>=
     (Map.elems . getShaderMap . material) >>=
     (\x ->
@@ -83,7 +85,7 @@ renderCamera cam objs = do
         TextureVal tex ->
           case getTextureCamera tex of
             Nothing -> []
-            Just (c, h) -> [renderCameraTexture (c, h)]
+            Just (c, h) -> [(c, h)]
         _ -> [])
   mapM_ (renderObj Nothing cam) objs
   where
