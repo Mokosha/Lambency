@@ -44,4 +44,6 @@ library
                        array,
                        filepath,
                        -- Eventually replace these...
-                       pngload
+                       pngload,
+                       pgm,
+                       directory

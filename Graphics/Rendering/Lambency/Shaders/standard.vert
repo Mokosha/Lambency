@@ -1,19 +1,19 @@
 attribute vec3 position;
+attribute vec3 normal;
 attribute vec2 texCoord;
-attribute vec3 norm;
 
 uniform mat4 mvpMatrix;
 uniform mat4 m2wMatrix;
 
-varying vec2 uv;
-varying vec3 normal;
 varying vec3 pos;
+varying vec3 norm;
+varying vec2 uv;
 
 void main() {
 
-  uv = texCoord;
-  normal = normalize((m2wMatrix * vec4(norm, 0)).xyz);
   pos = (m2wMatrix * vec4(position, 1.0)).xyz;
+  norm = normalize((m2wMatrix * vec4(normal, 0)).xyz);
+  uv = texCoord;
 
   vec4 clipSpace = mvpMatrix * vec4(position, 1.0);
   gl_Position = clipSpace / clipSpace.w;

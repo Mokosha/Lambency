@@ -11,6 +11,7 @@ module Graphics.Rendering.Lambency.Shader (
   setUniformVar,
   createSimpleShader,
   createSpotlightShader,
+  destroyShader,
 ) where
 
 --------------------------------------------------------------------------------
@@ -47,7 +48,7 @@ data ShaderVarTy = Matrix3Ty
                  | IntListTy
                  | FloatTy
                  | FloatListTy
-                 | TextureTy
+                 | TextureTy GLRaw.GLuint
                  deriving (Show, Eq)
 
 data ShaderValue = Matrix3Val Mat3
@@ -62,8 +63,32 @@ data ShaderValue = Matrix3Val Mat3
                  | IntListVal [Int]
                  | FloatVal Float
                  | FloatListVal [Float]
-                 | TextureVal TextureHandle
+                 | TextureVal Texture
                  deriving (Show)
+
+cmpm3 :: Mat3 -> Mat3 -> Bool
+cmpm3 (Mat3 x y z) (Mat3 a b c) =
+  compareClose x a && compareClose y b && compareClose z c
+
+cmpm4 :: Mat4 -> Mat4 -> Bool
+cmpm4 (Mat4 x y z w) (Mat4 a b c d) =
+  compareClose x a && compareClose y b && compareClose z c && compareClose w d
+
+instance Eq ShaderValue where
+  (Matrix3Val a) == (Matrix3Val b) = cmpm3 a b
+  (Matrix4Val a) == (Matrix4Val b) = cmpm4 a b
+  (Matrix3ListVal a) == (Matrix3ListVal b) = all id $ map (uncurry cmpm3) $ zip a b
+  (Matrix4ListVal a) == (Matrix4ListVal b) = all id $ map (uncurry cmpm4) $ zip a b
+  (Vector3Val a) == (Vector3Val b) = compareClose a b
+  (Vector4Val a) == (Vector4Val b) = compareClose a b
+  (Vector3ListVal a) == (Vector3ListVal b) = all id $ map (uncurry compareClose) $ zip a b
+  (Vector4ListVal a) == (Vector4ListVal b) = all id $ map (uncurry compareClose) $ zip a b
+  (IntVal a) == (IntVal b) = a == b
+  (IntListVal a) == (IntListVal b) = a == b
+  (FloatVal a) == (FloatVal b) = a == b
+  (FloatListVal a) == (FloatListVal b) = a == b
+  (TextureVal a) == (TextureVal b) = a == b
+  _ == _ = False
 
 data ShaderVar = Uniform ShaderVarTy GL.UniformLocation
                | Attribute ShaderVarTy GL.AttribLocation
@@ -75,7 +100,7 @@ instance Ord ShaderVar where
   s1 `compare` s2 = (show s1) `compare` (show s2)
 
 type ShaderMap = Map.Map ShaderVar ShaderValue
-data Shader = Shader GL.Program ShaderVarMap
+data Shader = Shader GL.Program ShaderVarMap deriving(Show, Eq)
 
 getProgram :: Shader -> GL.Program
 getProgram (Shader prg _) = prg
@@ -95,10 +120,10 @@ setUniformVar (Uniform Matrix4Ty (GL.UniformLocation loc)) (Matrix4Val mat)  = d
   arr <- newListArray (0 :: Int, 15) (map realToFrac (destructMat4 mat))
   withStorableArray arr (\ptr -> GLRaw.glUniformMatrix4fv loc 1 0 ptr)
 
-setUniformVar (Uniform TextureTy loc) (TextureVal tex) = do
-  GL.activeTexture GL.$= (GL.TextureUnit 0)
-  GL.textureBinding GL.Texture2D GL.$= Just tex
-  GL.uniform loc GL.$= (GL.TextureUnit 0)
+setUniformVar (Uniform (TextureTy unit) loc) (TextureVal tex) = do
+  GL.activeTexture GL.$= (GL.TextureUnit unit)
+  GL.textureBinding GL.Texture2D GL.$= Just (getHandle tex)
+  GL.uniform loc GL.$= (GL.TextureUnit unit)
 
 setUniformVar (Uniform Vector3Ty loc) (Vector3Val (Vec3 x y z)) = do
   GL.uniform loc GL.$= GL.Vertex3 (f x) (f y) (f z)
@@ -175,7 +200,7 @@ createSimpleShader = do
   vars <- extractVars $ map (uncurry (lookupShaderVar prg))
     [(FloatListTy, "position"),
      (FloatListTy, "texCoord"),
-     (TextureTy, "sampler"),
+     (TextureTy 0, "diffuseTex"),
      (Matrix4Ty, "mvpMatrix")]
   return $ Shader prg vars
 
@@ -187,11 +212,16 @@ createSpotlightShader = do
   vars <- extractVars $ map (uncurry (lookupShaderVar prg))
     [(FloatListTy, "position"),
      (FloatListTy, "texCoord"),
-     (FloatListTy, "norm"),
+     (FloatListTy, "normal"),
      (Matrix4Ty, "m2wMatrix"),
      (Matrix4Ty, "mvpMatrix"),
-     (TextureTy, "diffuseTex"),
+     (TextureTy 0, "shadowMap"),
+     (TextureTy 1, "diffuseTex"),
      (Vector3Ty, "ambient"),
      (Vector3Ty, "lightPos"),
-     (Vector3Ty, "lightDir")]
+     (Vector3Ty, "lightDir"),
+     (Matrix4Ty, "shadowVP")]
   return $ Shader prg vars
+
+destroyShader :: Shader -> IO ()
+destroyShader (Shader prog _) = GL.deleteObjectName prog

@@ -32,10 +32,14 @@ data CameraLocation = CameraLocation {
   camUp :: Normal3
 } deriving (Show)
 
+instance Eq CameraLocation where
+  (CameraLocation pa da ua) == (CameraLocation pb db ub) =
+    compareClose pa pb && compareClose da db && compareClose ua ub
+
 data CameraViewDistance = CameraViewDistance {
   near :: Float,
   far :: Float
-} deriving (Show)
+} deriving (Show, Eq)
 
 data CameraType =
   Ortho {
@@ -48,8 +52,9 @@ data CameraType =
     fovY :: Float,
     aspect :: Float
   }
+  deriving (Show, Eq)
 
-data Camera = Camera CameraLocation CameraType CameraViewDistance
+data Camera = Camera CameraLocation CameraType CameraViewDistance deriving(Show, Eq)
 
 type Time = Double
 data GameCamera = GameCamera Camera (Time -> Camera -> Camera)
@@ -155,7 +160,7 @@ setCamFar c f = let
 getViewMatrix :: Camera -> Mat4
 getViewMatrix c = let
   dir = getCamDir c
-  side = crossprod dir $ getCamUp c
+  side = dir &^ (getCamUp c)
   up = side &^ dir
   te :: Normal3 -> Float
   te n = neg (getCamPos c) &. (fn n)
@@ -166,7 +171,7 @@ getViewMatrix c = let
      -- rotation part
      Mat4 (en side) (en up) (neg $ en dir) $
      -- translation part
-     Vec4 (te side) (te up) (- te dir) 1.0
+     Vec4 (te side) (te up) ((0-) $ te dir) 1.0
   where
     ez = extendZero
     fn = fromNormal

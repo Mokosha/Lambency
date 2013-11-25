@@ -9,7 +9,7 @@ void main() {
 
   uv = texCoord;
 
-  vec4 pos = vec4(position, 1.0);
-  vec4 clipSpace = mvpMatrix * pos;
-  gl_Position = clipSpace / clipSpace.w;
+  vec4 clipSpace = mvpMatrix * vec4(position, 1.0);
+  clipSpace = clipSpace / clipSpace.w;
+  gl_Position = clipSpace;
 }

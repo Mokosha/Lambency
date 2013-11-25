@@ -1,5 +1,6 @@
 module Graphics.Rendering.Lambency.Utils (
   compareZero,
+  compareClose,
   quatFromVecs,
   destructMat4,
   sprToMatrix,
@@ -15,6 +16,9 @@ import Data.Vect.Float.Util.Dim4
 
 compareZero :: (DotProd v) => v -> Bool
 compareZero v = (abs $ v &. v) < 1e-6
+
+compareClose :: (DotProd v) => v -> v -> Bool
+compareClose a b = max (b &. b) (a &. a) - (a &. b) < 1e-6
 
 checkParallel :: (DotProd v) => v -> v -> Bool
 checkParallel v1 v2 = 1 - (abs $ v1 &. v2) < 1e-6 

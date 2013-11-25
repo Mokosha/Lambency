@@ -3,7 +3,8 @@ module Graphics.Rendering.Lambency.Renderable (
   Renderable(..),
   assignMaterial,
   switchMaterialTexture,
-  createBasicRO
+  createBasicRO,
+  clearBuffers
   ) where
 
 --------------------------------------------------------------------------------
@@ -13,6 +14,7 @@ import Graphics.Rendering.Lambency.Material
 import Graphics.Rendering.Lambency.Texture
 import Graphics.Rendering.Lambency.Vertex
 
+import qualified Data.Map as Map
 import Data.Array.IO
 import Data.Array.Storable
 import Data.Int
@@ -22,7 +24,7 @@ import Foreign.Ptr
 
 data RenderObject = RenderObject {
   material :: Material,
-  render :: IO ()
+  render :: Material -> IO ()
 }
 
 assignMaterial :: RenderObject -> Material -> RenderObject
@@ -32,11 +34,14 @@ switchMaterialTexture :: RenderObject -> String -> Texture -> RenderObject
 switchMaterialTexture ro name tex =
   (\o -> o { material = switchTexture (material ro) name tex }) ro
 
+clearBuffers :: IO ()
+clearBuffers = GL.clear [GL.ColorBuffer, GL.DepthBuffer]
+
 createBasicRO :: [Vertex] -> [Int16] -> Material -> IO (RenderObject)
 createBasicRO [] _ mat = do
   return $ RenderObject {
     material = mat,
-    render = return ()
+    render = \_ -> return ()
   }
 createBasicRO (v:vs) idxs mat =
   let
@@ -47,7 +52,7 @@ createBasicRO (v:vs) idxs mat =
     ibo <- setupBuffer GL.ElementArrayBuffer idxs
     return $ RenderObject {
       material = mat,
-      render = vertexRenderer mat vbo ibo $ fromIntegral (length idxs)
+      render = createRenderFunc vbo ibo $ fromIntegral (length idxs)
     }
   where
     ptrsize :: (Storable a) => [a] -> GL.GLsizeiptr
@@ -59,74 +64,33 @@ createBasicRO (v:vs) idxs mat =
       buf <- GL.genObjectName
       GL.bindBuffer tgt GL.$= (Just buf)
       varr <- newListArray (0, length xs - 1) xs
-      withStorableArray varr (\ptr ->
-        GL.bufferData tgt GL.$= (ptrsize xs, ptr, GL.StaticDraw))
+      withStorableArray varr (\ptr -> GL.bufferData tgt GL.$= (ptrsize xs, ptr, GL.StaticDraw))
       return buf
 
-    vertexRenderer :: Material ->
-                      (GL.BufferObject -> GL.BufferObject -> GL.NumArrayIndices -> IO ())
-    vertexRenderer m = case v of
-      (TVertex3 _ _) -> renderTTris (lu "position") (lu "texCoord")
-      (OTVertex3 _ _ _) -> renderOTTris (lu "position") (lu "norm") (lu "texCoord")
-      _ -> renderTris (lu "position")
+    bindMaterial :: Material -> IO ()
+    bindMaterial m = do
+      mapM_ (\(loc, desc) -> GL.vertexAttribPointer loc GL.$= (GL.ToFloat, desc)) $
+        zip (map lu $ getAttribNames v) (getDescriptors v)
      where
        lu :: String -> GL.AttribLocation
-       lu name = case getMaterialVar m name of
-         Attribute _ loc -> loc
-         Uniform _ _ -> GL.AttribLocation (-1)
+       lu name = let svs = (getShaderVars . getShader) m
+          in case Map.lookup name svs of
+            Nothing -> GL.AttribLocation (-1)
+            Just var -> case var of
+              Uniform _ _ -> GL.AttribLocation (-1)
+              Attribute _ loc -> loc
 
-    renderTris :: GL.AttribLocation ->
-                  GL.BufferObject -> GL.BufferObject ->
-                  GL.NumArrayIndices -> IO ()
-    renderTris posLoc vbo ibo nIndices = let
-      vadesc = GL.VertexArrayDescriptor 3 GL.Float 0 (nullPtr :: Ptr Float)
-      in do
+    createRenderFunc :: GL.BufferObject -> GL.BufferObject ->
+                        GL.NumArrayIndices -> (Material -> IO ())
+    createRenderFunc vbo ibo nIndices = (\m -> do
         -- Bind appropriate buffers
         GL.bindBuffer GL.ArrayBuffer GL.$= Just vbo
-        GL.vertexAttribPointer posLoc GL.$= (GL.ToFloat, vadesc)
+        bindMaterial m
 
         GL.bindBuffer GL.ElementArrayBuffer GL.$= Just ibo
 
         -- Render
-        GL.drawElements GL.Triangles nIndices GL.UnsignedShort nullPtr
-
-    renderTTris :: GL.AttribLocation -> GL.AttribLocation ->
-                   GL.BufferObject -> GL.BufferObject ->
-                   GL.NumArrayIndices ->
-                   IO ()
-    renderTTris posLoc texCoordLoc vbo ibo nIndices = let
-      posdesc = GL.VertexArrayDescriptor 3 GL.Float 20 (nullPtr :: Ptr Float)
-      uvdesc = GL.VertexArrayDescriptor 2 GL.Float 20 (plusPtr (nullPtr :: Ptr Float) 12)
-      in do
-        -- Bind appropriate buffers
-        GL.bindBuffer GL.ArrayBuffer GL.$= Just vbo
-        GL.vertexAttribPointer posLoc GL.$= (GL.ToFloat, posdesc)
-        GL.vertexAttribPointer texCoordLoc GL.$= (GL.ToFloat, uvdesc)
-
-        GL.bindBuffer GL.ElementArrayBuffer GL.$= Just ibo
-
-        -- Render
-        GL.drawElements GL.Triangles nIndices GL.UnsignedShort nullPtr
-
-    renderOTTris :: GL.AttribLocation -> GL.AttribLocation -> GL.AttribLocation ->
-                    GL.BufferObject -> GL.BufferObject ->
-                    GL.NumArrayIndices ->
-                    IO ()
-    renderOTTris posLoc normLoc texCoordLoc vbo ibo nIndices = let
-      posdesc = GL.VertexArrayDescriptor 3 GL.Float 32 (nullPtr :: Ptr Float)
-      normdesc = GL.VertexArrayDescriptor 3 GL.Float 32 (plusPtr (nullPtr :: Ptr Float) 12)
-      uvdesc = GL.VertexArrayDescriptor 2 GL.Float 32 (plusPtr (nullPtr :: Ptr Float) 24)
-      in do
-        -- Bind appropriate buffers
-        GL.bindBuffer GL.ArrayBuffer GL.$= Just vbo
-        GL.vertexAttribPointer posLoc GL.$= (GL.ToFloat, posdesc)
-        GL.vertexAttribPointer normLoc GL.$= (GL.ToFloat, normdesc)
-        GL.vertexAttribPointer texCoordLoc GL.$= (GL.ToFloat, uvdesc)
-
-        GL.bindBuffer GL.ElementArrayBuffer GL.$= Just ibo
-
-        -- Render
-        GL.drawElements GL.Triangles nIndices GL.UnsignedShort nullPtr
+        GL.drawElements GL.Triangles nIndices GL.UnsignedShort nullPtr)
 
 class Renderable a where
   createRenderObject :: a -> Material -> IO (RenderObject)

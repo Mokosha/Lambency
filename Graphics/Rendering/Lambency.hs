@@ -32,13 +32,6 @@ initLambency = do
   printInfo GL.glVersion "OpenGL Version: "
   printInfo GL.shadingLanguageVersion "GLSL Version: "
   -- (mapM_ putStrLn) =<< (GL.get GL.glExtensions)
-  vaos <- GL.genObjectNames 1
-  case vaos of
-    vao : _ -> do
-      let vaoBind = GL.bindVertexArrayObject
-        in
-       vaoBind GL.$= (Just vao)
-    _ -> return ()
   putStrLn "Done initializing..."
   where
     printInfo :: (GL.GettableStateVar String) -> String -> IO ()

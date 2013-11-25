@@ -23,15 +23,15 @@ data CubeDemoObject = DemoObject Float Vec3 UnitQuaternion
 demoCam :: LR.Camera
 demoCam = LR.mkPerspCamera
            -- Pos           Dir              Up
-           ((-15) *& vec3Z) (mkNormal vec3Z) (mkNormal vec3Y)
+           ((-15) *& vec3Z) (mkNormal (vec3Z)) (mkNormal vec3Y)
            (pi / 4) (4.0 / 3.0)
            -- near far
            0.1 1000.0
 
-demoSVMap :: LR.RenderObject -> Map.Map LR.ShaderVar (CubeDemoObject -> LR.Camera -> LR.ShaderValue)
-demoSVMap ro = Map.fromList [
-  (lu "mvpMatrix", updateMVPMatrix),
-  (lu "m2wMatrix", updateModelMatrix)]
+demoSVMap :: Map.Map String (CubeDemoObject -> LR.Camera -> LR.ShaderValue)
+demoSVMap = Map.fromList [
+  ("mvpMatrix", updateMVPMatrix),
+  ("m2wMatrix", updateModelMatrix)]
   where
     updateModelMatrix :: CubeDemoObject -> LR.Camera -> LR.ShaderValue
     updateModelMatrix (DemoObject scale pos rot) c =
@@ -40,8 +40,6 @@ demoSVMap ro = Map.fromList [
     updateMVPMatrix :: CubeDemoObject -> LR.Camera -> LR.ShaderValue
     updateMVPMatrix obj c = LR.Matrix4Val $ model .*. (LR.getViewProjMatrix c)
       where (LR.Matrix4Val model) = updateModelMatrix obj c
-      
-    lu = LR.getMaterialVar (LR.material ro)
 
 planeObj :: LR.Material -> IO (LR.GameObject CubeDemoObject)
 planeObj mat = do
@@ -49,7 +47,7 @@ planeObj mat = do
   return LR.GameObject {
     LR.renderObject = Just ro,
     LR.gameObject = DemoObject 10 (Vec3 0 (-2) 0) unitU,
-    LR.objSVMap = demoSVMap ro,
+    LR.objSVMap = demoSVMap,
     LR.update = \_ o _ -> Just o
   }
 
@@ -60,7 +58,7 @@ cubeObj mat = do
   return LR.GameObject {
     LR.renderObject = Just ro,
     LR.gameObject = DemoObject 1 zero $ rotU (Vec3 1 0 1) 0.6,
-    LR.objSVMap = demoSVMap ro,
+    LR.objSVMap = demoSVMap,
     LR.update = \t obj _ -> Just $ rotateObj t obj
   }
   where 

@@ -20,13 +20,13 @@ data Mesh = Mesh { vertices :: [Vertex],
 
 makeTriangle :: Mesh
 makeTriangle = Mesh {
-  vertices = Vertex3 . mkVec3 <$> [ (-1, -1, 0), (1, -1, 0), (0, 1, 0)],
+  vertices = mkVertex3 . mkVec3 <$> [ (-1, -1, 0), (1, -1, 0), (0, 1, 0)],
   indices = [0, 1, 2]
 }
 
 makeCube :: Mesh
 makeCube = Mesh {
-  vertices = zipWith3 OTVertex3 (mkVec3 <$> [ 
+  vertices = zipWith3 mkNormTexVertex3 (mkVec3 <$> [ 
     -- Front face
     (-1.0, -1.0,  1.0),
     ( 1.0, -1.0,  1.0),
@@ -78,7 +78,7 @@ makeCube = Mesh {
 
 makePlane :: Mesh
 makePlane = Mesh {
-  vertices = zipWith3 OTVertex3
+  vertices = zipWith3 mkNormTexVertex3
              [Vec3 x 0 z | z <- [(-1),(-0.9)..1], x <- [(-1),(-0.9)..1]]
              (replicate (21*21) (Vec3 0 1 0))
              [Vec2 u v | v <- [0,0.05..1], u <- [0,0.05..1]],

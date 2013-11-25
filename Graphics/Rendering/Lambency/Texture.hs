@@ -1,23 +1,33 @@
 module Graphics.Rendering.Lambency.Texture (
   Texture,
   TextureFormat(..),
+  FBOHandle,
   TextureHandle,
   getHandle,
+  getTextureCamera,
   createFramebufferObject,
   createSolidTexture,
   createDepthTexture,
-  loadTextureFromPNG
+  loadTextureFromPNG,
+  destroyTexture,
+  bindRenderTexture,
+  clearRenderTexture,
 ) where
 
 --------------------------------------------------------------------------------
 import qualified Graphics.Rendering.OpenGL as GL
 
 import qualified Codec.Image.PNG as PNG
+import qualified Graphics.Pgm as PGM
 
 import Graphics.Rendering.Lambency.Camera
 
+import Control.Monad (unless)
+
+import System.Directory
 import Foreign.Ptr
 import Data.Array.Storable
+import Data.Array.Unboxed
 import Data.Word
 --------------------------------------------------------------------------------
 
@@ -25,16 +35,51 @@ type FBOHandle = GL.FramebufferObject
 type TextureHandle = GL.TextureObject
 data TextureFormat = RGBA8
                    | RGB8
+                     deriving(Show, Eq)
+
 data Texture = Texture TextureHandle TextureFormat
              | RenderTexture TextureHandle FBOHandle Camera
+               deriving(Show, Eq)
 
 getHandle :: Texture -> TextureHandle
 getHandle (Texture h _) = h
 getHandle (RenderTexture h _ _) = h
 
+getTextureCamera :: Texture -> Maybe (Camera, FBOHandle)
+getTextureCamera (Texture _ _) = Nothing
+getTextureCamera (RenderTexture _ h cam) = Just (cam, h)
+
 fmt2glpfmt :: TextureFormat -> GL.PixelFormat
 fmt2glpfmt RGBA8 = GL.RGBA
 fmt2glpfmt RGB8 = GL.RGB
+
+bindRenderTexture :: FBOHandle -> IO ()
+bindRenderTexture h = do
+  GL.bindFramebuffer GL.Framebuffer GL.$= h
+  GL.viewport GL.$= (GL.Position 0 0, GL.Size 512 512)
+
+clearRenderTexture :: IO ()
+clearRenderTexture = do
+  let depthfile = "depth.pgm"
+  exists <- doesFileExist depthfile
+  unless exists $ do
+    GL.flush
+    arr <- newArray_ ((0, 0), (511, 511))
+    withStorableArray arr (\ptr -> do
+      GL.readPixels (GL.Position 0 0)
+        (GL.Size 512 512)
+        (GL.PixelData GL.DepthComponent GL.Float ptr)
+      GL.flush)
+    farr <- (freeze :: StorableArray (Int, Int) Float -> IO (UArray (Int, Int) Float)) arr
+    PGM.arrayToFile depthfile (amap ((round :: Float -> Word16) . (*65535)) farr)
+  GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject
+  GL.viewport GL.$= (GL.Position 0 0, GL.Size 640 480)
+
+destroyTexture :: Texture -> IO ()
+destroyTexture (Texture h _) = GL.deleteObjectName h
+destroyTexture (RenderTexture h fboh _) = do
+  GL.deleteObjectName h
+  GL.deleteObjectName fboh
 
 createFramebufferObject :: TextureFormat -> IO (Texture)
 createFramebufferObject fmt = do
@@ -91,11 +136,17 @@ createDepthTexture cam = do
 
   putStrLn "Creating framebuffer object..."
   rbHandle <- GL.genObjectName
-  GL.bindFramebuffer GL.DrawFramebuffer GL.$= rbHandle
-  GL.framebufferTexture2D GL.DrawFramebuffer GL.DepthAttachment GL.Texture2D handle 0
-  status <- GL.get $ GL.framebufferStatus GL.DrawFramebuffer
-  putStrLn $ "Checking framebuffer status..." ++ (show status)
-  GL.bindFramebuffer GL.DrawFramebuffer GL.$= GL.defaultFramebufferObject
+  GL.bindFramebuffer GL.Framebuffer GL.$= rbHandle
+  GL.framebufferTexture2D GL.Framebuffer GL.DepthAttachment GL.Texture2D handle 0
+  GL.drawBuffer GL.$= GL.NoBuffers
+  GL.readBuffer GL.$= GL.NoBuffers
+  GL.get (GL.framebufferStatus GL.Framebuffer) >>=
+    putStrLn . ((++) "Checking framebuffer status...") . show
+
+  GL.depthMask GL.$= GL.Enabled
+  GL.depthFunc GL.$= Just GL.Lequal
+  GL.cullFace GL.$= Just GL.Back
+  GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject
 
   return $ RenderTexture handle rbHandle cam
 
