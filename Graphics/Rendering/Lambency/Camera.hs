@@ -191,7 +191,7 @@ getProjMatrix (Camera _ (Ortho {top = t, bottom = b, left = l, right = r}) dist)
 getProjMatrix (Camera _ (Persp {fovY = fovy, aspect = a}) dist) = let
   n = near dist
   f = far dist
-  t = n * (atan (fovy * 0.5))
+  t = n * (tan (fovy * 0.5))
   r = t * a
   in
    Mat4
