@@ -57,7 +57,6 @@ createSpotlightMaterial mtex = do
   let lightPos = 10 *& (Vec3 (-1) 1 0)
       lightDir = mkNormal (neg lightPos)
       lightCam = mkPerspCamera lightPos lightDir (mkNormal vec3Z) (pi / 4) 1 0.1 500.0
-  putStrLn . show $ getViewProjMatrix lightCam
   depthTex <- createDepthTexture lightCam
   let varMap = getShaderVars shdr
       shdrMap = Map.fromList [
