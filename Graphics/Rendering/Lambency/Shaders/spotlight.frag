@@ -32,9 +32,6 @@ void main() {
     lightColor += color*(spot/(0.1*dist));
   }
 
-  float d = max(0.0, dot(-lightDir, norm)) * (1.0 - shadow);
+  float d = max(0.0, dot(-lightDir, norm)) * (1.0 - 0.5*shadow);
   gl_FragColor = vec4(lightColor*d*(texture2D(diffuseTex, uv).xyz), 1.0);
-//  gl_FragColor = vec4(lightPersp.xy, 0, 1);
-//  gl_FragColor = vec4(depth, depth, depth, 1);
-//  gl_FragColor = vec4(texture2D(shadowMap, uv).xxx, 1);
 }
