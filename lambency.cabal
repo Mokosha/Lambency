@@ -24,6 +24,7 @@ library
   exposed-modules:     Graphics.UI.Lambency
                        Graphics.Rendering.Lambency
   other-modules:       Graphics.Rendering.Lambency.Camera
+                       Graphics.Rendering.Lambency.Location
                        Graphics.Rendering.Lambency.Material
                        Graphics.Rendering.Lambency.Mesh
                        Graphics.Rendering.Lambency.Object
