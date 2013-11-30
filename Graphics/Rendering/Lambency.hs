@@ -1,6 +1,7 @@
 module Graphics.Rendering.Lambency (
   initLambency,
   module Graphics.Rendering.Lambency.Camera,
+  module Graphics.Rendering.Lambency.Location,
   module Graphics.Rendering.Lambency.Material,
   module Graphics.Rendering.Lambency.Mesh,
   module Graphics.Rendering.Lambency.Object,
@@ -15,6 +16,7 @@ module Graphics.Rendering.Lambency (
 import qualified Graphics.Rendering.OpenGL as GL
 
 import Graphics.Rendering.Lambency.Camera
+import Graphics.Rendering.Lambency.Location
 import Graphics.Rendering.Lambency.Material
 import Graphics.Rendering.Lambency.Mesh
 import Graphics.Rendering.Lambency.Object
