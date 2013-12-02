@@ -3,7 +3,6 @@ module Graphics.Rendering.Lambency.Utils (
   compareClose,
   quatFromVecs,
   destructMat4,
-  sprToMatrix,
 ) where
 
 --------------------------------------------------------------------------------
@@ -46,10 +45,3 @@ destructMat4 mat = let
   Mat4 r1 r2 r3 r4 = mat
   in
    destructVec4 [r1, r2, r3, r4]
-
-sprToMatrix :: Float -> Vec3 -> UnitQuaternion -> Mat4
-sprToMatrix scale pos rot =
-  let s = Mat4 (scale *& vec4X) (scale *& vec4Y) (scale *& vec4Z) vec4W
-      r = (extendWith 1.0) . fromOrtho . leftOrthoU $ rot
-      t = Mat4 vec4X vec4Y vec4Z (extendWith 1.0 pos)
-  in s .*. r .*. t

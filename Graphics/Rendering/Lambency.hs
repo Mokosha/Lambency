@@ -7,6 +7,7 @@ module Graphics.Rendering.Lambency (
   module Graphics.Rendering.Lambency.Renderable,
   module Graphics.Rendering.Lambency.Shader,
   module Graphics.Rendering.Lambency.Texture,
+  module Graphics.Rendering.Lambency.Transform,
   module Graphics.Rendering.Lambency.Utils,
 ) where
 
@@ -21,6 +22,7 @@ import Graphics.Rendering.Lambency.Object
 import Graphics.Rendering.Lambency.Renderable
 import Graphics.Rendering.Lambency.Shader
 import Graphics.Rendering.Lambency.Texture
+import Graphics.Rendering.Lambency.Transform
 import Graphics.Rendering.Lambency.Utils
 --------------------------------------------------------------------------------
 

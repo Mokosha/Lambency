@@ -18,7 +18,7 @@ import Paths_lambency_examples
 import GHC.Float (double2Float)
 ---------------------------------------------------------------------------------
 
-data CubeDemoObject = DemoObject Float Vec3 UnitQuaternion
+type CubeDemoObject = LR.Transform
 
 demoCam :: LR.Camera
 demoCam = LR.mkPerspCamera
@@ -34,8 +34,8 @@ demoSVMap = Map.fromList [
   ("m2wMatrix", updateModelMatrix)]
   where
     updateModelMatrix :: CubeDemoObject -> LR.Camera -> LR.ShaderValue
-    updateModelMatrix (DemoObject scale pos rot) c =
-      LR.Matrix4Val $ LR.sprToMatrix scale pos rot
+    updateModelMatrix obj c =
+      LR.Matrix4Val $ LR.xform2Matrix obj
 
     updateMVPMatrix :: CubeDemoObject -> LR.Camera -> LR.ShaderValue
     updateMVPMatrix obj c = LR.Matrix4Val $ model .*. (LR.getViewProjMatrix c)
@@ -46,7 +46,7 @@ planeObj mat = do
   ro <- LR.createRenderObject LR.makePlane mat
   return LR.GameObject {
     LR.renderObject = Just ro,
-    LR.gameObject = DemoObject 10 (Vec3 0 (-2) 0) unitU,
+    LR.gameObject = LR.uniformScale 10 $ LR.translate (Vec3 0 (-2) 0) $ LR.identityXForm,
     LR.objSVMap = demoSVMap,
     LR.update = \_ o _ -> Just o
   }
@@ -57,12 +57,13 @@ cubeObj mat = do
   ro <- LR.createRenderObject LR.makeCube (LR.switchTexture mat "diffuseTex" tex)
   return LR.GameObject {
     LR.renderObject = Just ro,
-    LR.gameObject = DemoObject 1 zero $ rotU (Vec3 1 0 1) 0.6,
+    LR.gameObject = LR.rotate (rotU (Vec3 1 0 1) 0.6) LR.identityXForm,
     LR.objSVMap = demoSVMap,
     LR.update = \t obj _ -> Just $ rotateObj t obj
   }
-  where 
-  rotateObj dt (DemoObject s p u) = DemoObject s p $ u .*. (rotU vec3Y $ double2Float dt)
+  where
+    rotateObj :: Double -> CubeDemoObject -> CubeDemoObject
+    rotateObj dt = LR.rotateWorld (rotU vec3Y $ double2Float dt)
 
 main :: IO ()
 main = do
