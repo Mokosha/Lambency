@@ -8,16 +8,20 @@ uniform vec3 ambient;
 uniform vec3 lightPos;
 uniform vec3 lightDir;
 
-uniform sampler2D shadowMap;
+uniform sampler2DShadow shadowMap;
 uniform mat4 shadowVP;
+
+float bias(float d) {
+  return d - 0.0001;
+}
 
 void main() {
 
   vec4 lightPersp = shadowVP * vec4(pos, 1);
   lightPersp /= lightPersp.w;
   lightPersp = lightPersp * 0.5 + 0.5;
-  float depth = texture2D(shadowMap, lightPersp.xy).z;
-  float shadow = float(lightPersp.z > 0.001+depth);
+  lightPersp.z = bias(lightPersp.z);
+  float shadow = float(shadow2D(shadowMap, lightPersp.xyz));
 
   vec3 p2l = pos-lightPos;
   float dist = length(p2l);
@@ -33,5 +37,7 @@ void main() {
   }
 
   float d = max(0.0, dot(-lightDir, norm)) * (1.0 - 0.5*shadow);
-  gl_FragColor = vec4(lightColor*d*(texture2D(diffuseTex, uv).xyz), 1.0);
+  vec3 finalColor = lightColor*d*(texture2D(diffuseTex, uv).xyz);
+
+  gl_FragColor = vec4(finalColor, 1.0);
 }
