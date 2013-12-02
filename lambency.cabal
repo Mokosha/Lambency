@@ -31,6 +31,7 @@ library
                        Graphics.Rendering.Lambency.Renderable
                        Graphics.Rendering.Lambency.Shader
                        Graphics.Rendering.Lambency.Texture
+                       Graphics.Rendering.Lambency.Transform
                        Graphics.Rendering.Lambency.Vertex
                        Graphics.Rendering.Lambency.Utils
                        Paths_lambency
