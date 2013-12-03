@@ -5,8 +5,8 @@ module Graphics.Rendering.Lambency.Camera (
   mkPerspCamera,
   getViewProjMatrix,
 
-  getCamLoc,
-  setCamLoc,
+  getCamXForm,
+  setCamXForm,
   getCamDist,
   setCamDist,
   getCamPos,
@@ -22,19 +22,10 @@ module Graphics.Rendering.Lambency.Camera (
 ) where
 --------------------------------------------------------------------------------
 import Graphics.Rendering.Lambency.Utils
+import qualified Graphics.Rendering.Lambency.Transform as XForm
 
 import Data.Vect.Float
 --------------------------------------------------------------------------------
-
-data CameraLocation = CameraLocation {
-  camPos :: Vec3,
-  camDir :: Normal3,
-  camUp :: Normal3
-} deriving (Show)
-
-instance Eq CameraLocation where
-  (CameraLocation pa da ua) == (CameraLocation pb db ub) =
-    compareClose pa pb && compareClose da db && compareClose ua ub
 
 data CameraViewDistance = CameraViewDistance {
   near :: Float,
@@ -54,20 +45,29 @@ data CameraType =
   }
   deriving (Show, Eq)
 
-data Camera = Camera CameraLocation CameraType CameraViewDistance deriving(Show, Eq)
+data Camera = Camera XForm.Transform CameraType CameraViewDistance deriving(Show, Eq)
 
 type Time = Double
 data GameCamera = GameCamera Camera (Time -> Camera -> Camera)
+
+mkXForm :: Vec3 -> Normal3 -> Normal3 -> XForm.Transform
+mkXForm pos dir up = let
+  r = dir &^ up
+  u' = r &^ dir
+  in XForm.XForm {
+    XForm.right = r,
+    XForm.up = u',
+    XForm.forward = negN dir,
+    XForm.position = pos,
+    XForm.scale = Vec3 1 1 1
+    }
 
 mkOrthoCamera :: Vec3 -> Normal3 -> Normal3 ->
                  Float -> Float -> Float -> Float -> Float -> Float ->
                  Camera
 mkOrthoCamera pos dir up l r t b n f = Camera
-  CameraLocation {
-     camPos = pos,
-     camDir = dir,
-     camUp = up
-  }
+
+  (mkXForm pos dir up)
 
   Ortho {
     left = l,
@@ -84,11 +84,8 @@ mkOrthoCamera pos dir up l r t b n f = Camera
 mkPerspCamera :: Vec3 -> Normal3 -> Normal3 ->
                  Float -> Float -> Float -> Float -> Camera
 mkPerspCamera pos dir up fovy aspratio n f = Camera
-  CameraLocation {
-     camPos = pos,
-     camDir = dir,
-     camUp = up
-  }
+
+  (mkXForm pos dir up)
 
   Persp {
     fovY = fovy,
@@ -100,11 +97,12 @@ mkPerspCamera pos dir up fovy aspratio n f = Camera
     far = f
   }
 
-getCamLoc :: Camera -> CameraLocation
-getCamLoc (Camera loc _ _) = loc
+-- !FIXME! Change the following functions to val -> Camera -> Camera
+getCamXForm :: Camera -> XForm.Transform
+getCamXForm (Camera xf _ _) = xf
 
-setCamLoc :: Camera -> CameraLocation -> Camera
-setCamLoc (Camera _ cam dist) loc = Camera loc cam dist
+setCamXForm :: Camera -> XForm.Transform -> Camera
+setCamXForm (Camera _ cam dist) xf = Camera xf cam dist
 
 getCamDist :: Camera -> CameraViewDistance
 getCamDist (Camera _ _ dist) = dist
@@ -113,34 +111,34 @@ setCamDist :: Camera -> CameraViewDistance -> Camera
 setCamDist (Camera loc cam _) dist = Camera loc cam dist
 
 getCamPos :: Camera -> Vec3
-getCamPos = (camPos . getCamLoc)
+getCamPos = XForm.position . getCamXForm
 
 setCamPos :: Camera -> Vec3 -> Camera
 setCamPos c p = let
-  loc = getCamLoc c
+  (XForm.XForm _ u nd _ _) = getCamXForm c
   in
-   setCamLoc c $ (\l -> l { camPos = p }) loc
+   setCamXForm c $ mkXForm p (negN nd) u
 
 getCamDir :: Camera -> Normal3
-getCamDir = (camDir . getCamLoc)
+getCamDir = negN . XForm.forward . getCamXForm
 
 setCamDir :: Camera -> Normal3 -> Camera
 setCamDir c d = let
-  loc = getCamLoc c
+  (XForm.XForm _ u _ p _) = getCamXForm c
   in
-   setCamLoc c $ (\l -> l { camDir = d }) loc
+   setCamXForm c $ mkXForm p d u
 
 getCamUp :: Camera -> Normal3
-getCamUp = (camUp . getCamLoc)
+getCamUp = XForm.up . getCamXForm
 
 setCamUp :: Camera -> Normal3 -> Camera
 setCamUp c u = let
-  loc = getCamLoc c
+  (XForm.XForm _ _ nd p _) = getCamXForm c
   in
-   setCamLoc c $ (\l -> l { camUp = u }) loc
+   setCamXForm c $ mkXForm p (negN nd) u
 
 getCamNear :: Camera -> Float
-getCamNear = (near . getCamDist)
+getCamNear = near . getCamDist
 
 setCamNear :: Camera -> Float -> Camera
 setCamNear c n = let
@@ -158,20 +156,8 @@ setCamFar c f = let
    setCamDist c $ (\d -> d { far = f }) dist
 
 getViewMatrix :: Camera -> Mat4
-getViewMatrix c = let
-  dir = getCamDir c
-  side = dir &^ (getCamUp c)
-  up = side &^ dir
-  te :: Normal3 -> Vec4
-  te n = extendWith (neg (getCamPos c) &. (fromNormal n)) (fromNormal n)
-  in
-   if compareZero side then
-     -- !FIXME! the user put something bogus... should we still
-     -- try to figure out a good value for the view matrix?
-     one
-   else
-     -- rotation part
-     transpose $ Mat4 (te side) (te up) (neg $ te dir) (Vec4 0 0 0 1)
+getViewMatrix (Camera xf _ _) =
+  XForm.xform2Matrix $ (\xf' -> xf' { XForm.position = neg (XForm.position xf) }) xf
 
 getProjMatrix :: Camera -> Mat4
 getProjMatrix (Camera _ (Ortho {top = t, bottom = b, left = l, right = r}) dist) = let
