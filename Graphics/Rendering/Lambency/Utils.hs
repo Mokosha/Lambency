@@ -3,6 +3,7 @@ module Graphics.Rendering.Lambency.Utils (
   compareClose,
   quatFromVecs,
   destructMat4,
+  negN,
 ) where
 
 --------------------------------------------------------------------------------
@@ -45,3 +46,6 @@ destructMat4 mat = let
   Mat4 r1 r2 r3 r4 = mat
   in
    destructVec4 [r1, r2, r3, r4]
+
+negN :: UnitVector v u => u -> u
+negN = toNormalUnsafe . neg . fromNormal
