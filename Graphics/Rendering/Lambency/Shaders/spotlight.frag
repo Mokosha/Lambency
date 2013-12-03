@@ -31,13 +31,17 @@ void main() {
   float spot = clamp(cosToPt, 0.0, 1.0);
 
   const vec3 color = vec3(1.0, 1.0, 1.0);
-  vec3 lightColor = ambient;
+  vec3 lightColor = vec3(0, 0, 0);
   if(spot > 0.0) {
     lightColor += color*(spot/(0.1*dist));
   }
 
-  float d = max(0.0, dot(-lightDir, norm)) * (1.0 - 0.5*shadow);
-  vec3 finalColor = lightColor*d*(texture2D(diffuseTex, uv).xyz);
+  // diffuse
+  lightColor *= max(0.0, dot(-lightDir, norm)) * (1.0 - 0.5*shadow);
+
+  // ambient
+  lightColor += ambient;
+  vec3 finalColor = lightColor*texture2D(diffuseTex, uv).xyz;
 
   gl_FragColor = vec4(finalColor, 1.0);
 }
