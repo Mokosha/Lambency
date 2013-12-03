@@ -12,6 +12,9 @@ import Graphics.Rendering.Lambency.Material
 import Graphics.Rendering.Lambency.Renderable
 import Graphics.Rendering.Lambency.Shader
 import Graphics.Rendering.Lambency.Texture
+import Graphics.Rendering.Lambency.Transform
+
+import Data.Vect.Float
 
 import Data.Maybe (catMaybes)
 import Data.List (nubBy)
@@ -22,12 +25,18 @@ import qualified Data.Map as Map
 
 type Time = Double
 
-data GameObject a = GameObject {
-  renderObject :: Maybe RenderObject,
-  gameObject :: a,
-  objSVMap :: Map.Map String (a -> Camera -> ShaderValue),
-  update :: Time -> a -> [a] -> Maybe a
-}
+data GameObject a =
+  SimpleObject {
+    gameObject :: a,
+    update :: Time -> a -> [a] -> Maybe a
+  }
+  | Object {
+    location :: a -> Transform,
+    renderObject :: Maybe RenderObject,
+    gameObject :: a,
+    objSVMap :: Map.Map String (a -> Camera -> ShaderValue),
+    update :: Time -> a -> [a] -> Maybe a
+  }
 
 updateGameObject :: GameObject a -> a -> GameObject a
 updateGameObject go val = (\obj -> obj { gameObject = val }) go
@@ -43,7 +52,20 @@ updateObjs dt objs = catMaybes $
         os = map gameObject objs
 
 renderObj :: Maybe Material -> Camera -> GameObject a -> IO ()
+renderObj _ _ (SimpleObject { gameObject = _, update = _ }) = return ()
 renderObj maybeMat cam obj = let
+
+  positionMap matVars = Map.fromList $ lookupShdrVar =<< [
+    ("mvpMatrix", Matrix4Val $ model .*. (getViewProjMatrix cam)),
+    ("m2wMatrix", Matrix4Val $ model)]
+    where model :: Mat4
+          model = xform2Matrix ((location obj) (gameObject obj))
+
+          lookupShdrVar :: (String, ShaderValue) -> [(ShaderVar, ShaderValue)]
+          lookupShdrVar (name, val) =
+            case Map.lookup name matVars of
+              Nothing -> []
+              Just var -> [(var, val)]
 
   setShaderVar :: ShaderMap -> ShaderVar -> IO ()
   setShaderVar _ (Attribute _ _) = return ()
@@ -70,7 +92,7 @@ renderObj maybeMat cam obj = let
                    Map.filterWithKey (\k _ -> Map.member k matVars) objMap
          -- finally, concatenate the results with the predefined shader
          -- variables....
-         finalMap = Map.union userMap $ getShaderMap mat
+         finalMap = Map.union userMap $ Map.union (positionMap matVars) $ getShaderMap mat
        mapM_ (setShaderVar finalMap) $ Map.elems matVars
        render ro mat
        afterRender mat

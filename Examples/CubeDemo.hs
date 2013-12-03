@@ -28,26 +28,14 @@ demoCam = LR.mkPerspCamera
            -- near far
            0.1 1000.0
 
-demoSVMap :: Map.Map String (CubeDemoObject -> LR.Camera -> LR.ShaderValue)
-demoSVMap = Map.fromList [
-  ("mvpMatrix", updateMVPMatrix),
-  ("m2wMatrix", updateModelMatrix)]
-  where
-    updateModelMatrix :: CubeDemoObject -> LR.Camera -> LR.ShaderValue
-    updateModelMatrix obj c =
-      LR.Matrix4Val $ LR.xform2Matrix obj
-
-    updateMVPMatrix :: CubeDemoObject -> LR.Camera -> LR.ShaderValue
-    updateMVPMatrix obj c = LR.Matrix4Val $ model .*. (LR.getViewProjMatrix c)
-      where (LR.Matrix4Val model) = updateModelMatrix obj c
-
 planeObj :: LR.Material -> IO (LR.GameObject CubeDemoObject)
 planeObj mat = do
   ro <- LR.createRenderObject LR.makePlane mat
-  return LR.GameObject {
+  return LR.Object {
+    LR.location = id,
     LR.renderObject = Just ro,
     LR.gameObject = LR.uniformScale 10 $ LR.translate (Vec3 0 (-2) 0) $ LR.identityXForm,
-    LR.objSVMap = demoSVMap,
+    LR.objSVMap = Map.empty,
     LR.update = \_ o _ -> Just o
   }
 
@@ -55,10 +43,11 @@ cubeObj :: LR.Material -> IO (LR.GameObject CubeDemoObject)
 cubeObj mat = do
   (Just tex) <- getDataFileName ("crate" <.> "png") >>= LR.loadTextureFromPNG
   ro <- LR.createRenderObject LR.makeCube (LR.switchTexture mat "diffuseTex" tex)
-  return LR.GameObject {
+  return LR.Object {
+    LR.location = id,
     LR.renderObject = Just ro,
     LR.gameObject = LR.rotate (rotU (Vec3 1 0 1) 0.6) LR.identityXForm,
-    LR.objSVMap = demoSVMap,
+    LR.objSVMap = Map.empty,
     LR.update = \t obj _ -> Just $ rotateObj t obj
   }
   where
