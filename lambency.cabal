@@ -18,6 +18,8 @@ data-files:          simple.vert
                      simple.frag
                      standard.vert
                      spotlight.frag
+                     minimal.vert
+                     minimal.frag
 data-dir:            Graphics/Rendering/Lambency/Shaders
 
 library

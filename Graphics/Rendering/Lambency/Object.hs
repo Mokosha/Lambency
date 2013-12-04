@@ -115,23 +115,29 @@ renderObj maybeMat cam obj = let
 
 renderCamera :: Camera -> [GameObject a] -> IO ()
 renderCamera cam objs = do
-  mapM_ renderCameraTexture $ nubBy ((==) `on` snd) $
-    (catMaybes $ renderObject `map` objs) >>=
-    (Map.elems . getShaderMap . material) >>=
-    (\x ->
+  mapM_ renderCameraTexture $ nubBy ((==) `on` sel2) $
+    (catMaybes $ renderObject `map` objs) >>= getDefaultMaterial >>=
+    (\(d, x) ->
       case x of
         TextureVal tex ->
           case getTextureCamera tex of
             Nothing -> []
-            Just (c, h) -> [(c, h)]
+            Just (c, h) -> [(c, h, d)]
         _ -> [])
   mapM_ (renderObj Nothing cam) objs
   where
-    renderCameraTexture :: (Camera, FBOHandle) -> IO ()
-    renderCameraTexture (c, h) = do
-      mat <- createSimpleMaterial
+    renderCameraTexture :: (Camera, FBOHandle, Maybe Material) -> IO ()
+    renderCameraTexture (c, h, mat) = do
       bindRenderTexture h
       clearBuffers
-      mapM_ (renderObj (Just mat) c) objs
+      mapM_ (renderObj mat c) objs
       clearRenderTexture
-      destroyMaterial mat
+
+    getDefaultMaterial :: RenderObject -> [(Maybe Material, ShaderValue)]
+    getDefaultMaterial ro =
+      case material ro of
+        Material _ vars -> zip (repeat Nothing) (Map.elems vars)
+        MultiMaterial d m -> zip (repeat d) (Map.elems . getShaderMap $ m)
+
+    sel2 :: (a, b, c) -> b
+    sel2 (_, y, _) = y

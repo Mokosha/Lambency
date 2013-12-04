@@ -9,6 +9,7 @@ module Graphics.Rendering.Lambency.Shader (
   isUniform,
   getUniforms,
   setUniformVar,
+  createMinimalShader,
   createSimpleShader,
   createSpotlightShader,
   destroyShader,
@@ -221,6 +222,16 @@ createSpotlightShader = do
      (Vector3Ty, "lightPos"),
      (Vector3Ty, "lightDir"),
      (Matrix4Ty, "shadowVP")]
+  return $ Shader prg vars
+
+createMinimalShader :: IO (Shader)
+createMinimalShader = do
+  vs <- getShaderPath "minimal" GL.VertexShader
+  fs <- getShaderPath "minimal" GL.FragmentShader
+  (Just prg) <- loadProgram [vs, fs]
+  vars <- extractVars $ map (uncurry (lookupShaderVar prg))
+    [(FloatListTy, "position"),
+     (Matrix4Ty, "mvpMatrix")]
   return $ Shader prg vars
 
 destroyShader :: Shader -> IO ()

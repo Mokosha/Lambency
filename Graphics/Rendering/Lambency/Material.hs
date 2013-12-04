@@ -25,14 +25,20 @@ import qualified Data.Map as Map
 --------------------------------------------------------------------------------
 
 -- Material consists of a shader and the variables specified by the
--- engine for the shader.
-data Material = Material Shader ShaderMap deriving(Show, Eq)
+-- engine for the shader. If the material has a render texture associated with
+-- it, then a MultiMaterial allows the specification of a default material for
+-- all objects to use during the off-screen rendering pass of the material
+data Material = Material Shader ShaderMap
+              | MultiMaterial (Maybe Material) Material
+                deriving(Show, Eq)
 
 getShader :: Material -> Shader
 getShader (Material s _) = s
+getShader (MultiMaterial _ m) = getShader m
 
 getShaderMap :: Material -> ShaderMap
 getShaderMap (Material _ m) = m
+getShaderMap (MultiMaterial _ m) = getShaderMap m
 
 getMaterialVar :: Material -> String -> ShaderVar
 getMaterialVar m = (Map.!) $ (getShaderVars . getShader) m
@@ -66,7 +72,8 @@ createSpotlightMaterial mtex = do
         (varMap Map.! "lightDir", Vector3Val $ fromNormal lightDir),
         (varMap Map.! "lightPos", Vector3Val lightPos),
         (varMap Map.! "ambient", Vector3Val $ Vec3 0.15 0.15 0.15)]
-  return $ Material shdr shdrMap
+  minShdr <- createMinimalShader
+  return $ MultiMaterial (Just $ Material minShdr Map.empty) (Material shdr shdrMap)
 
 destroyMaterial :: Material -> IO ()
 destroyMaterial (Material shdr shdrMap) = do
@@ -75,6 +82,11 @@ destroyMaterial (Material shdr shdrMap) = do
   where getTexture :: ShaderValue -> [Texture]
         getTexture (TextureVal t) =  [t]
         getTexture _ = [] 
+destroyMaterial (MultiMaterial mmat mat) = do
+  destroyMaterial mat
+  case mmat of
+    Nothing -> return ()
+    Just m -> destroyMaterial m
 
 switchTexture :: Material -> String -> Texture -> Material
 switchTexture (Material shdr shdrMap) name tex =
@@ -82,6 +94,7 @@ switchTexture (Material shdr shdrMap) name tex =
       shdrVal = TextureVal tex
   in
    Material shdr $ Map.adjust (\_ -> shdrVal) shdrVar shdrMap
+switchTexture (MultiMaterial _ m) name tex = switchTexture m name tex
 
 beforeRender :: Material -> IO ()
 beforeRender (Material shdr _) = do
@@ -94,6 +107,9 @@ beforeRender (Material shdr _) = do
         enableAttribute v = case v of
           Uniform _ _ -> return ()
           Attribute _ loc -> GL.vertexAttribArray loc GL.$= GL.Enabled
+-- !FIXME! This doesn't really fit here, which probably means that
+-- the 'multi-render' material doesn't belong
+beforeRender (MultiMaterial _ m) = beforeRender m
 
 afterRender :: Material -> IO ()
 afterRender (Material shdr _) = do
@@ -106,3 +122,6 @@ afterRender (Material shdr _) = do
             GL.textureBinding GL.Texture2D GL.$= Nothing
           Uniform _ _ -> return ()
           Attribute _ loc -> GL.vertexAttribArray loc GL.$= GL.Disabled
+-- !FIXME! This doesn't really fit here, which probably means that
+-- the 'multi-render' material doesn't belong
+afterRender (MultiMaterial _ m) = afterRender m
