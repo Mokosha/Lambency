@@ -1,5 +1,7 @@
 module Graphics.Rendering.Lambency.Object (
   GameObject(..),
+  mkSimpleObject,
+  mkStaticObject,
   updateGameObject,
   updateObjs,
   renderCamera
@@ -25,21 +27,35 @@ import qualified Data.Map as Map
 
 type Time = Double
 
+type GameObjectUpdate a = Time -> a -> [a] -> Maybe a
+
 data GameObject a =
   SimpleObject {
     gameObject :: a,
-    update :: Time -> a -> [a] -> Maybe a
+    update :: GameObjectUpdate a
   }
   | Object {
     location :: a -> Transform,
     renderObject :: Maybe RenderObject,
     gameObject :: a,
     objSVMap :: Map.Map String (a -> Camera -> ShaderValue),
-    update :: Time -> a -> [a] -> Maybe a
+    update :: GameObjectUpdate a
   }
 
 updateGameObject :: GameObject a -> a -> GameObject a
 updateGameObject go val = (\obj -> obj { gameObject = val }) go
+
+mkSimpleObject :: a -> GameObjectUpdate a -> GameObject a
+mkSimpleObject obj upd = SimpleObject { gameObject = obj, update = upd }
+
+mkStaticObject :: a -> Transform -> Maybe RenderObject -> GameObject a
+mkStaticObject obj xform ro = Object {
+  location = const xform,
+  renderObject = ro,
+  gameObject = obj,
+  objSVMap = Map.empty,
+  update = \_ o _ -> Just o
+}
 
 updateObjs :: Time -> [GameObject a] -> [GameObject a]
 updateObjs dt objs = catMaybes $

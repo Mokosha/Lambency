@@ -31,13 +31,10 @@ demoCam = LR.mkPerspCamera
 planeObj :: LR.Material -> IO (LR.GameObject CubeDemoObject)
 planeObj mat = do
   ro <- LR.createRenderObject LR.makePlane mat
-  return LR.Object {
-    LR.location = id,
-    LR.renderObject = Just ro,
-    LR.gameObject = LR.uniformScale 10 $ LR.translate (Vec3 0 (-2) 0) $ LR.identityXForm,
-    LR.objSVMap = Map.empty,
-    LR.update = \_ o _ -> Just o
-  }
+  return $ LR.mkStaticObject xform xform (Just ro)
+  where xform = LR.uniformScale 10 $
+                LR.translate (Vec3 0 (-2) 0) $
+                LR.identityXForm
 
 cubeObj :: LR.Material -> IO (LR.GameObject CubeDemoObject)
 cubeObj mat = do
