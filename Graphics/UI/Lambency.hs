@@ -11,6 +11,8 @@ import qualified Graphics.Rendering.OpenGL as GL
 
 import qualified Graphics.Rendering.Lambency as LR
 
+import Graphics.UI.Lambency.Input
+
 import Control.Monad (unless)
 
 --------------------------------------------------------------------------------
@@ -48,8 +50,8 @@ destroyWindow m = do
     Nothing -> return ()
   GLFW.terminate  
 
-run :: GLFW.Window -> LR.GameCamera -> [ LR.GameObject a ] -> IO ()
-run win (LR.GameCamera cam updCam) objs = do
+run' :: InputControl -> GLFW.Window -> LR.GameCamera -> [ LR.GameObject a ] -> IO ()
+run' ctl win (LR.GameCamera cam updCam) objs = do
 
   GLFW.pollEvents
   keyState <- GLFW.getKey win GLFW.Key'Q
@@ -64,10 +66,15 @@ run win (LR.GameCamera cam updCam) objs = do
   GL.flush
   GLFW.swapBuffers win
   q <- GLFW.windowShouldClose win
-  unless q $ run win updateCamera $ LR.updateObjs dt objs
+  unless q $ run' ctl win updateCamera $ LR.updateObjs dt objs
   where
     dt :: Double
     dt = 0.05
 
     updateCamera :: LR.GameCamera
     updateCamera = LR.GameCamera (updCam dt cam) updCam
+
+run :: GLFW.Window -> LR.GameCamera -> [ LR.GameObject a ] -> IO ()
+run win cam objs = do
+  ctl <- mkInputControl win
+  run' ctl win cam objs
