@@ -1,4 +1,5 @@
 module Graphics.UI.Lambency (
+  Input(..),
   makeWindow,
   destroyWindow,
   run
@@ -15,6 +16,8 @@ import Graphics.UI.Lambency.Input
 
 import Control.Monad (unless)
 
+import qualified Data.Set as Set
+
 --------------------------------------------------------------------------------
 
 errorCallback :: GLFW.Error -> String -> IO()
@@ -24,23 +27,20 @@ makeWindow :: Int -> Int -> String -> IO (Maybe GLFW.Window)
 makeWindow width height title = do
   putStr "Initializing GLFW..."
   r <- GLFW.init
-  unless r $ return ()
-  putStrLn "Done"
-  GLFW.setErrorCallback $ Just errorCallback
-  putStr $ "Creating window of size (" ++ (show width) ++ ", " ++ (show height) ++ ")..."
-  m <- GLFW.createWindow width height title Nothing Nothing
-  case m of Nothing -> ioError $ userError "Failed to create window!"
-            Just _ -> putStrLn "Done."
-  case m of
-    Nothing -> return ()
-    (Just _) -> do
+  if not r then ioError (userError "Failed!") else do
+    putStrLn "Done"
+    GLFW.setErrorCallback $ Just errorCallback
+    putStr $ "Creating window of size (" ++ (show width) ++ ", " ++ (show height) ++ ")..."
+    m <- GLFW.createWindow width height title Nothing Nothing
+    if m == (Nothing) then ioError (userError "Failed!") else do
+      putStrLn "Done."
       GLFW.makeContextCurrent m
 
       -- Initial defaults
       GL.depthFunc GL.$= Just GL.Lequal
       GL.cullFace GL.$= Just GL.Back
-  LR.initLambency
-  return m
+      LR.initLambency
+      return m
 
 destroyWindow :: Maybe GLFW.Window -> IO ()
 destroyWindow m = do
@@ -53,11 +53,10 @@ destroyWindow m = do
 run' :: InputControl -> GLFW.Window -> LR.GameCamera -> [ LR.GameObject a ] -> IO ()
 run' ctl win (LR.GameCamera cam updCam) objs = do
 
-  GLFW.pollEvents
-  keyState <- GLFW.getKey win GLFW.Key'Q
-  case keyState of
-    GLFW.KeyState'Pressed -> GLFW.setWindowShouldClose win True
-    _ -> return ()
+  input <- getInput ctl
+  if Set.member GLFW.Key'Q (keysPressed input)
+    then GLFW.setWindowShouldClose win True
+    else return ()
 
   -- !FIXME! This should be moved to the camera...
   GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
@@ -65,6 +64,8 @@ run' ctl win (LR.GameCamera cam updCam) objs = do
   LR.renderCamera cam objs
   GL.flush
   GLFW.swapBuffers win
+  GLFW.pollEvents
+
   q <- GLFW.windowShouldClose win
   unless q $ run' ctl win updateCamera $ LR.updateObjs dt objs
   where
