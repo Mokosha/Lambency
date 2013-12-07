@@ -10,8 +10,7 @@ module Graphics.UI.Lambency.Input (
 
 import qualified Graphics.UI.GLFW as GLFW
 
-import Control.Monad (liftM)
-import Control.Concurrent
+import Control.Concurrent.STM
 
 import qualified Data.Set as Set
 
@@ -30,27 +29,26 @@ data Input = Input {
 kEmptyInput :: Input
 kEmptyInput = Input { keysPressed = Set.empty, mbPressed = [], cursor = Nothing, misc = [] }
 
-type InputControl = MVar Input
+type InputControl = TVar Input
 
 -- Returns a snapshot of the input
 getInput :: InputControl -> IO(Input)
-getInput = readMVar
+getInput = readTVarIO
 
 scrollCallback :: InputControl -> GLFW.Window -> Double -> Double -> IO ()
-scrollCallback ctl _ xoff yoff = modifyMVar_ ctl (liftM updateScroll . return)
+scrollCallback ctl _ xoff yoff = atomically $ modifyTVar' ctl updateScroll
   where
     updateScroll :: Input -> Input
-    updateScroll input =
-      (\ipt -> ipt { misc = (Scroll xoff yoff) : (filter notScroll $ misc input) }) input
+    updateScroll =
+      (\input -> input { misc = (Scroll xoff yoff) : (filter notScroll $ misc input) })
 
     notScroll :: MiscInput -> Bool
     notScroll (Scroll _ _) = False
     notScroll _ = True
 
 keyCallback :: InputControl -> GLFW.Window ->
-               GLFW.Key -> Int -> GLFW.KeyState -> GLFW.ModifierKeys ->
-               IO ()
-keyCallback ctl _ key _ keystate _ = modifyMVar_ ctl (liftM modifyKeys . return)
+               GLFW.Key -> Int -> GLFW.KeyState -> GLFW.ModifierKeys -> IO ()
+keyCallback ctl _ key _ keystate _ = atomically $ modifyTVar' ctl modifyKeys
   where
     updateKeys :: (Set.Set GLFW.Key -> Set.Set GLFW.Key) -> Input -> Input
     updateKeys fn = (\input -> input { keysPressed = fn (keysPressed input) })
@@ -63,7 +61,7 @@ keyCallback ctl _ key _ keystate _ = modifyMVar_ ctl (liftM modifyKeys . return)
 
 mkInputControl :: GLFW.Window -> IO (InputControl)
 mkInputControl win = do
-  ctl <- newMVar kEmptyInput
+  ctl <- newTVarIO kEmptyInput
   GLFW.setScrollCallback win (Just $ scrollCallback ctl)
   GLFW.setKeyCallback win (Just $ keyCallback ctl)
   return ctl

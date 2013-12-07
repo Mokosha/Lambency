@@ -43,6 +43,7 @@ library
                        OpenGL >=2.9.2.0,
                        OpenGLRaw ==1.4.0.0,
                        vect == 0.4.7,
+                       stm >= 2.4,
                        containers,
                        bytestring,
                        array,
