@@ -22,14 +22,18 @@ module Graphics.Rendering.Lambency.Camera (
   GameCamera(..),
   updateCamera,
   mkFixedCam,
+  mkDebugCam,
 ) where
 --------------------------------------------------------------------------------
+import qualified Graphics.UI.GLFW as GLFW
+
 import Graphics.UI.Lambency.Input
 
 import Graphics.Rendering.Lambency.Utils
 import qualified Graphics.Rendering.Lambency.Transform as XForm
 
 import Data.Vect.Float
+import GHC.Float
 --------------------------------------------------------------------------------
 
 data CameraViewDistance = CameraViewDistance {
@@ -200,3 +204,27 @@ mkFixedCam cam = GameCamera cam constCam
   where constCam :: Camera -> Time -> Input -> (Input, GameCamera)
         constCam _ _ ipt = (ipt, GameCamera cam constCam)
 
+mkDebugCam :: Camera -> GameCamera
+mkDebugCam cam = GameCamera cam debugCam
+  where
+    debugCam :: Camera -> Time -> Input -> (Input, GameCamera)
+    debugCam (Camera xform camTy camSz) dt ipt = let
+
+      tr :: GLFW.Key -> Float -> (XForm.Transform -> Normal3) ->
+            (XForm.Transform -> XForm.Transform)
+      tr k sc dir = let
+        vdir = fromNormal . dir
+        s = double2Float dt * sc
+        in
+         withPressedKey ipt k (\x -> XForm.translate (s *& (vdir x)) x)
+
+      movement :: XForm.Transform -> XForm.Transform
+      movement = foldl1 (.) [
+        tr GLFW.Key'W (-1.0) XForm.forward,
+        tr GLFW.Key'S (1.0) XForm.forward,
+        tr GLFW.Key'A (-1.0) XForm.right,
+        tr GLFW.Key'D (1.0) XForm.right
+        ]
+
+      in
+       (ipt, GameCamera (Camera (movement xform) camTy camSz) debugCam)
