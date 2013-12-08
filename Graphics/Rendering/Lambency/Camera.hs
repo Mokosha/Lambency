@@ -1,6 +1,5 @@
 module Graphics.Rendering.Lambency.Camera (
   Camera,
-  GameCamera(..),
   mkOrthoCamera,
   mkPerspCamera,
   getViewProjMatrix,
@@ -18,9 +17,15 @@ module Graphics.Rendering.Lambency.Camera (
   getCamNear,
   setCamNear,
   getCamFar,
-  setCamFar
+  setCamFar,
+
+  GameCamera(..),
+  updateCamera,
+  mkFixedCam,
 ) where
 --------------------------------------------------------------------------------
+import Graphics.UI.Lambency.Input
+
 import Graphics.Rendering.Lambency.Utils
 import qualified Graphics.Rendering.Lambency.Transform as XForm
 
@@ -46,9 +51,6 @@ data CameraType =
   deriving (Show, Eq)
 
 data Camera = Camera XForm.Transform CameraType CameraViewDistance deriving(Show, Eq)
-
-type Time = Double
-data GameCamera = GameCamera Camera (Time -> Camera -> Camera)
 
 mkXForm :: Vec3 -> Normal3 -> Normal3 -> XForm.Transform
 mkXForm pos dir up = let
@@ -184,3 +186,17 @@ getProjMatrix (Camera _ (Persp {fovY = fovy, aspect = a}) dist) = let
 
 getViewProjMatrix :: Camera -> Mat4
 getViewProjMatrix c = (getViewMatrix c) .*. (getProjMatrix c)
+
+--
+
+type Time = Double
+data GameCamera = GameCamera Camera (Camera -> Time -> Input -> (Input, GameCamera))
+
+updateCamera :: GameCamera -> Time -> Input -> (Input, GameCamera)
+updateCamera (GameCamera cam upd) = upd cam
+
+mkFixedCam :: Camera -> GameCamera
+mkFixedCam cam = GameCamera cam constCam
+  where constCam :: Camera -> Time -> Input -> (Input, GameCamera)
+        constCam _ _ ipt = (ipt, GameCamera cam constCam)
+

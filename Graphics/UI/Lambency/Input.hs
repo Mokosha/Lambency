@@ -3,7 +3,9 @@ module Graphics.UI.Lambency.Input (
   Input(..),
   InputControl,
   mkInputControl,
-  getInput
+  getInput, setInput,
+
+  isKeyPressed, withPressedKey, debounceKey
 ) where
 
 --------------------------------------------------------------------------------
@@ -18,22 +20,35 @@ import qualified Data.Set as Set
 
 data MiscInput = Scroll Double Double
                | Resize
+                 deriving (Show)
 
 data Input = Input {
   keysPressed :: Set.Set GLFW.Key,
   mbPressed :: [Int],
   cursor :: Maybe (Float, Float),
   misc :: [MiscInput]
-}
+} deriving(Show)
 
 kEmptyInput :: Input
 kEmptyInput = Input { keysPressed = Set.empty, mbPressed = [], cursor = Nothing, misc = [] }
+
+isKeyPressed :: GLFW.Key -> Input -> Bool
+isKeyPressed key = (Set.member key) . keysPressed
+
+withPressedKey :: Input -> GLFW.Key -> (a -> a) -> a -> a
+withPressedKey input key fn v = if isKeyPressed key input then fn v else v
+
+debounceKey :: GLFW.Key -> Input -> Input
+debounceKey key = (\input -> input { keysPressed = Set.delete key (keysPressed input) })
 
 type InputControl = TVar Input
 
 -- Returns a snapshot of the input
 getInput :: InputControl -> IO(Input)
 getInput = readTVarIO
+
+setInput :: InputControl -> Input -> IO ()
+setInput ctl ipt = atomically $ writeTVar ctl ipt
 
 scrollCallback :: InputControl -> GLFW.Window -> Double -> Double -> IO ()
 scrollCallback ctl _ xoff yoff = atomically $ modifyTVar' ctl updateScroll

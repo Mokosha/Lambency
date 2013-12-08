@@ -57,6 +57,6 @@ main = do
   mat <- LR.createSpotlightMaterial . Just =<< (LR.createSolidTexture (128, 128, 128, 255))
   objs <- sequence [cubeObj mat, planeObj mat]
   case m of
-    (Just win) -> L.run win (LR.GameCamera demoCam $ flip const) objs
+    (Just win) -> L.run win (LR.mkFixedCam demoCam) objs
     Nothing -> return ()
   L.destroyWindow m

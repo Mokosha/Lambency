@@ -53,6 +53,8 @@ destroyWindow m = do
 run' :: InputControl -> GLFW.Window -> LR.GameCamera -> [ LR.GameObject a ] -> IO ()
 run' ctl win (LR.GameCamera cam updCam) objs = do
 
+  GLFW.pollEvents
+
   input <- getInput ctl
   if Set.member GLFW.Key'Q (keysPressed input)
     then GLFW.setWindowShouldClose win True
@@ -63,17 +65,23 @@ run' ctl win (LR.GameCamera cam updCam) objs = do
   GL.clear [GL.ColorBuffer, GL.DepthBuffer]
   LR.renderCamera cam objs
   GL.flush
+
+  -- Swap buffers and poll events...
   GLFW.swapBuffers win
-  GLFW.pollEvents
+
+  -- Update camera
+  let (ipt, newcam) = updCam cam dt input
+
+  -- Update game objects
+  -- !FIXME!
+
+  setInput ctl ipt
 
   q <- GLFW.windowShouldClose win
-  unless q $ run' ctl win updateCamera $ LR.updateObjs dt objs
+  unless q $ run' ctl win newcam $ LR.updateObjs dt objs
   where
     dt :: Double
     dt = 0.05
-
-    updateCamera :: LR.GameCamera
-    updateCamera = LR.GameCamera (updCam dt cam) updCam
 
 run :: GLFW.Window -> LR.GameCamera -> [ LR.GameObject a ] -> IO ()
 run win cam objs = do
