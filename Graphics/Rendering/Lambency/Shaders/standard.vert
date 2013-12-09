@@ -15,6 +15,5 @@ void main() {
   norm = normalize((m2wMatrix * vec4(normal, 0)).xyz);
   uv = texCoord;
 
-  vec4 clipSpace = mvpMatrix * vec4(position, 1.0);
-  gl_Position = clipSpace / clipSpace.w;
+  gl_Position = mvpMatrix * vec4(position, 1.0);
 }
