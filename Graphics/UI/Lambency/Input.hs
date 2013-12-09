@@ -16,6 +16,7 @@ import Control.Concurrent.STM
 
 import qualified Data.Set as Set
 
+import GHC.Float
 --------------------------------------------------------------------------------
 
 data MiscInput = Scroll Double Double
@@ -74,9 +75,14 @@ keyCallback ctl _ key _ keystate _ = atomically $ modifyTVar' ctl modifyKeys
       GLFW.KeyState'Released -> updateKeys $ Set.delete key
       _ -> id
 
+cursorPosCallback :: InputControl -> GLFW.Window -> Double -> Double -> IO ()
+cursorPosCallback ctl _ x y = atomically $ modifyTVar' ctl
+  (\ipt -> ipt { cursor = Just (double2Float x, double2Float y) })
+
 mkInputControl :: GLFW.Window -> IO (InputControl)
 mkInputControl win = do
   ctl <- newTVarIO kEmptyInput
   GLFW.setScrollCallback win (Just $ scrollCallback ctl)
   GLFW.setKeyCallback win (Just $ keyCallback ctl)
+  GLFW.setCursorPosCallback win (Just $ cursorPosCallback ctl)
   return ctl
