@@ -65,10 +65,7 @@ forward' :: Transform -> Vec3
 forward' = fromNormal . forward
 
 updateAxis :: Normal3 -> Normal3 -> Normal3 -> Transform -> Transform
-updateAxis nr nu nf =
-  (\xf -> xf { up = nu }) .
-  (\xf -> xf { forward = nf }) .
-  (\xf -> xf { right = nr })
+updateAxis nr nu nf = (\xf -> xf { up = nu, forward = nf, right = nr })
 
 renormalize :: Transform -> Transform
 renormalize xf = updateAxis (right xf) u' f' xf
