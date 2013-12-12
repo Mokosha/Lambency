@@ -33,6 +33,7 @@ import Graphics.Rendering.Lambency.Utils
 import qualified Graphics.Rendering.Lambency.Transform as XForm
 
 import Data.Vect.Float
+import Data.Vect.Float.Util.Quaternion
 import GHC.Float
 --------------------------------------------------------------------------------
 
@@ -228,13 +229,9 @@ mkDebugCam cam = GameCamera cam debugCam
         tr GLFW.Key'S (1.0) XForm.forward,
         tr GLFW.Key'A (-1.0) XForm.right,
         tr GLFW.Key'D (1.0) XForm.right,
-          XForm.rotate $
-          quatFromVecs
-          (mkNormal $
-           (neg $ XForm.forward' xform) &+
-           (mx *& XForm.right' xform) &+
-           ((-my) *& XForm.up' xform))
-          (toNormalUnsafe $ neg $ XForm.forward' xform)
+        XForm.rotate $ foldl1 (.*.) [
+          rotU' (XForm.up xform) (-asin mx),
+          rotU' (XForm.right xform) (-asin my)]
         ]
 
       finalXForm = mkXForm
