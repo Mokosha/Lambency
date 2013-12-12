@@ -4,12 +4,13 @@ module Graphics.UI.Lambency.Input (
   InputControl,
   mkInputControl,
   getInput, setInput,
+  resetCursorPos,
 
   isKeyPressed, withPressedKey, debounceKey
 ) where
 
 --------------------------------------------------------------------------------
-
+import Graphics.Rendering.Lambency.Utils
 import qualified Graphics.UI.GLFW as GLFW
 
 import Control.Concurrent.STM
@@ -42,17 +43,28 @@ withPressedKey input key fn v = if isKeyPressed key input then fn v else v
 debounceKey :: GLFW.Key -> Input -> Input
 debounceKey key = (\input -> input { keysPressed = Set.delete key (keysPressed input) })
 
-type InputControl = TVar Input
+data InputControl = IptCtl (TVar Input) GLFW.Window
 
 -- Returns a snapshot of the input
 getInput :: InputControl -> IO(Input)
-getInput = readTVarIO
+getInput (IptCtl var _) = readTVarIO var
 
 setInput :: InputControl -> Input -> IO ()
-setInput ctl ipt = atomically $ writeTVar ctl ipt
+setInput (IptCtl var win) ipt = do
+  case (cursor ipt) of
+    Just _ -> return ()
+    Nothing -> do
+      (w, h) <- GLFW.getWindowSize win
+      GLFW.setCursorPos win (fromIntegral w / 2.0) (fromIntegral h / 2.0)
+  atomically $ writeTVar var ipt
+
+resetCursorPos :: Input -> Input
+resetCursorPos = (\input -> input { cursor = Nothing })
+
+--------------------------
 
 scrollCallback :: InputControl -> GLFW.Window -> Double -> Double -> IO ()
-scrollCallback ctl _ xoff yoff = atomically $ modifyTVar' ctl updateScroll
+scrollCallback (IptCtl ctl _) _ xoff yoff = atomically $ modifyTVar' ctl updateScroll
   where
     updateScroll :: Input -> Input
     updateScroll =
@@ -64,7 +76,7 @@ scrollCallback ctl _ xoff yoff = atomically $ modifyTVar' ctl updateScroll
 
 keyCallback :: InputControl -> GLFW.Window ->
                GLFW.Key -> Int -> GLFW.KeyState -> GLFW.ModifierKeys -> IO ()
-keyCallback ctl _ key _ keystate _ = atomically $ modifyTVar' ctl modifyKeys
+keyCallback (IptCtl ctl _) _ key _ keystate _ = atomically $ modifyTVar' ctl modifyKeys
   where
     updateKeys :: (Set.Set GLFW.Key -> Set.Set GLFW.Key) -> Input -> Input
     updateKeys fn = (\input -> input { keysPressed = fn (keysPressed input) })
@@ -76,12 +88,22 @@ keyCallback ctl _ key _ keystate _ = atomically $ modifyTVar' ctl modifyKeys
       _ -> id
 
 cursorPosCallback :: InputControl -> GLFW.Window -> Double -> Double -> IO ()
-cursorPosCallback ctl _ x y = atomically $ modifyTVar' ctl
-  (\ipt -> ipt { cursor = Just (double2Float x, double2Float y) })
+cursorPosCallback (IptCtl ctl _) win x y = do
+  (w, h) <- GLFW.getWindowSize win
+  let xf = double2Float x
+      yf = double2Float y
+  atomically $ modifyTVar' ctl
+    (\ipt -> ipt { cursor = Just
+                   (newRange xf (0, fromIntegral w) (-1, 1),
+                    newRange yf (0, fromIntegral h) (-1, 1)) })
 
 mkInputControl :: GLFW.Window -> IO (InputControl)
 mkInputControl win = do
-  ctl <- newTVarIO kEmptyInput
+
+  GLFW.setCursorInputMode win GLFW.CursorInputMode'Hidden
+
+  ctlvar <- newTVarIO kEmptyInput
+  let ctl = IptCtl ctlvar win
   GLFW.setScrollCallback win (Just $ scrollCallback ctl)
   GLFW.setKeyCallback win (Just $ keyCallback ctl)
   GLFW.setCursorPosCallback win (Just $ cursorPosCallback ctl)
