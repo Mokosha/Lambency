@@ -4,6 +4,7 @@ module Graphics.Rendering.Lambency.Utils (
   quatFromVecs,
   destructMat4,
   negN,
+  newRange,
 ) where
 
 --------------------------------------------------------------------------------
@@ -26,7 +27,7 @@ checkParallel v1 v2 = 1 - (abs $ v1 &. v2) < 1e-6
 quatFromVecs :: Normal3 -> Normal3 -> UnitQuaternion
 quatFromVecs n1 n2
   | 1 - (abs d) < 1e-6 = handleParallel
-  | otherwise = rotU cv $ angle (fromNormal n1) (fromNormal n2)
+  | otherwise = rotU cv $ -angle (fromNormal n1) (fromNormal n2)
   where
     d = n1 &. n2
     cv = fromNormal $ n1 &^ n2
@@ -49,3 +50,7 @@ destructMat4 mat = let
 
 negN :: UnitVector v u => u -> u
 negN = toNormalUnsafe . neg . fromNormal
+
+newRange :: Floating a => a -> (a, a) -> (a, a) -> a
+newRange x (omin, omax) (nmin, nmax) =
+  nmin + (nmax - nmin) * ((x - omin) / (omax - omin))
