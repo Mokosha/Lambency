@@ -210,6 +210,10 @@ mkDebugCam cam = GameCamera cam debugCam
     debugCam :: Camera -> Time -> Input -> (Input, GameCamera)
     debugCam (Camera xform camTy camSz) dt ipt = let
 
+      (mx, my) = case (cursor ipt) of
+        Just x -> x
+        Nothing -> (0, 0)
+
       tr :: GLFW.Key -> Float -> (XForm.Transform -> Normal3) ->
             (XForm.Transform -> XForm.Transform)
       tr k sc dir = let
@@ -223,8 +227,22 @@ mkDebugCam cam = GameCamera cam debugCam
         tr GLFW.Key'W (-1.0) XForm.forward,
         tr GLFW.Key'S (1.0) XForm.forward,
         tr GLFW.Key'A (-1.0) XForm.right,
-        tr GLFW.Key'D (1.0) XForm.right
+        tr GLFW.Key'D (1.0) XForm.right,
+          XForm.rotate $
+          quatFromVecs
+          (mkNormal $
+           (neg $ XForm.forward' xform) &+
+           (mx *& XForm.right' xform) &+
+           ((-my) *& XForm.up' xform))
+          (toNormalUnsafe $ neg $ XForm.forward' xform)
         ]
 
+      finalXForm = mkXForm
+                   (XForm.position newXForm)
+                   (negN $ XForm.forward newXForm)
+                   (toNormalUnsafe vec3Y)
+        where
+          newXForm = movement xform
+
       in
-       (ipt, GameCamera (Camera (movement xform) camTy camSz) debugCam)
+       (resetCursorPos ipt, GameCamera (Camera finalXForm camTy camSz) debugCam)
