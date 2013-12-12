@@ -1,5 +1,6 @@
 module Graphics.Rendering.Lambency.Transform (
   Transform(..), identityXForm,
+  right', up', forward',
   localRight, localUp, localForward,
 
   rotate, rotateWorld, translate, uniformScale,
@@ -53,6 +54,15 @@ identityXForm = XForm {
   position = zero,
   scale = Vec3 1 1 1
 }
+
+right' :: Transform -> Vec3
+right' = fromNormal . right
+
+up' :: Transform -> Vec3
+up' = fromNormal . up
+
+forward' :: Transform -> Vec3
+forward' = fromNormal . forward
 
 updateAxis :: Normal3 -> Normal3 -> Normal3 -> Transform -> Transform
 updateAxis nr nu nf =
