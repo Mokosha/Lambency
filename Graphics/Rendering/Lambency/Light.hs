@@ -50,6 +50,6 @@ renderLight (Light shdr shdrmap msm) ros = do
       afterRender s
 
     renderObj :: Shader -> ShaderMap -> RenderObject -> IO ()
-    renderObj s sm ro =
+    renderObj s sm ro = do
       (render ro) s (Map.union sm (material ro))
 

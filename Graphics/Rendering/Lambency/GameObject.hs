@@ -17,11 +17,12 @@ import Control.Wire
 --------------------------------------------------------------------------------
 
 positioned :: Camera -> Transform -> ShaderMap
-positioned cam xform = Map.fromList
-                    [("mvpMatrix", Matrix4Val $ model .*. (getViewProjMatrix cam)),
-                     ("m2wMatrix", Matrix4Val $ model)]
-  where model :: Mat4
-        model = xform2Matrix xform
+positioned cam xform = let
+  model :: Mat4
+  model = xform2Matrix xform
+  in Map.fromList
+     [("mvpMatrix", Matrix4Val $ model .*. (getViewProjMatrix cam)),
+      ("m2wMatrix", Matrix4Val $ model)]
 
 placeStaticObject :: Monad m => Transform -> Wire s e m (Camera, RenderObject) RenderObject
 placeStaticObject xform = 

@@ -24,7 +24,7 @@ import GHC.Float (double2Float)
 
 type CubeDemoObject = LR.Transform
 
-demoCam :: Monad m => W.Wire s e m a (a, LR.Camera)
+demoCam :: Monad m => W.Wire LR.Timestep e m L.Input (L.Input, LR.Camera)
 demoCam = LR.mkFixedCam $ LR.mkPerspCamera
            -- Pos           Dir              Up
            ((-15) *& vec3Z) (mkNormal (vec3Z)) (mkNormal vec3Y)
@@ -57,7 +57,8 @@ cubeWire = do
     initial :: LR.Transform
     initial = LR.rotate (rotU (Vec3 1 0 1) 0.6) LR.identityXForm
 
-gameWire :: Monad m => IO (W.Wire LR.Timestep e m a (a, [LR.Light], [LR.RenderObject]))
+gameWire :: Monad m =>
+            IO (W.Wire LR.Timestep e m L.Input (L.Input, [LR.Light], [LR.RenderObject]))
 gameWire = do
   wires <- sequence [cubeWire, planeWire]
   let lightPos = 10 *& (Vec3 (-1) 1 0)

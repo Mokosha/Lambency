@@ -75,7 +75,7 @@ run win w = do
         Right (ipt, lights, ros) -> do
           -- !FIXME! This should be moved to the camera...
           GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
-          GL.clear [GL.ColorBuffer, GL.DepthBuffer]
+          LR.clearBuffers
           mapM_ (flip LR.renderLight ros) lights
           GL.flush
 
