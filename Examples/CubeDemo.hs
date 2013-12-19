@@ -27,7 +27,7 @@ type CubeDemoObject = LR.Transform
 demoCam :: Monad m => W.Wire LR.Timestep e m L.Input (L.Input, LR.Camera)
 demoCam = LR.mkFixedCam $ LR.mkPerspCamera
            -- Pos           Dir              Up
-           ((-15) *& vec3Z) (mkNormal (vec3Z)) (mkNormal vec3Y)
+           ((-15) *& vec3Z) (mkNormal vec3Z) (mkNormal vec3Y)
            (pi / 4) (4.0 / 3.0)
            -- near far
            0.1 1000.0

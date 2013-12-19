@@ -21,10 +21,10 @@ createSpotlight pos dir ang = do
   depthTex <- createDepthTexture
   minShdr <- createMinimalShader
   -- !FIXME! The camera fovy should depend on the cosoffset
-  let lightCam = mkPerspCamera pos dir (mkNormal vec3Z) (pi / 4) 1 0.1 500.0
+  let lightCam = mkPerspCamera pos dir (mkNormal vec3Y) (pi / 4) 1 0.1 500.0
       shdrMap = Map.fromList [
         ("shadowVP", Matrix4Val $ getViewProjMatrix lightCam),
-        ("shadowMap", (TextureVal depthTex)),
+        ("shadowMap", TextureVal depthTex),
         ("lightDir", Vector3Val $ fromNormal dir),
         ("lightPos", Vector3Val pos),
         ("lightCosCutoff", FloatVal ang),
@@ -38,18 +38,22 @@ renderLight (Light shdr shdrmap msm) ros = do
     Just (Shadow shadowShdr shadowMap) -> do
       bindRenderTexture shadowMap
       clearBuffers
-      renderShdr shadowShdr
+      beforeRender shadowShdr
+      -- Right now the MVP matrix of each object is for the main camera, so
+      -- we need to replace it with the combination from the model matrix
+      -- and the shadow VP...
+      mapM_
+        (\ro -> do
+            let
+              mat :: ShaderValue -> Mat4
+              mat (Matrix4Val m) = m
+              mat _ = one
+              lightMVP = (mat $ material ro Map.! "m2wMatrix") .*.
+                         (mat $ shdrmap Map.! "shadowVP")
+              newmap = Map.insert "mvpMatrix" (Matrix4Val lightMVP) shdrmap
+            (render ro) shadowShdr (Map.union newmap (material ro))) ros
+      afterRender shadowShdr
       clearRenderTexture
-  renderShdr shdr
-  
-  where
-    renderShdr :: Shader -> IO ()
-    renderShdr s = do
-      beforeRender s
-      mapM_ (renderObj s shdrmap) ros
-      afterRender s
-
-    renderObj :: Shader -> ShaderMap -> RenderObject -> IO ()
-    renderObj s sm ro = do
-      (render ro) s (Map.union sm (material ro))
-
+  beforeRender shdr
+  mapM_ (\ro -> (render ro) shdr (Map.union shdrmap (material ro))) ros
+  afterRender shdr
