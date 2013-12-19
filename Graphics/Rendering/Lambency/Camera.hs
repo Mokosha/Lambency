@@ -1,5 +1,4 @@
 module Graphics.Rendering.Lambency.Camera (
-  Camera,
   mkOrthoCamera,
   mkPerspCamera,
   getViewProjMatrix,
@@ -19,8 +18,6 @@ module Graphics.Rendering.Lambency.Camera (
   getCamFar,
   setCamFar,
 
-  GameCamera(..),
-  updateCamera,
   mkFixedCam,
   mkDebugCam,
 ) where
@@ -30,32 +27,14 @@ import qualified Graphics.UI.GLFW as GLFW
 import Graphics.UI.Lambency.Input
 
 import Graphics.Rendering.Lambency.Utils
+import Graphics.Rendering.Lambency.Types
 import qualified Graphics.Rendering.Lambency.Transform as XForm
 
 import Data.Vect.Float
 import Data.Vect.Float.Util.Quaternion
-import GHC.Float
+
+import qualified Control.Wire as W
 --------------------------------------------------------------------------------
-
-data CameraViewDistance = CameraViewDistance {
-  near :: Float,
-  far :: Float
-} deriving (Show, Eq)
-
-data CameraType =
-  Ortho {
-    left :: Float,
-    right :: Float,
-    top :: Float,
-    bottom :: Float
-  }
-  | Persp {
-    fovY :: Float,
-    aspect :: Float
-  }
-  deriving (Show, Eq)
-
-data Camera = Camera XForm.Transform CameraType CameraViewDistance deriving(Show, Eq)
 
 mkXForm :: Vec3 -> Normal3 -> Normal3 -> XForm.Transform
 mkXForm pos dir up = let
@@ -194,23 +173,21 @@ getViewProjMatrix c = (getViewMatrix c) .*. (getProjMatrix c)
 
 --
 
-type Time = Double
-data GameCamera = GameCamera Camera (Camera -> Time -> Input -> (Input, GameCamera))
-
-updateCamera :: GameCamera -> Time -> Input -> (Input, GameCamera)
-updateCamera (GameCamera cam upd) = upd cam
-
-mkFixedCam :: Camera -> GameCamera
-mkFixedCam cam = GameCamera cam constCam
-  where constCam :: Camera -> Time -> Input -> (Input, GameCamera)
-        constCam _ _ ipt = (ipt, GameCamera cam constCam)
-
-mkDebugCam :: Camera -> GameCamera
-mkDebugCam cam = GameCamera cam debugCam
+mkFixedCam :: Monad m => Camera -> W.Wire s e m a (a, Camera)
+mkFixedCam cam = W.mkSF_ (\x -> (x, cam))
+  
+mkDebugCam :: Monad m => Camera -> W.Wire Timestep e m Input (Input, Camera)
+mkDebugCam (Camera xform camTy camSz) =
+  W.mkPure $ \time ipt -> let
+    W.Timed dt () = time ()
+    newcam :: Camera
+    newcam = updCam dt ipt
+    in
+     (Right (resetCursorPos ipt, newcam), mkDebugCam newcam)
   where
-    debugCam :: Camera -> Time -> Input -> (Input, GameCamera)
-    debugCam (Camera xform camTy camSz) dt ipt = let
-
+    updCam :: Float -> Input -> Camera
+    updCam dt ipt = Camera finalXForm camTy camSz
+     where
       (mx, my) = case (cursor ipt) of
         Just x -> x
         Nothing -> (0, 0)
@@ -219,7 +196,7 @@ mkDebugCam cam = GameCamera cam debugCam
             (XForm.Transform -> XForm.Transform)
       tr k sc dir = let
         vdir = fromNormal . dir
-        s = double2Float dt * sc
+        s = dt * sc
         in
          withPressedKey ipt k (\x -> XForm.translate (s *& (vdir x)) x)
 
@@ -240,6 +217,3 @@ mkDebugCam cam = GameCamera cam debugCam
                    (toNormalUnsafe vec3Y)
         where
           newXForm = movement xform
-
-      in
-       (resetCursorPos ipt, GameCamera (Camera finalXForm camTy camSz) debugCam)

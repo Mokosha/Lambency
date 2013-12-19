@@ -26,13 +26,15 @@ library
   exposed-modules:     Graphics.UI.Lambency
                        Graphics.Rendering.Lambency
   other-modules:       Graphics.Rendering.Lambency.Camera
+                       Graphics.Rendering.Lambency.Light
                        Graphics.Rendering.Lambency.Material
                        Graphics.Rendering.Lambency.Mesh
-                       Graphics.Rendering.Lambency.Object
+                       Graphics.Rendering.Lambency.GameObject
                        Graphics.Rendering.Lambency.Renderable
                        Graphics.Rendering.Lambency.Shader
                        Graphics.Rendering.Lambency.Texture
                        Graphics.Rendering.Lambency.Transform
+                       Graphics.Rendering.Lambency.Types
                        Graphics.Rendering.Lambency.Vertex
                        Graphics.Rendering.Lambency.Utils
                        Graphics.UI.Lambency.Input
@@ -44,6 +46,8 @@ library
                        OpenGLRaw ==1.4.0.0,
                        vect == 0.4.7,
                        stm >= 2.4,
+                       mtl >= 2.1.2,
+                       netwire >= 5.0.0,
                        containers,
                        bytestring,
                        array,

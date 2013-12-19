@@ -20,6 +20,7 @@ data-dir:            Assets
 executable lambcubedemo
   main-is:        CubeDemo.hs
   build-depends:  base > 4.5,
+                  netwire >= 5,
                   lambency,
                   vect == 0.4.7,
                   containers,

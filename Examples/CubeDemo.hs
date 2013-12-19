@@ -8,6 +8,7 @@ import qualified Graphics.Rendering.Lambency as LR
 import Data.Vect.Float
 import Data.Vect.Float.Util.Quaternion
 
+import Data.Traversable (sequenceA)
 import Data.Maybe (fromJust)
 import qualified Data.Map as Map
 
@@ -15,48 +16,59 @@ import System.Directory
 import System.FilePath
 import Paths_lambency_examples
 
+import Control.Arrow
+import qualified Control.Wire as W
+
 import GHC.Float (double2Float)
 ---------------------------------------------------------------------------------
 
 type CubeDemoObject = LR.Transform
 
-demoCam :: LR.Camera
-demoCam = LR.mkPerspCamera
+demoCam :: Monad m => W.Wire s e m a (a, LR.Camera)
+demoCam = LR.mkFixedCam $ LR.mkPerspCamera
            -- Pos           Dir              Up
            ((-15) *& vec3Z) (mkNormal (vec3Z)) (mkNormal vec3Y)
            (pi / 4) (4.0 / 3.0)
            -- near far
            0.1 1000.0
 
-planeObj :: LR.Material -> IO (LR.GameObject CubeDemoObject)
-planeObj mat = do
-  ro <- LR.createRenderObject LR.makePlane mat
-  return $ LR.mkStaticObject xform xform (Just ro)
+planeWire :: Monad m => IO (W.Wire LR.Timestep e m LR.Camera LR.RenderObject)
+planeWire = do
+  tex <- LR.createSolidTexture (128, 128, 128, 255)
+  ro <- LR.createRenderObject LR.makePlane (LR.createTexturedMaterial tex)
+  return $ (arr id) &&& (W.mkConst (Right ro)) >>> (LR.placeStaticObject xform)
   where xform = LR.uniformScale 10 $
                 LR.translate (Vec3 0 (-2) 0) $
                 LR.identityXForm
 
-cubeObj :: LR.Material -> IO (LR.GameObject CubeDemoObject)
-cubeObj mat = do
+cubeWire :: Monad m => IO (W.Wire LR.Timestep e m LR.Camera LR.RenderObject)
+cubeWire = do
   (Just tex) <- getDataFileName ("crate" <.> "png") >>= LR.loadTextureFromPNG
-  ro <- LR.createRenderObject LR.makeCube (LR.switchTexture mat "diffuseTex" tex)
-  return LR.Object {
-    LR.location = id,
-    LR.renderObject = Just ro,
-    LR.gameObject = LR.rotate (rotU (Vec3 1 0 1) 0.6) LR.identityXForm,
-    LR.objSVMap = Map.empty,
-    LR.update = \t obj _ -> Just $ rotateObj t obj
-  }
+  ro <- LR.createRenderObject LR.makeCube (LR.createTexturedMaterial tex)
+  return $ (arr id &&& (rotate initial)) &&& (W.mkConst (Right ro)) >>> LR.placeObject
   where
-    rotateObj :: Double -> CubeDemoObject -> CubeDemoObject
-    rotateObj dt = LR.rotateWorld (rotU vec3Y $ double2Float dt)
+    rotate :: Monad m => LR.Transform -> W.Wire LR.Timestep e m a LR.Transform
+    rotate xform =
+      W.mkPure (\ts _ -> let
+                   W.Timed dt () = ts ()
+                   newxform = LR.rotateWorld (rotU vec3Y dt) xform
+                    in (Right newxform, rotate newxform))
+
+    initial :: LR.Transform
+    initial = LR.rotate (rotU (Vec3 1 0 1) 0.6) LR.identityXForm
+
+gameWire :: Monad m => IO (W.Wire LR.Timestep e m a (a, [LR.Light], [LR.RenderObject]))
+gameWire = do
+  wires <- sequence [cubeWire, planeWire]
+  let lightPos = 10 *& (Vec3 (-1) 1 0)
+  spotlight <- LR.createSpotlight lightPos (mkNormal $ neg lightPos) 0
+  return $ demoCam >>> second (sequenceA wires) >>> (arr $ \(x, y) -> (x, [spotlight], y))
 
 main :: IO ()
 main = do
   m <- L.makeWindow 640 480 "Cube Demo"
-  mat <- LR.createSpotlightMaterial . Just =<< (LR.createSolidTexture (128, 128, 128, 255))
-  objs <- sequence [cubeObj mat, planeObj mat]
+  wire <- gameWire
   case m of
-    (Just win) -> L.run win (LR.mkFixedCam demoCam) objs
+    (Just win) -> L.run win wire
     Nothing -> return ()
   L.destroyWindow m

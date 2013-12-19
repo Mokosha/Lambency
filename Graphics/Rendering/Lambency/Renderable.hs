@@ -1,17 +1,14 @@
 module Graphics.Rendering.Lambency.Renderable (
-  RenderObject(..),
   Renderable(..),
-  assignMaterial,
-  switchMaterialTexture,
   createBasicRO,
   clearBuffers
   ) where
 
 --------------------------------------------------------------------------------
 import qualified Graphics.Rendering.OpenGL as GL
-import Graphics.Rendering.Lambency.Shader
 import Graphics.Rendering.Lambency.Material
-import Graphics.Rendering.Lambency.Texture
+import Graphics.Rendering.Lambency.Shader
+import Graphics.Rendering.Lambency.Types
 import Graphics.Rendering.Lambency.Vertex
 
 import qualified Data.Map as Map
@@ -20,28 +17,17 @@ import Data.Array.Storable
 import Data.Int
 import Foreign.Storable
 import Foreign.Ptr
+
 --------------------------------------------------------------------------------
-
-data RenderObject = RenderObject {
-  material :: Material,
-  render :: Material -> IO ()
-}
-
-assignMaterial :: RenderObject -> Material -> RenderObject
-assignMaterial o m = (\ro -> ro { material = m }) o
-
-switchMaterialTexture :: RenderObject -> String -> Texture -> RenderObject
-switchMaterialTexture ro name tex =
-  (\o -> o { material = switchTexture (material ro) name tex }) ro
 
 clearBuffers :: IO ()
 clearBuffers = GL.clear [GL.ColorBuffer, GL.DepthBuffer]
 
 createBasicRO :: [Vertex] -> [Int16] -> Material -> IO (RenderObject)
-createBasicRO [] _ mat = do
+createBasicRO [] _ _ = do
   return $ RenderObject {
-    material = mat,
-    render = \_ -> return ()
+    material = Map.empty,
+    render = \_ _ -> return ()
   }
 createBasicRO (v:vs) idxs mat =
   let
@@ -59,7 +45,7 @@ createBasicRO (v:vs) idxs mat =
     ptrsize [] = toEnum 0
     ptrsize xs = toEnum $ length xs * (sizeOf $ head xs)
 
-    setupBuffer :: (Storable a) => GL.BufferTarget -> [a] -> IO( GL.BufferObject )
+    setupBuffer :: (Storable a) => GL.BufferTarget -> [a] -> IO ( GL.BufferObject )
     setupBuffer tgt xs = do
       buf <- GL.genObjectName
       GL.bindBuffer tgt GL.$= (Just buf)
@@ -67,13 +53,13 @@ createBasicRO (v:vs) idxs mat =
       withStorableArray varr (\ptr -> GL.bufferData tgt GL.$= (ptrsize xs, ptr, GL.StaticDraw))
       return buf
 
-    bindMaterial :: Material -> IO ()
-    bindMaterial m = do
+    bindShader :: Shader -> IO ()
+    bindShader shdr = do
       mapM_ (\(loc, desc) -> GL.vertexAttribPointer loc GL.$= (GL.ToFloat, desc)) $
         zip (map lu $ getAttribNames v) (getDescriptors v)
      where
        lu :: String -> GL.AttribLocation
-       lu name = let svs = (getShaderVars . getShader) m
+       lu name = let svs = getShaderVars shdr
           in case Map.lookup name svs of
             Nothing -> GL.AttribLocation (-1)
             Just var -> case var of
@@ -81,11 +67,18 @@ createBasicRO (v:vs) idxs mat =
               Attribute _ loc -> loc
 
     createRenderFunc :: GL.BufferObject -> GL.BufferObject ->
-                        GL.NumArrayIndices -> (Material -> IO ())
-    createRenderFunc vbo ibo nIndices = (\m -> do
+                        GL.NumArrayIndices -> (Shader -> ShaderMap -> IO ())
+    createRenderFunc vbo ibo nIndices = (\shdr shdrmap -> do
+
+        -- Set all uniforms for this shader
+        let shdrVars = getShaderVars shdr
+        mapM_ (\k -> case Map.lookup k shdrVars of
+          Nothing -> return ()
+          Just shdrVar -> setUniformVar shdrVar (shdrmap Map.! k)) (Map.keys shdrmap)
+
         -- Bind appropriate buffers
         GL.bindBuffer GL.ArrayBuffer GL.$= Just vbo
-        bindMaterial m
+        bindShader shdr
 
         GL.bindBuffer GL.ElementArrayBuffer GL.$= Just ibo
 

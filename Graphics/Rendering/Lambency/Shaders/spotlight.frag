@@ -7,6 +7,7 @@ uniform sampler2D diffuseTex;
 uniform vec3 ambient;
 uniform vec3 lightPos;
 uniform vec3 lightDir;
+uniform float lightCosCutoff;
 
 uniform sampler2DShadow shadowMap;
 uniform mat4 shadowVP;
@@ -28,7 +29,7 @@ void main() {
   p2l = normalize(p2l);
 
   float cosToPt = dot(lightDir, p2l);
-  float spot = clamp(cosToPt, 0.0, 1.0);
+  float spot = clamp(cosToPt, lightCosCutoff, 1.0);
 
   const vec3 color = vec3(1.0, 1.0, 1.0);
   vec3 lightColor = vec3(0, 0, 0);

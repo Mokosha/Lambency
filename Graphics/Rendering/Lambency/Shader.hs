@@ -1,9 +1,4 @@
 module Graphics.Rendering.Lambency.Shader (
-  Shader,
-  ShaderVarTy(..),
-  ShaderValue(..),
-  ShaderVar(..),
-  ShaderMap,
   getProgram,
   getShaderVars,
   isUniform,
@@ -13,11 +8,13 @@ module Graphics.Rendering.Lambency.Shader (
   createSimpleShader,
   createSpotlightShader,
   destroyShader,
+  beforeRender, afterRender
 ) where
 
 --------------------------------------------------------------------------------
 
 import Graphics.Rendering.Lambency.Texture
+import Graphics.Rendering.Lambency.Types
 import Graphics.Rendering.Lambency.Utils
 
 import Paths_lambency
@@ -37,71 +34,7 @@ import Data.Array.Storable
 import System.FilePath
 --------------------------------------------------------------------------------
 
-data ShaderVarTy = Matrix3Ty
-                 | Matrix4Ty
-                 | Matrix3ListTy
-                 | Matrix4ListTy
-                 | Vector3Ty
-                 | Vector4Ty
-                 | Vector3ListTy
-                 | Vector4ListTy
-                 | IntTy
-                 | IntListTy
-                 | FloatTy
-                 | FloatListTy
-                 | TextureTy GLRaw.GLuint
-                 deriving (Show, Eq)
-
-data ShaderValue = Matrix3Val Mat3
-                 | Matrix4Val Mat4
-                 | Matrix3ListVal [Mat3]
-                 | Matrix4ListVal [Mat4]
-                 | Vector3Val Vec3
-                 | Vector4Val Vec4
-                 | Vector3ListVal [Vec3]
-                 | Vector4ListVal [Vec4]
-                 | IntVal Int
-                 | IntListVal [Int]
-                 | FloatVal Float
-                 | FloatListVal [Float]
-                 | TextureVal Texture
-                 deriving (Show)
-
-cmpm3 :: Mat3 -> Mat3 -> Bool
-cmpm3 (Mat3 x y z) (Mat3 a b c) =
-  compareClose x a && compareClose y b && compareClose z c
-
-cmpm4 :: Mat4 -> Mat4 -> Bool
-cmpm4 (Mat4 x y z w) (Mat4 a b c d) =
-  compareClose x a && compareClose y b && compareClose z c && compareClose w d
-
-instance Eq ShaderValue where
-  (Matrix3Val a) == (Matrix3Val b) = cmpm3 a b
-  (Matrix4Val a) == (Matrix4Val b) = cmpm4 a b
-  (Matrix3ListVal a) == (Matrix3ListVal b) = all id $ map (uncurry cmpm3) $ zip a b
-  (Matrix4ListVal a) == (Matrix4ListVal b) = all id $ map (uncurry cmpm4) $ zip a b
-  (Vector3Val a) == (Vector3Val b) = compareClose a b
-  (Vector4Val a) == (Vector4Val b) = compareClose a b
-  (Vector3ListVal a) == (Vector3ListVal b) = all id $ map (uncurry compareClose) $ zip a b
-  (Vector4ListVal a) == (Vector4ListVal b) = all id $ map (uncurry compareClose) $ zip a b
-  (IntVal a) == (IntVal b) = a == b
-  (IntListVal a) == (IntListVal b) = a == b
-  (FloatVal a) == (FloatVal b) = a == b
-  (FloatListVal a) == (FloatListVal b) = a == b
-  (TextureVal a) == (TextureVal b) = a == b
-  _ == _ = False
-
-data ShaderVar = Uniform ShaderVarTy GL.UniformLocation
-               | Attribute ShaderVarTy GL.AttribLocation
-               deriving (Show, Eq)
-
 type ShaderVarMap = Map.Map String ShaderVar
-
-instance Ord ShaderVar where
-  s1 `compare` s2 = (show s1) `compare` (show s2)
-
-type ShaderMap = Map.Map ShaderVar ShaderValue
-data Shader = Shader GL.Program ShaderVarMap deriving(Show, Eq)
 
 getProgram :: Shader -> GL.Program
 getProgram (Shader prg _) = prg
@@ -126,12 +59,16 @@ setUniformVar (Uniform (TextureTy unit) loc) (TextureVal tex) = do
   GL.textureBinding GL.Texture2D GL.$= Just (getHandle tex)
   GL.uniform loc GL.$= (GL.TextureUnit unit)
 
+setUniformVar (Uniform FloatTy loc) (FloatVal f) = do
+  GL.uniform loc GL.$= GL.Index1 ((realToFrac f) :: GL.GLfloat)
+
 setUniformVar (Uniform Vector3Ty loc) (Vector3Val (Vec3 x y z)) = do
   GL.uniform loc GL.$= GL.Vertex3 (f x) (f y) (f z)
   where
     f :: Float -> GL.GLfloat
     f = realToFrac
 
+setUniformVar (Attribute _ _) _ = return ()
 setUniformVar _ _ = ioError $ userError "Uniform not supported"
 
 getShaderExt :: GL.ShaderType -> String
@@ -174,7 +111,7 @@ loadProgram paths = do
           return (Just sid)
         Nothing -> return Nothing
 
-lookupShaderVar :: GL.Program -> ShaderVarTy -> String -> IO((String, Maybe ShaderVar))
+lookupShaderVar :: GL.Program -> ShaderVarTy -> String -> IO (String, Maybe ShaderVar)
 lookupShaderVar prg ty name = do
   uloc <- GL.get $ GL.uniformLocation prg name
   if uloc == (GL.UniformLocation (-1)) then do
@@ -197,7 +134,9 @@ extractVars iomvars = M.liftM constructMap $ sequence iomvars
                                                                Just sv -> Just (n, sv)) vs
 createSimpleShader :: IO (Shader)
 createSimpleShader = do
-  (Just prg) <- loadProgram =<< mapM (getShaderPath "simple") [GL.VertexShader, GL.FragmentShader]
+  vs <- getShaderPath "simple" GL.VertexShader
+  fs <- getShaderPath "simple" GL.FragmentShader
+  (Just prg) <- loadProgram [vs, fs]
   vars <- extractVars $ map (uncurry (lookupShaderVar prg))
     [(FloatListTy, "position"),
      (FloatListTy, "texCoord"),
@@ -221,6 +160,7 @@ createSpotlightShader = do
      (Vector3Ty, "ambient"),
      (Vector3Ty, "lightPos"),
      (Vector3Ty, "lightDir"),
+     (FloatTy, "lightCosCutoff"),
      (Matrix4Ty, "shadowVP")]
   return $ Shader prg vars
 
@@ -236,3 +176,27 @@ createMinimalShader = do
 
 destroyShader :: Shader -> IO ()
 destroyShader (Shader prog _) = GL.deleteObjectName prog
+
+beforeRender :: Shader -> IO ()
+beforeRender shdr = do
+  -- Enable the program
+  GL.currentProgram GL.$= Just (getProgram shdr)
+
+  -- Enable each vertex attribute that this material needs
+  mapM_ enableAttribute $ (Map.elems . getShaderVars) shdr
+  where enableAttribute :: ShaderVar -> IO ()
+        enableAttribute v = case v of
+          Uniform _ _ -> return ()
+          Attribute _ loc -> GL.vertexAttribArray loc GL.$= GL.Enabled
+
+afterRender :: Shader -> IO ()
+afterRender shdr = do
+  -- Disable each vertex attribute that this material needs
+  mapM_ disableAttribute $ (Map.elems . getShaderVars) shdr
+  where disableAttribute :: ShaderVar -> IO ()
+        disableAttribute v = case v of
+          Uniform (TextureTy unit) _ -> do
+            GL.activeTexture GL.$= GL.TextureUnit unit
+            GL.textureBinding GL.Texture2D GL.$= Nothing
+          Uniform _ _ -> return ()
+          Attribute _ loc -> GL.vertexAttribArray loc GL.$= GL.Disabled

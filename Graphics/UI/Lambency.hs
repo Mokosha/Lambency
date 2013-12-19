@@ -15,6 +15,7 @@ import qualified Graphics.Rendering.Lambency as LR
 import Graphics.UI.Lambency.Input
 
 import Control.Monad (unless)
+import qualified Control.Wire as W
 
 import qualified Data.Set as Set
 
@@ -50,40 +51,38 @@ destroyWindow m = do
     Nothing -> return ()
   GLFW.terminate  
 
-run' :: InputControl -> GLFW.Window -> LR.GameCamera -> [ LR.GameObject a ] -> IO ()
-run' ctl win (LR.GameCamera cam updCam) objs = do
-
-  GLFW.pollEvents
-
-  input <- getInput ctl
-  if Set.member GLFW.Key'Q (keysPressed input)
-    then GLFW.setWindowShouldClose win True
-    else return ()
-
-  -- !FIXME! This should be moved to the camera...
-  GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
-  GL.clear [GL.ColorBuffer, GL.DepthBuffer]
-  LR.renderCamera cam objs
-  GL.flush
-
-  -- Swap buffers and poll events...
-  GLFW.swapBuffers win
-
-  -- Update camera
-  let (ipt, newcam) = updCam cam dt input
-
-  -- Update game objects
-  -- !FIXME!
-
-  setInput ctl ipt
-
-  q <- GLFW.windowShouldClose win
-  unless q $ run' ctl win newcam $ LR.updateObjs dt objs
-  where
-    dt :: Double
-    dt = 0.05
-
-run :: GLFW.Window -> LR.GameCamera -> [ LR.GameObject a ] -> IO ()
-run win cam objs = do
+run :: GLFW.Window -> LR.GameWire -> IO ()
+run win w = do
   ctl <- mkInputControl win
-  run' ctl win cam objs
+  let session = W.countSession 0.05
+  run' ctl session w
+  where
+    run' :: InputControl -> W.Session IO (LR.Timestep) -> LR.GameWire -> IO ()
+    run' ctl session wire = do
+      GLFW.pollEvents
+
+      input <- getInput ctl
+      if Set.member GLFW.Key'Q (keysPressed input)
+        then GLFW.setWindowShouldClose win True
+        else return ()
+
+      -- Step
+      (timestep, nextsession) <- W.stepSession session
+      (result, nextwire) <- W.stepWire wire timestep (Right input)
+
+      case result of
+        Left _ -> return ()
+        Right (ipt, lights, ros) -> do
+          -- !FIXME! This should be moved to the camera...
+          GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
+          GL.clear [GL.ColorBuffer, GL.DepthBuffer]
+          mapM_ (flip LR.renderLight ros) lights
+          GL.flush
+
+          -- Swap buffers and poll events...
+          GLFW.swapBuffers win
+
+          setInput ctl ipt
+
+          q <- GLFW.windowShouldClose win
+          unless q $ run' ctl nextsession nextwire

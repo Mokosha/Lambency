@@ -1,10 +1,6 @@
 module Graphics.Rendering.Lambency.Texture (
-  Texture,
-  TextureFormat(..),
-  FBOHandle,
-  TextureHandle,
   getHandle,
-  getTextureCamera,
+  isRenderTexture,
   createFramebufferObject,
   createSolidTexture,
   createDepthTexture,
@@ -17,10 +13,10 @@ module Graphics.Rendering.Lambency.Texture (
 --------------------------------------------------------------------------------
 import qualified Graphics.Rendering.OpenGL as GL
 
+import Graphics.Rendering.Lambency.Types
+
 import qualified Codec.Image.PNG as PNG
 import qualified Graphics.Pgm as PGM
-
-import Graphics.Rendering.Lambency.Camera
 
 import Control.Monad (unless)
 
@@ -31,30 +27,21 @@ import Data.Array.Unboxed
 import Data.Word
 --------------------------------------------------------------------------------
 
-type FBOHandle = GL.FramebufferObject
-type TextureHandle = GL.TextureObject
-data TextureFormat = RGBA8
-                   | RGB8
-                     deriving(Show, Eq)
-
-data Texture = Texture TextureHandle TextureFormat
-             | RenderTexture TextureHandle FBOHandle Camera
-               deriving(Show, Eq)
-
 getHandle :: Texture -> TextureHandle
 getHandle (Texture h _) = h
-getHandle (RenderTexture h _ _) = h
-
-getTextureCamera :: Texture -> Maybe (Camera, FBOHandle)
-getTextureCamera (Texture _ _) = Nothing
-getTextureCamera (RenderTexture _ h cam) = Just (cam, h)
+getHandle (RenderTexture h _) = h
 
 fmt2glpfmt :: TextureFormat -> GL.PixelFormat
 fmt2glpfmt RGBA8 = GL.RGBA
 fmt2glpfmt RGB8 = GL.RGB
 
-bindRenderTexture :: FBOHandle -> IO ()
-bindRenderTexture h = do
+isRenderTexture :: Texture -> Bool
+isRenderTexture (Texture _ _) = False
+isRenderTexture (RenderTexture _ _) = True
+
+bindRenderTexture :: Texture -> IO ()
+bindRenderTexture (Texture _ _) = return ()
+bindRenderTexture (RenderTexture _ h) = do
   GL.bindFramebuffer GL.Framebuffer GL.$= h
   GL.viewport GL.$= (GL.Position 0 0, GL.Size 512 512)
 
@@ -77,7 +64,7 @@ clearRenderTexture = do
 
 destroyTexture :: Texture -> IO ()
 destroyTexture (Texture h _) = GL.deleteObjectName h
-destroyTexture (RenderTexture h fboh _) = do
+destroyTexture (RenderTexture h fboh) = do
   GL.deleteObjectName h
   GL.deleteObjectName fboh
 
@@ -122,8 +109,8 @@ loadTextureFromPNG filename = do
       
       return $ Just tex
 
-createDepthTexture :: Camera -> IO (Texture)
-createDepthTexture cam = do
+createDepthTexture :: IO (Texture)
+createDepthTexture = do
   handle <- GL.genObjectName
   GL.activeTexture GL.$= GL.TextureUnit 0
   GL.textureBinding GL.Texture2D GL.$= Just handle
@@ -149,7 +136,7 @@ createDepthTexture cam = do
   GL.cullFace GL.$= Just GL.Back
   GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject
 
-  return $ RenderTexture handle rbHandle cam
+  return $ RenderTexture handle rbHandle
 
 createSolidTexture :: (Word8, Word8, Word8, Word8) -> IO(Texture)
 createSolidTexture (r, g, b, a) = do
