@@ -1,6 +1,6 @@
 module Graphics.Rendering.Lambency.GameObject (
-  placeStaticObject,
-  placeObject
+  mkObject,
+  mkStaticObject
 ) where
 
 --------------------------------------------------------------------------------
@@ -24,12 +24,14 @@ positioned cam xform = let
      [("mvpMatrix", Matrix4Val $ model .*. (getViewProjMatrix cam)),
       ("m2wMatrix", Matrix4Val $ model)]
 
-placeStaticObject :: Monad m => Transform -> Wire s e m (Camera, RenderObject) RenderObject
-placeStaticObject xform = 
-  ((arr (flip positioned xform) *** (arr material)) >>> (arr $ uncurry Map.union))
-  &&& (arr snd) >>> (arr $ uncurry (\x ro -> ro { material = x }))
+mkObject :: Monad m => RenderObject ->
+            Wire s e m a Transform ->
+            Wire s e m (Camera, a) RenderObject
+mkObject ro xformw = mkId *** xformw >>> (arr $ uncurry positioned) >>>
+                     (mkSF_ $ \sm ->
+                       (\r -> r { material = Map.union sm (material ro) }) ro)
 
-placeObject :: Monad m => Wire s e m ((Camera, Transform), RenderObject) RenderObject
-placeObject = 
-  (((arr $ uncurry positioned) *** (arr material)) >>> (arr $ uncurry Map.union))
-  &&& (arr snd) >>> (arr $ uncurry (\x ro -> ro { material = x }))
+mkStaticObject :: Monad m => RenderObject -> Transform -> Wire s e m Camera RenderObject
+mkStaticObject ro xform = mkSF_ $ \cam ->
+  (\r -> r { material = Map.union (positioned cam xform) (material ro) }) ro
+  

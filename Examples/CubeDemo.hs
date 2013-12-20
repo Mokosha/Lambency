@@ -36,7 +36,7 @@ planeWire :: Monad m => IO (W.Wire LR.Timestep e m LR.Camera LR.RenderObject)
 planeWire = do
   tex <- LR.createSolidTexture (128, 128, 128, 255)
   ro <- LR.createRenderObject LR.makePlane (LR.createTexturedMaterial tex)
-  return $ (arr id) &&& (W.mkConst (Right ro)) >>> (LR.placeStaticObject xform)
+  return $ LR.mkStaticObject ro xform
   where xform = LR.uniformScale 10 $
                 LR.translate (Vec3 0 (-2) 0) $
                 LR.identityXForm
@@ -45,7 +45,7 @@ cubeWire :: Monad m => IO (W.Wire LR.Timestep e m LR.Camera LR.RenderObject)
 cubeWire = do
   (Just tex) <- getDataFileName ("crate" <.> "png") >>= LR.loadTextureFromPNG
   ro <- LR.createRenderObject LR.makeCube (LR.createTexturedMaterial tex)
-  return $ (arr id &&& (rotate initial)) &&& (W.mkConst (Right ro)) >>> LR.placeObject
+  return $ W.mkId &&& W.mkConst (Right ()) >>> LR.mkObject ro (rotate initial)
   where
     rotate :: Monad m => LR.Transform -> W.Wire LR.Timestep e m a LR.Transform
     rotate xform =
