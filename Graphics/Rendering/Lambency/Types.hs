@@ -135,70 +135,10 @@ data RenderObject = RenderObject {
   material :: Material,
   render :: Shader -> ShaderMap -> IO ()
 }
-{--
+
 --------------------------------------------------------------------------------
 
 -- Game Objects
-
-data GameObject a =
-  Object {
-    location :: XForm.Transform,
-    renderObject :: Maybe RenderObject,
-    object :: a,
-    update :: GameWire a
-  }
-
-newtype GameObjectID = GameObjectID { gameObjectID :: Int } deriving (Show, Eq, Ord)
-
---------------------------------------------------------------------------------
-
--- Game State
-
-data FixedState = FixedState {
-  textures :: Map.Map TextureID Texture,
-  materials :: Map.Map MaterialID Material
-} deriving (Show)
-
-data DynamicState a = DynamicState {
-  mainCamera :: (CameraWire a),
-  lights :: Map.Map LightID (LightWire a),
-  objects :: Map.Map GameObjectID (GameObject a)
-}
-
-type RenderCall = IO ()
-data RenderPass = NoRender
-                | Render Camera [RenderCall] RenderPass
-
---------------------------------------------------------------------------------
-
--- Manipulators
-
-type GameContext a = RWS.RWS FixedState [String] (DynamicState a)
-type Timestep = () -> W.Timed Float ()
-
-type GameWire a = W.Wire
-                  Timestep
-                  Bool
-                  (GameContext a)
-                  Input
-                  (Input, GameObject a)
-
-type LightWire a = W.Wire
-                   Timestep
-                   Bool
-                   (GameContext a)
-                   Input
-                   (Input, Light)
-
-type CameraWire a = W.Wire
-                    Timestep
-                    Bool
-                    (GameContext a)
-                    Input
-                    (Input, Camera)
-
-type GameSession a = W.Session (GameContext a) Timestep
---}
 
 type Timestep = () -> W.Timed Float ()
 type GameWire = W.Wire Timestep Bool IO Input (Input, [Light], [RenderObject])
