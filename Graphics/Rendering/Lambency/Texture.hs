@@ -15,16 +15,18 @@ import qualified Graphics.Rendering.OpenGL as GL
 
 import Graphics.Rendering.Lambency.Types
 
-import qualified Codec.Image.PNG as PNG
+import qualified Codec.Picture as JP
 import qualified Graphics.Pgm as PGM
 
 import Control.Monad (unless)
 
 import System.Directory
 import Foreign.Ptr
+import Data.Vector.Storable (unsafeWith)
 import Data.Array.Storable
 import Data.Array.Unboxed
 import Data.Word
+import qualified Data.ByteString as BS
 --------------------------------------------------------------------------------
 
 getHandle :: Texture -> TextureHandle
@@ -92,8 +94,8 @@ initializeTexture ptr (w, h) fmt = do
 
 loadTextureFromPNG :: FilePath -> IO(Maybe Texture)
 loadTextureFromPNG filename = do
-  pngFile <- PNG.loadPNGFile filename
-  pngImg <- case pngFile of
+  pngBytes <- BS.readFile filename
+  pngImg <- case JP.decodePng pngBytes of
     Left str -> do
       putStrLn $ "Error loading PNG file: " ++ str
       return Nothing
@@ -101,13 +103,12 @@ loadTextureFromPNG filename = do
   case pngImg of
     Nothing -> return Nothing
     Just img -> do
-      tex <- withStorableArray (PNG.imageData img) (\ptr ->
-        if (PNG.hasAlphaChannel img) then
-          initializeTexture ptr (PNG.dimensions img) RGBA8
-        else
-          initializeTexture ptr (PNG.dimensions img) RGB8)
-      
-      return $ Just tex
+      case img of
+        (JP.ImageRGBA8 (JP.Image width height dat)) -> do
+          tex <- unsafeWith dat $ \ptr ->
+            initializeTexture ptr (fromIntegral width, fromIntegral height) RGBA8
+          return $ Just tex
+        _ -> return Nothing
 
 createDepthTexture :: IO (Texture)
 createDepthTexture = do
