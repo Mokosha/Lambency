@@ -90,5 +90,18 @@ plane = Mesh {
            idxOf (x+1) y, idxOf x (y+1), idxOf (x+1) (y+1)]
         idxOf x y = y * 21 + x
 
+quad :: Mesh
+quad = Mesh {
+  vertices = zipWith mkTexVertex3 (map texToVert texcoords) texcoords,
+  indices = [0, 1, 3, 3, 2, 0]
+  }
+  where
+    texcoords :: [ Vec2 ]
+    texcoords = [ Vec2 x y | x <- [0, 1], y <- [0, 1] ]
+
+    texToVert :: Vec2 -> Vec3
+    texToVert (Vec2 x y) = Vec3 (x * 2 - 1) (y * 2 - 1) 0
+
+
 instance Renderable Mesh where
   createRenderObject m mat = createBasicRO (vertices m) (indices m) mat
