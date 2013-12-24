@@ -1,7 +1,8 @@
 module Graphics.Rendering.Lambency.Mesh (
-  makeTriangle,
-  makeCube,
-  makePlane
+  triangle,
+  cube,
+  plane,
+  quad,
 ) where
 
 --------------------------------------------------------------------------------
@@ -18,14 +19,14 @@ import Data.Int
 data Mesh = Mesh { vertices :: [Vertex],
                    indices :: [Int16] }
 
-makeTriangle :: Mesh
-makeTriangle = Mesh {
+triangle :: Mesh
+triangle = Mesh {
   vertices = mkVertex3 . mkVec3 <$> [ (-1, -1, 0), (1, -1, 0), (0, 1, 0)],
   indices = [0, 1, 2]
 }
 
-makeCube :: Mesh
-makeCube = Mesh {
+cube :: Mesh
+cube = Mesh {
   vertices = zipWith3 mkNormTexVertex3 (mkVec3 <$> [ 
     -- Front face
     (-1.0, -1.0,  1.0),
@@ -76,8 +77,8 @@ makeCube = Mesh {
   indices = concat [[x, x+1, x+2, x, x+2, x+3] | x <- [0,4..20]]
 }
 
-makePlane :: Mesh
-makePlane = Mesh {
+plane :: Mesh
+plane = Mesh {
   vertices = zipWith3 mkNormTexVertex3
              [Vec3 x 0 z | z <- [(-1),(-0.9)..1], x <- [(-1),(-0.9)..1]]
              (replicate (21*21) (Vec3 0 1 0))
