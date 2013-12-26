@@ -111,6 +111,7 @@ data Texture = Texture TextureHandle TextureFormat
 data LightType = SpotLight Vec3 Normal3 Float
                | DirectionalLight Normal3
                | PointLight Vec3
+               | NoLight
                deriving (Show)
 
 data Shadow = Shadow Shader Texture deriving (Show, Eq)
