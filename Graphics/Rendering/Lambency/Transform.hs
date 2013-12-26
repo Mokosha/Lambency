@@ -109,8 +109,18 @@ translate t xf' = (\xf -> xf { position = t &+ (position xf') }) xf'
 -- Returns a matrix where that transforms a coordinate space such that the
 -- new coordinate system's origin is located at the value of 'p' of the old
 -- coordinate space, and the three axes that define forward up and right are
--- now the basis in Z, Y, and X respectively.
+-- now the basis in Z, Y, and X respectively. Scale is applied localy in the
+-- original coordinate space.
 xform2Matrix :: Transform -> Mat4
 xform2Matrix xf =
-  let te n sc = extendWith ((position xf) &. (fromNormal n)) (sc (scale xf) *& (fromNormal n))
-  in transpose $ Mat4 (te (right xf) _1) (te (up xf) _2) (te (forward xf) _3) (Vec4 0 0 0 1)
+  let
+    Vec3 rx ry rz = fromNormal $ right xf
+    Vec3 ux uy uz = fromNormal $ up xf
+    Vec3 fx fy fz = fromNormal $ forward xf
+    Vec3 sx sy sz = scale xf
+  in
+   Mat4
+   (extendZero $ (sx *&) $ Vec3 rx ux fx)
+   (extendZero $ (sy *&) $ Vec3 ry uy fy)
+   (extendZero $ (sz *&) $ Vec3 rz uz fz)
+   (extendWith 1.0 $ position xf)

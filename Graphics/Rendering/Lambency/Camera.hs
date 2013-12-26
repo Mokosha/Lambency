@@ -143,7 +143,15 @@ setCamFar c f = let
 
 getViewMatrix :: Camera -> Mat4
 getViewMatrix (Camera xf _ _) =
-  XForm.xform2Matrix $ (\xf' -> xf' { XForm.position = neg (XForm.position xf) }) xf
+  let
+    pos = neg . XForm.position $ xf
+    sca = XForm.scale xf
+    r = XForm.right xf
+    u = XForm.up xf
+    f = XForm.forward xf
+    te :: Normal3 -> (Vec3 -> Float) -> Vec4
+    te n sc = extendWith (pos &. (fromNormal n)) (sc sca *& (fromNormal n))
+  in transpose $ Mat4 (te r _1) (te u _2) (te f _3) (Vec4 0 0 0 1)
 
 getProjMatrix :: Camera -> Mat4
 getProjMatrix (Camera _ (Ortho {top = t, bottom = b, left = l, right = r}) dist) = let
