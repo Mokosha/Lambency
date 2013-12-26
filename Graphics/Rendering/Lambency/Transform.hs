@@ -3,7 +3,7 @@ module Graphics.Rendering.Lambency.Transform (
   right', up', forward',
   localRight, localUp, localForward,
 
-  rotate, rotateWorld, translate, uniformScale,
+  rotate, rotateWorld, translate, uniformScale, nonuniformScale,
   
   xform2Matrix,
 ) where
@@ -99,9 +99,15 @@ rotateWorld quat xf = let
   in
    renormalize $ updateAxis (rotateAxis r) (rotateAxis u) (rotateAxis f) xf
   
+nonuniformScale :: Vec3 -> Transform -> Transform
+nonuniformScale s xform =
+  (\xf -> xf { scale = s `mulvec` (scale xform) }) xform
+  where
+    mulvec :: Vec3 -> Vec3 -> Vec3
+    mulvec (Vec3 x y z) (Vec3 a b c) = Vec3 (x*a) (y*b) (z*c)
 
 uniformScale :: Float -> Transform -> Transform
-uniformScale s = \xf -> xf { scale = (Vec3 s s s) }
+uniformScale s = nonuniformScale $ Vec3 s s s
 
 translate :: Vec3 -> Transform -> Transform
 translate t xf' = (\xf -> xf { position = t &+ (position xf') }) xf'
