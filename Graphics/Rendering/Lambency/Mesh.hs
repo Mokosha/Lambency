@@ -93,7 +93,7 @@ plane = Mesh {
 quad :: Mesh
 quad = Mesh {
   vertices = zipWith mkTexVertex3 (map texToVert texcoords) texcoords,
-  indices = [0, 1, 3, 3, 2, 0]
+  indices = [0, 2, 1, 1, 2, 3]
   }
   where
     texcoords :: [ Vec2 ]
