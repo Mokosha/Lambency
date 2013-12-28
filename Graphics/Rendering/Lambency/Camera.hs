@@ -40,13 +40,7 @@ mkXForm :: Vec3 -> Normal3 -> Normal3 -> XForm.Transform
 mkXForm pos dir up = let
   r = dir &^ up
   u' = r &^ dir
-  in XForm.XForm {
-    XForm.right = r,
-    XForm.up = u',
-    XForm.forward = negN dir,
-    XForm.position = pos,
-    XForm.scale = Vec3 1 1 1
-    }
+  in XForm.translate pos $ XForm.fromCoordinateBasis (r, u', negN dir)
 
 mkOrthoCamera :: Vec3 -> Normal3 -> Normal3 ->
                  Float -> Float -> Float -> Float -> Float -> Float ->
@@ -101,7 +95,9 @@ getCamPos = XForm.position . getCamXForm
 
 setCamPos :: Camera -> Vec3 -> Camera
 setCamPos c p = let
-  (XForm.XForm _ u nd _ _) = getCamXForm c
+  xf = getCamXForm c
+  nd = XForm.forward xf
+  u = XForm.up xf
   in
    setCamXForm c $ mkXForm p (negN nd) u
 
@@ -110,7 +106,9 @@ getCamDir = negN . XForm.forward . getCamXForm
 
 setCamDir :: Camera -> Normal3 -> Camera
 setCamDir c d = let
-  (XForm.XForm _ u _ p _) = getCamXForm c
+  xf = getCamXForm c
+  u = XForm.up xf
+  p = XForm.position xf
   in
    setCamXForm c $ mkXForm p d u
 
@@ -119,7 +117,9 @@ getCamUp = XForm.up . getCamXForm
 
 setCamUp :: Camera -> Normal3 -> Camera
 setCamUp c u = let
-  (XForm.XForm _ _ nd p _) = getCamXForm c
+  xf = getCamXForm c
+  nd = XForm.forward xf
+  p = XForm.position xf
   in
    setCamXForm c $ mkXForm p (negN nd) u
 

@@ -43,9 +43,9 @@ data CameraType =
     fovY :: Float,
     aspect :: Float
   }
-  deriving (Show, Eq)
+  deriving (Show)
 
-data Camera = Camera XForm.Transform CameraType CameraViewDistance deriving(Show, Eq)
+data Camera = Camera XForm.Transform CameraType CameraViewDistance deriving(Show)
 
 --------------------------------------------------------------------------------
 

@@ -39,7 +39,7 @@ planeWire = do
   return $ LR.mkStaticObject ro xform
   where xform = LR.uniformScale 10 $
                 LR.translate (Vec3 0 (-2) 0) $
-                LR.identityXForm
+                LR.identity
 
 cubeWire :: Monad m => IO (W.Wire LR.Timestep e m LR.Camera LR.RenderObject)
 cubeWire = do
@@ -56,7 +56,7 @@ cubeWire = do
                    in (Right newxform, rotate newxform))
 
     initial :: LR.Transform
-    initial = LR.rotate (rotU (Vec3 1 0 1) 0.6) LR.identityXForm
+    initial = LR.rotate (rotU (Vec3 1 0 1) 0.6) LR.identity
 
 gameWire :: Monad m =>
             IO (W.Wire LR.Timestep e m L.Input (L.Input, [LR.Light], [LR.RenderObject]))
