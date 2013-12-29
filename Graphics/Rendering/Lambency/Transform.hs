@@ -1,12 +1,12 @@
 module Graphics.Rendering.Lambency.Transform (
-  Transform, fromForwardUp, fromCoordinateBasis, identity,
+  Transform, fromForwardUp, fromCoordinateBasis, identity, invert,
   right, up, forward, right', up', forward',
   localRight, localUp, localForward, localRight', localUp', localForward',
   scale, position,
 
   rotate, rotateWorld, translate, uniformScale, nonuniformScale,
   
-  xform2Matrix, transformPoint
+  xform2Matrix, transformPoint, invTransformPoint
 ) where
 
 --------------------------------------------------------------------------------
@@ -26,6 +26,22 @@ fromForwardUp f u =
     r = u &^ f
     u' = f &^ r
   in (r, u', f)
+
+basis2Matrix :: CoordinateBasis -> Mat3
+basis2Matrix (r, u, f) = transpose $ Mat3 (n r) (n u) (n f)
+  where n = fromNormal
+
+-- Basis is orthonormal, so inverse should be a simple transpose.
+invertBasis :: CoordinateBasis -> CoordinateBasis
+invertBasis (n1, n2, n3) =
+  let
+    Vec3 x1 y1 z1 = fromNormal n1
+    Vec3 x2 y2 z2 = fromNormal n2
+    Vec3 x3 y3 z3 = fromNormal n3
+  in
+  (toNormalUnsafe $ Vec3 x1 x2 x3,
+   toNormalUnsafe $ Vec3 y1 y2 y3,
+   toNormalUnsafe $ Vec3 z1 z2 z3)
 
 data Transform = Identity
                | Scale Vec3 Transform
@@ -149,6 +165,15 @@ translate t (Scale s xf) = Translate t $ Scale s xf
 translate t (OrthoNormal b xf) = Translate t $ OrthoNormal b xf
 translate t (Translate t' xf) = Translate (t &+ t') xf
 
+invert :: Transform -> Transform
+invert Identity = Identity
+invert xform = (foldl (.) id $ modifiers xform) Identity
+  where modifiers :: Transform -> [Transform -> Transform]
+        modifiers Identity = []
+        modifiers (Scale (Vec3 x y z) xf) = Scale (Vec3 (1/x) (1/y) (1/z)) : (modifiers xf)
+        modifiers (OrthoNormal b xf) = OrthoNormal (invertBasis b) : (modifiers xf)
+        modifiers (Translate t xf) = Translate (neg t) : (modifiers xf)
+
 -- Returns a matrix where that transforms a coordinate space such that the
 -- new coordinate system's origin is located at the value of 'p' of the old
 -- coordinate space, and the three axes that define forward up and right are
@@ -169,6 +194,10 @@ xform2Matrix xf =
    (extendWith 1.0 $ position xf)
 
 transformPoint :: Transform -> Vec3 -> Vec3
-transformPoint xform pt = let
-  Vec4 x y z _ = (extendWith 1.0 pt) .* (xform2Matrix xform)
-  in Vec3 x y z
+transformPoint Identity = id
+transformPoint (Scale s xf) = (s &!) . (transformPoint xf)
+transformPoint (OrthoNormal b xf) = ((basis2Matrix b) *.) . (transformPoint xf)
+transformPoint (Translate t xf) = (&+ t) . (transformPoint xf)
+
+invTransformPoint :: Transform -> Vec3 -> Vec3
+invTransformPoint xf = transformPoint (invert xf)
