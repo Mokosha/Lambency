@@ -1,5 +1,6 @@
 module Graphics.Rendering.Lambency (
   initLambency,
+  module Graphics.Rendering.Lambency.Bounds,
   module Graphics.Rendering.Lambency.Camera,
   module Graphics.Rendering.Lambency.GameObject,
   module Graphics.Rendering.Lambency.Light,
@@ -21,6 +22,7 @@ module Graphics.Rendering.Lambency (
 
 import qualified Graphics.Rendering.OpenGL as GL
 
+import Graphics.Rendering.Lambency.Bounds
 import Graphics.Rendering.Lambency.Camera
 import Graphics.Rendering.Lambency.GameObject
 import Graphics.Rendering.Lambency.Light
