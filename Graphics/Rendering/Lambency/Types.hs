@@ -5,7 +5,6 @@ module Graphics.Rendering.Lambency.Types (
   Texture(..), TextureFormat(..), FBOHandle, TextureHandle,
   Material,
   RenderObject(..),
-  BoundingVolume(..),
   Timestep, GameWire
 ) where
 
@@ -137,14 +136,6 @@ data RenderObject = RenderObject {
   material :: Material,
   render :: Shader -> ShaderMap -> IO ()
 }
-
---------------------------------------------------------------------------------
-
--- Bounding Volumes
-data BoundingVolume = UnitBox
-                    | UnitSphere
-                    | Union BoundingVolume BoundingVolume
-                    | TransformedVolume XForm.Transform BoundingVolume
 
 --------------------------------------------------------------------------------
 

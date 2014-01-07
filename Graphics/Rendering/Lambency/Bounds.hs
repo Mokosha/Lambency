@@ -1,18 +1,47 @@
 module Graphics.Rendering.Lambency.Bounds (
+  BoundingVolume,
   aabb,
-  obb,
   boundingSphere,
   containsPoint,
-  contains
+  colliding
   ) where
 
 --------------------------------------------------------------------------------
 
-import Graphics.Rendering.Lambency.Types
 import Graphics.Rendering.Lambency.Transform
 
 import Data.Vect.Float hiding (distance)
+import Data.Vect.Float.Util.Quaternion
+
 --------------------------------------------------------------------------------
+
+-- Bounding Volumes
+
+data BoundingVolume = BoundingBox Float Float Float
+                    | BoundingEllipse Float Float Float
+                    | RotatedVolume UnitQuaternion BoundingVolume
+                    | TranslatedVolume Vec3 BoundingVolume
+                    | Union BoundingVolume BoundingVolume
+
+instance Transformable3D BoundingVolume where
+  translate t (TranslatedVolume t' bv) = TranslatedVolume (t &+ t') bv
+  translate t (Union bv1 bv2) = Union (translate t bv1) (translate t bv2)
+  translate t bv = TranslatedVolume t bv
+
+  rotate quat (RotatedVolume uq bv) = RotatedVolume (uq .*. quat) bv
+  rotate quat (TranslatedVolume t bv) = TranslatedVolume t (rotate quat bv)
+  rotate quat bv = RotatedVolume quat bv
+
+  nonuniformScale (Vec3 sx sy sz) (BoundingBox ex ey ez) =
+    BoundingBox (ex * sx) (ey * sy) (ez * sz)
+  nonuniformScale (Vec3 sx sy sz) (BoundingEllipse ex ey ez) =
+    BoundingEllipse (ex * sx) (ey * sy) (ez * sz)
+
+  nonuniformScale s (RotatedVolume uq bv) = RotatedVolume uq (nonuniformScale s bv)
+  nonuniformScale s (TranslatedVolume t bv) = TranslatedVolume t (nonuniformScale s bv)
+  nonuniformScale s (Union b b') = Union (nonuniformScale s b) (nonuniformScale s b')
+
+-------------------------------------------------------------------------------
 
 aabb :: Vec3 -> Vec3 -> BoundingVolume
 aabb v1@(Vec3 x1 y1 z1) v2@(Vec3 x2 y2 z2) = let
@@ -20,60 +49,51 @@ aabb v1@(Vec3 x1 y1 z1) v2@(Vec3 x2 y2 z2) = let
   szy = abs (y2 - y1)
   szz = abs (z2 - z1)
   c = (v1 &+ v2) &* 0.5
-  in TransformedVolume
-     (nonuniformScale (Vec3 (szx * 0.5) (szy * 0.5) (szz * 0.5)) $
-      translate c identity)
-     UnitBox
-
-obb :: Vec3 -> Vec3 -> Transform -> BoundingVolume
-obb mi ma xf = TransformedVolume xf $ aabb mi ma
+  in translate c $ BoundingBox (szx * 0.5) (szy * 0.5) (szz * 0.5)
 
 boundingSphere :: Vec3 -> Float -> BoundingVolume
-boundingSphere c r =
-  TransformedVolume (uniformScale r $ translate c identity) UnitSphere
+boundingSphere c r = translate c $ BoundingEllipse r r r
 
 containsPoint :: BoundingVolume -> Vec3 -> Bool
-containsPoint UnitBox (Vec3 x y z) =
-  and $ map (\v -> ((-1) >= v) && (v <= 1)) [x, y, z]
-containsPoint UnitSphere v = lensqr v < 1
+containsPoint (BoundingBox x y z) (Vec3 x' y' z') =
+  and $ zipWith (\v w -> ((-w) >= v) && (v <= w)) [x', y', z'] [x, y, z]
+containsPoint (BoundingEllipse x y z) (Vec3 x' y' z') =
+  (sqr $ x' / x) + (sqr $ y' / y) + (sqr $ z' / z) < 1
+  where
+    sqr :: Num a => a -> a
+    sqr k = k * k
 containsPoint (Union bv1 bv2) v = (containsPoint bv1 v) || (containsPoint bv2 v)
-containsPoint (TransformedVolume xf bv) v = containsPoint bv (invTransformPoint xf v)
+containsPoint (TranslatedVolume t bv) v = containsPoint bv (v &- t)
+containsPoint (RotatedVolume q bv) v = containsPoint bv (actU (invU q) v)
 
-distance :: BoundingVolume -> Vec3 -> Float
-distance bv v@(Vec3 x y z) =
-  case bv of
-    UnitBox ->
-      if containsPoint UnitBox v then
-        minimum $ map (((-1) +) . abs) [x, y, z]
-      else
-        let [x', y', z'] = map (max 0 . (\k -> abs k - 1)) [x, y, z]
-        in len $ Vec3 x' y' z'
+-- An orientation is simply a position in world space, a rotation matrix, and
+-- and extents vector for each of the new coordinate axes
+type Orientation = (Vec3, Ortho3, Vec3)
 
-    UnitSphere -> len v - 1
+io :: Orientation
+io = (zero, one, Vec3 1 1 1)
 
-    (Union bv1 bv2) ->
-      if (containsPoint bv1 v) && (containsPoint bv2 v) then
-        -- The point is within both volumes, so the distance is the closer
-        -- of the two. The closer one will be the one with the less negative
-        -- distance...
-        max (distance bv1 v) (distance bv2 v)
-      else
-        -- At least one volume doesn't contain the point, so the distance is
-        -- the smallest distance from either...
-        min (distance bv1 v) (distance bv2 v)
+data OrientedVolume = Box Orientation
+                    | Ellipse Orientation
 
-    -- !FIXME! We need to extract the scale and then inverse transform the
-    -- point and determine the distance in each axis and then multiply that
-    -- by the scale.
-    (TransformedVolume xf bv') -> distance bv' v
+collideOriented :: OrientedVolume -> OrientedVolume -> Bool
 
--- Returns whether or not the first bounding volume is completely contained
--- within the second.
-contains :: BoundingVolume -> BoundingVolume -> Bool
-contains UnitBox bv =
-  and $ map (containsPoint bv)
-  [Vec3 x y z | x <- [(-1), 1], y <- [(-1), 1], z <- [(-1), 1]]
-contains UnitSphere bv = (distance bv zero) < (-0.9999)
-contains (Union bv1 bv2) bv = (contains bv1 bv) && (contains bv2 bv)
-contains (TransformedVolume xf bv') bv =
-  contains bv' (TransformedVolume (invert xf) bv)
+collideOriented (Box (t, o, s)) (Box (t', o', s')) = False
+collideOriented (Ellipse (t, o, s)) (Box (t', o', s')) = False
+collideOriented (Ellipse (t, o, s)) (Ellipse (t', o', s')) = False
+
+-- The only pattern we're missing is box-ellipse
+collideOriented ov1 ov2 = collideOriented ov2 ov1
+
+colliding :: BoundingVolume -> BoundingVolume -> Bool
+colliding bv (Union bv1 bv2) = (colliding bv bv1) || (colliding bv bv2)
+colliding (Union bv1 bv2) bv = (colliding bv bv1) || (colliding bv bv2)
+colliding bv1 bv2 =
+  any id [collideOriented x y | x <- (getO bv1 io), y <- (getO bv2 io)]
+  where
+    getO :: BoundingVolume -> Orientation -> [OrientedVolume]
+    getO (BoundingBox x y z) (t, o, s) = [Box (t, o, s &! (Vec3 x y z))]
+    getO (BoundingEllipse x y z) (t, o, s) = [Ellipse (t, o, s &! (Vec3 x y z))]
+    getO (TranslatedVolume t bv) (t', o, s) = getO bv (t &+ t', o, s)
+    getO (RotatedVolume q bv) (t, o, s) = getO bv (t, (rightOrthoU q) .*. o, s)
+    getO (Union bv1 bv2) o = (getO bv1 o) ++ (getO bv2 o)
