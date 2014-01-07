@@ -5,7 +5,7 @@ module Graphics.Rendering.Lambency.Types (
   Texture(..), TextureFormat(..), FBOHandle, TextureHandle,
   Material,
   RenderObject(..),
-  Timestep, GameWire
+  GameObject(..), Timestep, GameWire
 ) where
 
 --------------------------------------------------------------------------------
@@ -16,12 +16,15 @@ import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
 import Graphics.UI.Lambency.Input
 
 import qualified Graphics.Rendering.Lambency.Transform as XForm
+import qualified Graphics.Rendering.Lambency.Bounds as BV
 
 import Data.Vect.Float
 
 import qualified Data.Map as Map
 
 import qualified Control.Wire as W
+import Control.Monad.State
+import Control.Monad.Reader
 
 --------------------------------------------------------------------------------
 
@@ -141,6 +144,15 @@ data RenderObject = RenderObject {
 
 -- Game Objects
 
+data GameObject = GameObject
+                  RenderObject
+                  (Maybe BV.BoundingVolume)
+                  (Maybe (W.Wire Timestep () (Reader GameState) Input [GameObject]))
+                | LightObject
+                  Light
+                  (Maybe (W.Wire Timestep () (Reader GameState) Input Light))
+type GameState  = (Camera, [GameObject])
+
 type Timestep = () -> W.Timed Float ()
-type GameWire = W.Wire Timestep Bool IO Input (Input, [Light], [RenderObject])
+type GameWire = W.Wire Timestep () IO Input (Input, [GameObject])
                 

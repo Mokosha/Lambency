@@ -10,6 +10,7 @@ module Graphics.UI.Lambency (
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Graphics.Rendering.OpenGL as GL
 
+import qualified Graphics.Rendering.Lambency.Types as LRTypes
 import qualified Graphics.Rendering.Lambency as LR
 
 import Graphics.UI.Lambency.Input
@@ -51,13 +52,13 @@ destroyWindow m = do
     Nothing -> return ()
   GLFW.terminate  
 
-run :: GLFW.Window -> LR.GameWire -> IO ()
+run :: GLFW.Window -> LRTypes.GameWire -> IO ()
 run win w = do
   ctl <- mkInputControl win
   let session = W.countSession 0.05
   run' ctl session w
   where
-    run' :: InputControl -> W.Session IO (LR.Timestep) -> LR.GameWire -> IO ()
+    run' :: InputControl -> W.Session IO (LRTypes.Timestep) -> LRTypes.GameWire -> IO ()
     run' ctl session wire = do
       GLFW.pollEvents
 
@@ -72,11 +73,11 @@ run win w = do
 
       case result of
         Left _ -> return ()
-        Right (ipt, lights, ros) -> do
+        Right (ipt, gos) -> do
           -- !FIXME! This should be moved to the camera...
           GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
           LR.clearBuffers
-          mapM_ (flip LR.renderLight ros) lights
+          mapM_ (flip LR.renderLight $ toRenderObjs gos) (toLights gos)
           GL.flush
 
           -- Swap buffers and poll events...
@@ -86,3 +87,14 @@ run win w = do
 
           q <- GLFW.windowShouldClose win
           unless q $ run' ctl nextsession nextwire
+          
+    toLights :: [LRTypes.GameObject] -> [LRTypes.Light]
+    toLights [] = []
+    toLights ((LRTypes.LightObject l) : rest) = l : (toLights rest)
+    toLights (_ : rest) = toLights rest
+
+    toRenderObjs :: [LRTypes.GameObject] -> [LRTypes.RenderObject]
+    toRenderObjs [] = []
+    toRenderObjs ((LRTypes.GameObject _ _ ro) : rest) = ro : (toRenderObjs rest)
+    toRenderObjs ((LRTypes.SimpleObject ro) : rest) = ro : (toRenderObjs rest)
+    toRenderObjs (_ : rest) = toRenderObjs rest
