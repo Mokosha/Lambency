@@ -128,4 +128,4 @@ colliding bv1 bv2 =
     getO (BoundingEllipse x y z) (t, o, s) = [Ellipse (t, o, s &! (Vec3 x y z))]
     getO (TranslatedVolume t bv) (t', o, s) = getO bv (t &+ t', o, s)
     getO (RotatedVolume q bv) (t, o, s) = getO bv (t, (rightOrthoU q) .*. o, s)
-    getO (Union bv1 bv2) o = (getO bv1 o) ++ (getO bv2 o)
+    getO (Union bv1' bv2') o = (getO bv1' o) ++ (getO bv2' o)
