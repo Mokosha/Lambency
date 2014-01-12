@@ -14,7 +14,7 @@ module Graphics.Rendering.Lambency (
   LightType, Light,
   Material,
   RenderObject,
-  Timestep, GameWire,
+  Timestep, Game, GameWire, GameObject, GameState,
   module Graphics.Rendering.Lambency.Utils,
 ) where
 

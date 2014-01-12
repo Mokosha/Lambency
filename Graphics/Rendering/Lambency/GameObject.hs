@@ -1,7 +1,8 @@
 module Graphics.Rendering.Lambency.GameObject (
+  emptyState,
   positioned,
+  rendersWith, collidesWith,
   mkObject, mkStaticObject,
---  mkCollider, mkStaticCollider,
   mkStaticLight,
   withVelocity,
   keyPressed
@@ -12,6 +13,7 @@ import qualified Graphics.UI.GLFW as GLFW
 
 import Graphics.UI.Lambency.Input
 
+import Graphics.Rendering.Lambency.Bounds
 import Graphics.Rendering.Lambency.Camera
 import Graphics.Rendering.Lambency.Transform
 import Graphics.Rendering.Lambency.Types
@@ -21,8 +23,16 @@ import qualified Data.Map as Map
 
 import Control.Arrow
 import Control.Wire
+import Control.Monad.State.Class
 
 --------------------------------------------------------------------------------
+
+emptyState :: GameState
+emptyState = (mkOrthoCamera
+              vec3X
+              (toNormalUnsafe vec3Z)
+              (toNormalUnsafe vec3Y)
+              0 0 0 0 0 0, [], [])
 
 positioned :: Camera -> Transform -> ShaderMap
 positioned cam xform = let
@@ -32,26 +42,23 @@ positioned cam xform = let
      [("mvpMatrix", Matrix4Val $ model .*. (getViewProjMatrix cam)),
       ("m2wMatrix", Matrix4Val $ model)]
 
-mkObject :: Monad m => RenderObject ->
-            Wire s e m a Transform ->
-            Wire s e m (Camera, a) GameObject
-mkObject ro xformw = mkId *** xformw >>> (arr $ uncurry positioned) >>>
-                     (mkSF_ $ \sm -> SimpleObject $
-                       (\r -> r { material = Map.union sm (material ro) }) ro)
+rendersWith :: RenderObject -> GameObject -> GameObject
+rendersWith ro (GameObject xf cs) =
+  GameObject xf (RenderComponent ro : cs)
 
-mkStaticObject :: Monad m => RenderObject -> Transform -> Wire s e m Camera GameObject
-mkStaticObject ro xform = mkSF_ $ \cam -> SimpleObject $
-  (\r -> r { material = Map.union (positioned cam xform) (material ro) }) ro
+collidesWith :: BoundingVolume -> GameObject -> GameObject
+collidesWith bv (GameObject xf cs) =
+  GameObject xf (CollisionComponent bv : cs)
 
---mkCollider :: Monad m => RenderObject -> BoundingVolume ->
---              Wire s e m a Transform -> Wire s e m (Camera, a) GameObject
+mkObject :: RenderObject -> GameWire Transform -> GameWire [GameObject]
+mkObject ro xfw =
+  xfw >>> (mkPure_ $ \xf -> Right $ [GameObject xf [RenderComponent ro]])
 
---mkStaticCollider :: Monad m =>
---                    RenderObject -> BoundingVolume -> Transform ->
---                    Wire s e m Camera GameObject
+mkStaticObject :: RenderObject -> Transform -> GameWire [GameObject]
+mkStaticObject ro xform = mkConst $ Right $ [GameObject xform [RenderComponent ro]]
 
-mkStaticLight :: Monad m => Light -> Wire s e m a GameObject
-mkStaticLight l = mkConst $ Right (LightObject l)
+mkStaticLight :: Monad m => Light -> Wire s e m a Light
+mkStaticLight l = mkConst $ Right l
   
 withVelocity :: Monad m =>
                 Transform -> Wire Timestep e m a Vec3 ->
@@ -63,5 +70,16 @@ withVelocity xform velWire = velWire >>> (moveXForm xform)
           newxform = translate (dt *& vel) xf
           in (Right newxform, moveXForm newxform)
 
-keyPressed :: (Monad m, Monoid e) => GLFW.Key -> Wire s e m Input Input
-keyPressed key = when (isKeyPressed key)
+-- This wire produces the given value when the key is pressed otherwise
+-- it inhibits
+keyPressed :: GLFW.Key -> GameWire a -> GameWire a
+keyPressed key wire =
+  wire >>>
+  (mkGen_ $ \val -> do
+      ipt <- get
+      return $
+        if (isKeyPressed key ipt) then
+          Right val
+        else
+          Left ()
+  )

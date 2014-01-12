@@ -34,6 +34,7 @@ import Data.Vect.Float
 import Data.Vect.Float.Util.Quaternion
 
 import qualified Control.Wire as W
+import Control.Monad.RWS.Strict
 --------------------------------------------------------------------------------
 
 mkXForm :: Vec3 -> Normal3 -> Normal3 -> XForm.Transform
@@ -181,17 +182,19 @@ getViewProjMatrix c = (getViewMatrix c) .*. (getProjMatrix c)
 
 --
 
-mkFixedCam :: Monad m => Camera -> W.Wire s e m a (a, Camera)
-mkFixedCam cam = W.mkSF_ (\x -> (x, cam))
+mkFixedCam :: Monad m => Camera -> W.Wire s e m a Camera
+mkFixedCam cam = W.mkConst $ Right cam
   
-mkDebugCam :: Monad m => Camera -> W.Wire Timestep e m Input (Input, Camera)
+mkDebugCam :: Camera -> W.Wire Timestep e GameMonad a Camera
 mkDebugCam (Camera xform camTy camSz) =
-  W.mkPure $ \time ipt -> let
+  W.mkGen $ \time _ -> let
     W.Timed dt () = time ()
-    newcam :: Camera
-    newcam = updCam dt ipt
-    in
-     (Right (resetCursorPos ipt, newcam), mkDebugCam newcam)
+    in do
+      ipt <- get
+      let newcam :: Camera
+          newcam = updCam dt ipt
+      put $ resetCursorPos ipt
+      return (Right newcam, mkDebugCam newcam)
   where
     updCam :: Float -> Input -> Camera
     updCam dt ipt = Camera finalXForm camTy camSz

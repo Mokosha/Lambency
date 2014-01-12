@@ -24,15 +24,15 @@ import GHC.Float (double2Float)
 
 type CubeDemoObject = LR.Transform
 
-demoCam :: Monad m => W.Wire LR.Timestep e m L.Input (L.Input, LR.Camera)
-demoCam = LR.mkFixedCam $ LR.mkPerspCamera
+demoCam :: LR.GameWire LR.Camera
+demoCam = LR.mkDebugCam $ LR.mkPerspCamera
            -- Pos           Dir              Up
            ((-15) *& vec3Z) (mkNormal vec3Z) (mkNormal vec3Y)
            (pi / 4) (4.0 / 3.0)
            -- near far
            0.1 1000.0
 
-planeWire :: Monad m => IO (W.Wire LR.Timestep e m LR.Camera LR.RenderObject)
+planeWire :: IO (LR.GameWire [LR.GameObject])
 planeWire = do
   tex <- LR.createSolidTexture (128, 128, 128, 255)
   ro <- LR.createRenderObject LR.plane (LR.createTexturedMaterial tex)
@@ -41,11 +41,11 @@ planeWire = do
                 LR.translate (Vec3 0 (-2) 0) $
                 LR.identity
 
-cubeWire :: Monad m => IO (W.Wire LR.Timestep e m LR.Camera LR.RenderObject)
+cubeWire :: IO (LR.GameWire [LR.GameObject])
 cubeWire = do
   (Just tex) <- getDataFileName ("crate" <.> "png") >>= LR.loadTextureFromPNG
   ro <- LR.createRenderObject LR.cube (LR.createTexturedMaterial tex)
-  return $ W.mkId &&& W.mkConst (Right ()) >>> LR.mkObject ro (rotate initial)
+  return $ LR.mkObject ro (rotate initial)
   where
     rotate :: Monad m => LR.Transform -> W.Wire LR.Timestep e m a LR.Transform
     rotate xform =
@@ -58,19 +58,18 @@ cubeWire = do
     initial :: LR.Transform
     initial = LR.rotate (rotU (Vec3 1 0 1) 0.6) LR.identity
 
-gameWire :: Monad m =>
-            IO (W.Wire LR.Timestep e m L.Input (L.Input, [LR.Light], [LR.RenderObject]))
-gameWire = do
-  wires <- sequence [cubeWire, planeWire]
+initGame :: IO (LR.Game)
+initGame = do
+  [cube, plane] <- sequence [cubeWire, planeWire]
   let lightPos = 10 *& (Vec3 (-1) 1 0)
   spotlight <- LR.createSpotlight lightPos (mkNormal $ neg lightPos) 0
-  return $ demoCam >>> second (sequenceA wires) >>> (arr $ \(x, y) -> (x, [spotlight], y))
+  return (demoCam, [W.mkConst $ Right spotlight], [cube, plane])
 
 main :: IO ()
 main = do
   m <- L.makeWindow 640 480 "Cube Demo"
-  wire <- gameWire
+  game <- initGame
   case m of
-    (Just win) -> L.run win wire
+    (Just win) -> L.run win game
     Nothing -> return ()
   L.destroyWindow m

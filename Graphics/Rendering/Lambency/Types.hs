@@ -5,7 +5,10 @@ module Graphics.Rendering.Lambency.Types (
   Texture(..), TextureFormat(..), FBOHandle, TextureHandle,
   Material,
   RenderObject(..),
-  GameObject(..), Timestep, GameWire
+  Component(..),
+  LogAction(..),
+  GameWire, Timestep, GameMonad, GameState,
+  GameObject(..), Game
 ) where
 
 --------------------------------------------------------------------------------
@@ -23,8 +26,7 @@ import Data.Vect.Float
 import qualified Data.Map as Map
 
 import qualified Control.Wire as W
-import Control.Monad.State
-import Control.Monad.Reader
+import Control.Monad.RWS.Strict
 
 --------------------------------------------------------------------------------
 
@@ -125,10 +127,7 @@ data Light = Light Shader ShaderMap (Maybe Shadow)
 
 -- Materials
 
--- Material consists of the variables specified by the
--- engine for the shader. If the material has a render texture associated with
--- it, then a MultiMaterial allows the specification of a default material for
--- all objects to use during the off-screen rendering pass of the material
+-- Material consists of the variables specified by the engine for the shader.
 type Material = ShaderMap
 
 --------------------------------------------------------------------------------
@@ -142,17 +141,34 @@ data RenderObject = RenderObject {
 
 --------------------------------------------------------------------------------
 
+-- Components
+-- 
+-- A component is a way to annotate a game object with certain properties. For
+-- example, a component may be a collider or a render object. Only game objects
+-- that have a render object will be rendered. A game object will only be able
+-- to register collision with other objects that have a collider, etc.
+data Component = CollisionComponent BV.BoundingVolume
+               | RenderComponent RenderObject
+
+--------------------------------------------------------------------------------
+
+-- Logging functions
+--
+data LogAction = StringOutput String
+
+--------------------------------------------------------------------------------
+
 -- Game Objects
 
-data GameObject = GameObject
-                  RenderObject
-                  (Maybe BV.BoundingVolume)
-                  (Maybe (W.Wire Timestep () (Reader GameState) Input [GameObject]))
-                | LightObject
-                  Light
-                  (Maybe (W.Wire Timestep () (Reader GameState) Input Light))
-type GameState  = (Camera, [GameObject])
-
 type Timestep = () -> W.Timed Float ()
-type GameWire = W.Wire Timestep () IO Input (Input, [GameObject])
-                
+type GameMonad = RWS GameState [LogAction] Input
+type GameWire a = W.Wire Timestep () GameMonad () a
+
+-- GameObjects are a set of components and the way to update the components
+-- based on user input. The output of the wire associated with a game object is
+-- all of the new objects that will be added to the game environment.
+data GameObject = GameObject XForm.Transform [Component]
+
+-- A GameState is a camera with a collection of game objects
+type GameState = (Camera, [Light], [GameObject])
+type Game = (GameWire Camera, [GameWire Light], [GameWire [GameObject]])

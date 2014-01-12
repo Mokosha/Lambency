@@ -10,15 +10,16 @@ module Graphics.UI.Lambency (
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Graphics.Rendering.OpenGL as GL
 
-import qualified Graphics.Rendering.Lambency.Types as LRTypes
-import qualified Graphics.Rendering.Lambency as LR
+import Graphics.Rendering.Lambency
+import Graphics.Rendering.Lambency.Types
 
 import Graphics.UI.Lambency.Input
 
-import Control.Monad (unless)
+import Control.Monad.RWS.Strict
 import qualified Control.Wire as W
 
 import qualified Data.Set as Set
+import qualified Data.Map as Map
 
 --------------------------------------------------------------------------------
 
@@ -41,7 +42,7 @@ makeWindow width height title = do
       -- Initial defaults
       GL.depthFunc GL.$= Just GL.Lequal
       GL.cullFace GL.$= Just GL.Back
-      LR.initLambency
+      initLambency
       return m
 
 destroyWindow :: Maybe GLFW.Window -> IO ()
@@ -52,14 +53,68 @@ destroyWindow m = do
     Nothing -> return ()
   GLFW.terminate  
 
-run :: GLFW.Window -> LRTypes.GameWire -> IO ()
-run win w = do
+run :: GLFW.Window -> Game -> IO ()
+run win g = do
   ctl <- mkInputControl win
   let session = W.countSession 0.05
-  run' ctl session w
+  run' ctl session (g, emptyState)
   where
-    run' :: InputControl -> W.Session IO (LRTypes.Timestep) -> LRTypes.GameWire -> IO ()
-    run' ctl session wire = do
+
+    renderState :: GameState -> IO ()
+    renderState (cam, lights, gameObjs) = do
+      -- !FIXME! This should be moved to the camera...
+      GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
+      clearBuffers
+      mapM_ (flip renderLight $ toRenderObjs gameObjs) lights
+      GL.flush
+
+      -- Swap buffers and poll events...
+      GLFW.swapBuffers win
+
+      where
+        toRenderObjs :: [GameObject] -> [RenderObject]
+        toRenderObjs = (>>= toRenderObj)
+          where
+            collect :: [Component] -> [RenderObject]
+            collect [] = []
+            collect (RenderComponent ro : cs) = ro : (collect cs)
+            collect (_ : cs) = collect cs
+
+            place :: Transform -> RenderObject -> RenderObject
+            place xf ro = RenderObject {
+              material = Map.union (positioned cam xf) (material ro),
+              render = (render ro)
+              }
+
+            toRenderObj :: GameObject -> [RenderObject]
+            toRenderObj (GameObject xf cs) = map (place xf) (collect cs)
+
+    step :: Game -> Timestep -> GameMonad (GameState, Game)
+    step (camWire, lightWires, gameWires) ts = do
+      (Right cam, nCamWire) <- W.stepWire camWire ts (Right ())
+      gameObjs <- mapM (\w -> W.stepWire w ts $ Right ()) gameWires
+      lightObjs <- mapM (\w -> W.stepWire w ts $ Right ()) lightWires
+      let (objs, wires) = collect gameObjs
+          (lights, lwires) = collect lightObjs
+      return ((cam, lights, concat objs), (nCamWire, lwires, wires))
+      where
+        collect :: [(Either e a, GameWire a)] -> ([a], [GameWire a])
+        collect [] = ([], [])
+        collect ((Left _, _) : rest) = collect rest
+        collect ((Right obj, wire) : rest) = let
+          (objs, wires) = collect rest
+          in
+           (obj : objs, wire : wires)
+
+    doOutput :: [LogAction] -> IO ()
+    doOutput [] = return ()
+    doOutput (StringOutput s : la) = do
+      print s
+      doOutput la
+
+    run' :: InputControl -> W.Session IO (Timestep) -> (Game, GameState) -> IO ()
+    run' ctl session (game, st) = do
+      -- Poll events...
       GLFW.pollEvents
 
       input <- getInput ctl
@@ -69,32 +124,18 @@ run win w = do
 
       -- Step
       (timestep, nextsession) <- W.stepSession session
-      (result, nextwire) <- W.stepWire wire timestep (Right input)
+      let ((nextState, nextWires), newIpt, actions) =
+            runRWS (step game timestep) st input
 
-      case result of
-        Left _ -> return ()
-        Right (ipt, gos) -> do
-          -- !FIXME! This should be moved to the camera...
-          GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
-          LR.clearBuffers
-          mapM_ (flip LR.renderLight $ toRenderObjs gos) (toLights gos)
-          GL.flush
+      -- Anything happen?
+      doOutput actions
 
-          -- Swap buffers and poll events...
-          GLFW.swapBuffers win
+      -- Render
+      renderState nextState
 
-          setInput ctl ipt
+      -- Reset the input
+      setInput ctl newIpt
 
-          q <- GLFW.windowShouldClose win
-          unless q $ run' ctl nextsession nextwire
-          
-    toLights :: [LRTypes.GameObject] -> [LRTypes.Light]
-    toLights [] = []
-    toLights ((LRTypes.LightObject l) : rest) = l : (toLights rest)
-    toLights (_ : rest) = toLights rest
-
-    toRenderObjs :: [LRTypes.GameObject] -> [LRTypes.RenderObject]
-    toRenderObjs [] = []
-    toRenderObjs ((LRTypes.GameObject _ _ ro) : rest) = ro : (toRenderObjs rest)
-    toRenderObjs ((LRTypes.SimpleObject ro) : rest) = ro : (toRenderObjs rest)
-    toRenderObjs (_ : rest) = toRenderObjs rest
+      -- Check for exit
+      q <- GLFW.windowShouldClose win
+      unless q $ run' ctl nextsession (nextWires, nextState)
