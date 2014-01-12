@@ -16,16 +16,15 @@ import qualified Graphics.Rendering.OpenGL as GL
 import Graphics.Rendering.Lambency.Types
 
 import qualified Codec.Picture as JP
-import qualified Graphics.Pgm as PGM
 
 import Control.Monad (unless)
 
 import System.Directory
 import Foreign.Ptr
-import Data.Vector.Storable (unsafeWith)
 import Data.Array.Storable
 import Data.Array.Unboxed
 import Data.Word
+import qualified Data.Vector.Storable as Vector
 import qualified Data.ByteString as BS
 --------------------------------------------------------------------------------
 
@@ -49,7 +48,7 @@ bindRenderTexture (RenderTexture _ h) = do
 
 clearRenderTexture :: IO ()
 clearRenderTexture = do
-  let depthfile = "depth.pgm"
+  let depthfile = "depth.png"
   exists <- doesFileExist depthfile
   unless exists $ do
     GL.flush
@@ -60,7 +59,23 @@ clearRenderTexture = do
         (GL.PixelData GL.DepthComponent GL.Float ptr)
       GL.flush)
     farr <- (freeze :: StorableArray (Int, Int) Float -> IO (UArray (Int, Int) Float)) arr
-    PGM.arrayToFile depthfile (amap ((round :: Float -> Word16) . (*65535)) farr)
+    let img = JP.generateImage
+              (\x y -> (round :: Float -> Word16) $ 65535 * (farr ! (x, y)))
+              512 512
+
+        smallest :: Integer
+        smallest = fromIntegral $ Vector.minimum (JP.imageData img)
+
+        largest :: Integer
+        largest = fromIntegral $ Vector.maximum (JP.imageData img)
+
+        modulate :: Word16 -> Word16
+        modulate x = fromIntegral $
+                     (65535 * ((fromIntegral :: Integral a => a -> Integer) x - smallest))
+                     `div`
+                     (largest - smallest)
+
+    JP.writePng depthfile $ JP.pixelMap modulate img
   GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject
   GL.viewport GL.$= (GL.Position 0 0, GL.Size 640 480)
 
@@ -105,7 +120,7 @@ loadTextureFromPNG filename = do
     Just img -> do
       case img of
         (JP.ImageRGBA8 (JP.Image width height dat)) -> do
-          tex <- unsafeWith dat $ \ptr ->
+          tex <- Vector.unsafeWith dat $ \ptr ->
             initializeTexture ptr (fromIntegral width, fromIntegral height) RGBA8
           return $ Just tex
         _ -> return Nothing

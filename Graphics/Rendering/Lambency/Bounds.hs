@@ -78,7 +78,39 @@ data OrientedVolume = Box Orientation
 
 collideOriented :: OrientedVolume -> OrientedVolume -> Bool
 
-collideOriented (Box (t, o, s)) (Box (t', o', s')) = False
+collideOriented (Box (t, o, s)) (Box (t', o', s')) =
+  -- First we need to rotate and translate the first box into the coordinate
+  -- space of the second.
+  let
+    rotateAtoB :: Ortho3
+    rotateAtoB = (transpose o') .*. o
+
+    cBwrtA :: Vec3
+    cBwrtA = (t' &- t) .* (transpose $ fromOrtho o)
+
+    eBwrtA :: Vec3
+    eBwrtA = s' .* (transpose $ fromOrtho rotateAtoB)
+
+    absDot :: Vec3 -> Vec3 -> Float
+    absDot (Vec3 x y z) (Vec3 x' y' z') =
+      (abs $ x * x') + (abs $ y * y') + (abs $ z * z')
+
+    testAxis :: Normal3 -> Bool
+    testAxis axis = let v = fromNormal axis in
+      abs (cBwrtA &. v) <= ((s `absDot` v) + (eBwrtA `absDot` v))
+
+    axesA :: [Vec3]
+    axesA = [vec3X, vec3Y, vec3Z]
+
+    axesB :: [Vec3]
+    axesB = map (.* (fromOrtho rotateAtoB)) axesA
+
+  in
+   or $
+   map (testAxis . mkNormal) $
+   filter (\v -> lensqr v > 0.01) $
+   [v1 &^ v2 | v1 <- axesA, v2 <- axesB] ++ axesA ++ axesB
+
 collideOriented (Ellipse (t, o, s)) (Box (t', o', s')) = False
 collideOriented (Ellipse (t, o, s)) (Ellipse (t', o', s')) = False
 
@@ -96,4 +128,4 @@ colliding bv1 bv2 =
     getO (BoundingEllipse x y z) (t, o, s) = [Ellipse (t, o, s &! (Vec3 x y z))]
     getO (TranslatedVolume t bv) (t', o, s) = getO bv (t &+ t', o, s)
     getO (RotatedVolume q bv) (t, o, s) = getO bv (t, (rightOrthoU q) .*. o, s)
-    getO (Union bv1 bv2) o = (getO bv1 o) ++ (getO bv2 o)
+    getO (Union bv1' bv2') o = (getO bv1' o) ++ (getO bv2' o)

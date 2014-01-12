@@ -42,7 +42,7 @@ library
                        Paths_lambency
   ghc-options:         -Wall
   build-depends:       base > 4.5,
-                       GLFW-b ==1.3,
+                       GLFW-b,
                        OpenGL >=2.9.2.0,
                        OpenGLRaw ==1.4.0.0,
                        JuicyPixels >= 3.1.2,
@@ -55,5 +55,4 @@ library
                        array, vector,
                        filepath,
                        -- Eventually replace these...
-                       pgm,
                        directory

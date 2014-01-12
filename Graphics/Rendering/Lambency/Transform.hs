@@ -1,18 +1,19 @@
 module Graphics.Rendering.Lambency.Transform (
-  Transform, fromForwardUp, fromCoordinateBasis, identity, invert,
+  Transform, Invertible(..), Transformable3D(..),
+  fromForwardUp, fromCoordinateBasis, identity,
   right, up, forward, right', up', forward',
   localRight, localUp, localForward, localRight', localUp', localForward',
   scale, position,
 
-  rotate, rotateWorld, translate, uniformScale, nonuniformScale,
-  
-  xform2Matrix, transformPoint, invTransformPoint
+  rotateWorld, xform2Matrix, transformPoint, invTransformPoint
 ) where
 
 --------------------------------------------------------------------------------
 
 import Data.Vect.Float
 import Data.Vect.Float.Util.Quaternion
+
+-- import qualified Control.Wire as W
 
 --------------------------------------------------------------------------------
 
@@ -123,14 +124,6 @@ renormalize xf = updateAxis (right xf) u' f' xf
   where f' = (right xf) &^ (up xf)
         u' = f' &^ (right xf)
 
--- Rotates the coordinate axis of the transform by the given quaternion. This
--- function performs a local rotation
-rotate :: UnitQuaternion -> Transform -> Transform
-rotate quat xf = let
-  fn :: Normal3 -> Normal3
-  fn = toNormalUnsafe . (actU quat) . fromNormal
-  in updateAxis (fn $ right xf) (fn $ up xf) (fn $ forward xf) xf
-
 rotateWorld :: UnitQuaternion -> Transform -> Transform
 rotateWorld quat xf = let
 
@@ -149,30 +142,6 @@ rotateWorld quat xf = let
 
   in
    renormalize $ updateAxis (rotateAxis r) (rotateAxis u) (rotateAxis f) xf
-
-nonuniformScale :: Vec3 -> Transform -> Transform
-nonuniformScale s Identity = Scale s Identity
-nonuniformScale s (Scale s' xf) = Scale (s &! s') xf
-nonuniformScale s (OrthoNormal b xf) = OrthoNormal b $ nonuniformScale s xf
-nonuniformScale s (Translate t xf) = Translate t $ nonuniformScale s xf
-
-uniformScale :: Float -> Transform -> Transform
-uniformScale s = nonuniformScale $ Vec3 s s s
-
-translate :: Vec3 -> Transform -> Transform
-translate t Identity = Translate t Identity
-translate t (Scale s xf) = Translate t $ Scale s xf
-translate t (OrthoNormal b xf) = Translate t $ OrthoNormal b xf
-translate t (Translate t' xf) = Translate (t &+ t') xf
-
-invert :: Transform -> Transform
-invert Identity = Identity
-invert xform = (foldl (.) id $ modifiers xform) Identity
-  where modifiers :: Transform -> [Transform -> Transform]
-        modifiers Identity = []
-        modifiers (Scale (Vec3 x y z) xf) = Scale (Vec3 (1/x) (1/y) (1/z)) : (modifiers xf)
-        modifiers (OrthoNormal b xf) = OrthoNormal (invertBasis b) : (modifiers xf)
-        modifiers (Translate t xf) = Translate (neg t) : (modifiers xf)
 
 -- Returns a matrix where that transforms a coordinate space such that the
 -- new coordinate system's origin is located at the value of 'p' of the old
@@ -193,6 +162,18 @@ xform2Matrix xf =
    (extendZero $ (sz *&) $ Vec3 rz uz fz)
    (extendWith 1.0 $ position xf)
 
+class Invertible a where
+  invert :: a -> a
+
+instance Invertible Transform where
+  invert Identity = Identity
+  invert xform = (foldl (.) id $ modifiers xform) Identity
+    where modifiers :: Transform -> [Transform -> Transform]
+          modifiers Identity = []
+          modifiers (Scale (Vec3 x y z) xf) = Scale (Vec3 (1/x) (1/y) (1/z)) : (modifiers xf)
+          modifiers (OrthoNormal b xf) = OrthoNormal (invertBasis b) : (modifiers xf)
+          modifiers (Translate t xf) = Translate (neg t) : (modifiers xf)
+
 transformPoint :: Transform -> Vec3 -> Vec3
 transformPoint Identity = id
 transformPoint (Scale s xf) = (s &!) . (transformPoint xf)
@@ -201,3 +182,36 @@ transformPoint (Translate t xf) = (&+ t) . (transformPoint xf)
 
 invTransformPoint :: Transform -> Vec3 -> Vec3
 invTransformPoint xf = transformPoint (invert xf)
+
+class Transformable3D a where
+  translate :: Vec3 -> a -> a
+  rotate :: UnitQuaternion -> a -> a
+  nonuniformScale :: Vec3 -> a -> a
+
+  uniformScale :: Float -> a -> a
+  uniformScale s = nonuniformScale $ Vec3 s s s
+
+instance Transformable3D Transform where
+  translate t Identity = Translate t Identity
+  translate t (Scale s xf) = Translate t $ Scale s xf
+  translate t (OrthoNormal b xf) = Translate t $ OrthoNormal b xf
+  translate t (Translate t' xf) = Translate (t &+ t') xf
+
+  nonuniformScale s Identity = Scale s Identity
+  nonuniformScale s (Scale s' xf) = Scale (s &! s') xf
+  nonuniformScale s (OrthoNormal b xf) = OrthoNormal b $ nonuniformScale s xf
+  nonuniformScale s (Translate t xf) = Translate t $ nonuniformScale s xf
+
+  -- Rotates the coordinate axis of the transform by the given quaternion. This
+  -- function performs a local rotation
+  rotate quat xf = let
+    fn :: Normal3 -> Normal3
+    fn = toNormalUnsafe . (actU quat) . fromNormal
+    in updateAxis (fn $ right xf) (fn $ up xf) (fn $ forward xf) xf
+
+instance Transformable3D Vec3 where
+  translate = (&+)
+  rotate = actU
+  nonuniformScale = (&!)
+
+-- instance Transformable3D b => Transformable3D (W.Wire s e m a b) where
