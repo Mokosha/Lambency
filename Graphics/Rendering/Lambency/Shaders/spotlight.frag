@@ -64,7 +64,8 @@ void main() {
 
   // ambient
   lightColor += ambient;
-  vec3 finalColor = dither3(lightColor*texture2D(diffuseTex, uv).xyz, uv);
+  vec3 finalColor = lightColor*texture2D(diffuseTex, uv).xyz;
+  finalColor = dither3(finalColor, uv);
 
   gl_FragColor = vec4(finalColor, 1.0);
 }
