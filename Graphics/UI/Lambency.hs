@@ -41,6 +41,7 @@ makeWindow width height title = do
       -- Initial defaults
       GL.depthFunc GL.$= Just GL.Lequal
       GL.cullFace GL.$= Just GL.Back
+      GL.dither GL.$= GL.Disabled
       LR.initLambency
       return m
 
