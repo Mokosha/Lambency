@@ -12,6 +12,28 @@ uniform float lightCosCutoff;
 uniform sampler2DShadow shadowMap;
 uniform mat4 shadowVP;
 
+float rnd(vec2 co)
+{
+  return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+}
+
+// Fix values from their floating point representation
+// to what they should be in the interval [0,255] based
+// on a stochastic dithering pattern where the dithering
+// is done based on the proximity to an integer value in
+// the aforementioned interval.
+float dither(float v, float r) {
+  float val = v * 255.0;
+  float ival = floor(val);
+  float diff = val - ival;
+  return (ival + float(r < diff)) / 255.0;
+}
+
+vec3 dither3(vec3 v, vec2 seed) {
+  float r = rnd(seed);
+  return vec3(dither(v.x, r), dither(v.y, r), dither(v.z, r));
+}
+
 float bias(float d) {
   return d - 0.0001;
 }
@@ -42,7 +64,7 @@ void main() {
 
   // ambient
   lightColor += ambient;
-  vec3 finalColor = lightColor*texture2D(diffuseTex, uv).xyz;
+  vec3 finalColor = dither3(lightColor*texture2D(diffuseTex, uv).xyz, uv);
 
   gl_FragColor = vec4(finalColor, 1.0);
 }
