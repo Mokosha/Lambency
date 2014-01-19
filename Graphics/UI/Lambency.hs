@@ -58,7 +58,7 @@ run win g = do
   GLFW.swapInterval 1
   ctl <- mkInputControl win
   let session = W.countSession 0.05
-  run' ctl session (g, staticGameState g)
+  run' ctl session (staticGameState g, g)
   where
 
     renderState :: GameState -> IO ()
@@ -124,8 +124,9 @@ run win g = do
       print s
       doOutput la
 
-    run' :: InputControl -> W.Session IO (Timestep) -> (Game, GameState) -> IO ()
-    run' ctl session (game, st) = do
+    run' :: InputControl -> GameSession -> (GameState, Game) -> IO ()
+    run' ctl session (st, game) = do
+
       -- Poll events...
       GLFW.pollEvents
 
@@ -151,4 +152,4 @@ run win g = do
 
       -- Check for exit
       q <- GLFW.windowShouldClose win
-      unless q $ run' ctl nextsession (nextWires, nextState)
+      unless q $ run' ctl nextsession (nextState, nextWires)
