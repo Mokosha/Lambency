@@ -7,7 +7,7 @@ module Graphics.Rendering.Lambency.Types (
   RenderObject(..),
   Component(..),
   LogAction(..),
-  GameWire, Timestep, GameMonad, GameState,
+  GameWire, Timestep, GameMonad, GameState, GameSession, GameTime,
   GameObject(..), Game(..)
 ) where
 
@@ -22,6 +22,7 @@ import qualified Graphics.Rendering.Lambency.Transform as XForm
 import qualified Graphics.Rendering.Lambency.Bounds as BV
 
 import Data.Vect.Float
+import Data.Time.Clock
 
 import qualified Data.Map as Map
 
@@ -160,10 +161,6 @@ data LogAction = StringOutput String
 
 -- Game Objects
 
-type Timestep = () -> W.Timed Float ()
-type GameMonad = RWS GameState [LogAction] Input
-type GameWire a = W.Wire Timestep () GameMonad () a
-
 -- GameObjects are a set of components and the way to update the components
 -- based on user input. The output of the wire associated with a game object is
 -- all of the new objects that will be added to the game environment.
@@ -177,3 +174,17 @@ data Game = Game {
   dynamicLights :: [GameWire Light],
   gameObjects :: [GameWire [GameObject]]
   }
+
+--------------------------------------------------------------------------------
+
+-- Game State
+
+type Timestep = () -> W.Timed Float ()
+type GameMonad = RWS GameState [LogAction] Input
+type GameWire a = W.Wire Timestep () GameMonad () a
+type GameSession = W.Session IO Timestep
+
+-- The game timer has two parts. The first is the time after the last rendering
+-- and the second is the amount of time left over from performing the
+-- simulation steps.
+type GameTime = (UTCTime, NominalDiffTime)

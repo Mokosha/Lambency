@@ -50,6 +50,7 @@ library
                        stm >= 2.4,
                        mtl >= 2.1.2,
                        netwire >= 5.0.0,
+                       time,
                        containers,
                        bytestring,
                        array, vector,
