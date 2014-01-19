@@ -20,6 +20,9 @@ import qualified Control.Wire as W
 
 import qualified Data.Set as Set
 import qualified Data.Map as Map
+import Data.Time
+
+import GHC.Float
 
 --------------------------------------------------------------------------------
 
@@ -53,12 +56,39 @@ destroyWindow m = do
     Nothing -> return ()
   GLFW.terminate  
 
+-- The physics framerate in frames per second
+physicsFramerate :: Double
+physicsFramerate = 60.0
+
+physicsDeltaTime :: Double
+physicsDeltaTime = 1.0 / physicsFramerate
+
+physicsDeltaUTC :: NominalDiffTime
+physicsDeltaUTC = let
+  someDay :: Day
+  someDay = fromGregorian 1970 1 1
+
+  dayStart :: UTCTime
+  dayStart = UTCTime {
+    utctDay = someDay,
+    utctDayTime = secondsToDiffTime 0
+    }
+
+  dayEnd :: UTCTime
+  dayEnd = UTCTime {
+    utctDay = someDay,
+    utctDayTime = picosecondsToDiffTime $ round $ 1e12 * physicsDeltaTime
+    }
+  in
+   diffUTCTime dayEnd dayStart
+
 run :: GLFW.Window -> Game -> IO ()
 run win g = do
   GLFW.swapInterval 1
   ctl <- mkInputControl win
-  let session = W.countSession 0.05
-  run' ctl session (staticGameState g, g)
+  let session = W.countSession (double2Float physicsDeltaTime)
+  curTime <- getCurrentTime
+  run' ctl session (curTime, diffUTCTime curTime curTime) (staticGameState g, g)
   where
 
     renderState :: GameState -> IO ()
@@ -124,8 +154,8 @@ run win g = do
       print s
       doOutput la
 
-    run' :: InputControl -> GameSession -> (GameState, Game) -> IO ()
-    run' ctl session (st, game) = do
+    run' :: InputControl -> GameSession -> GameTime -> (GameState, Game) -> IO ()
+    run' ctl session (lastFrameTime, accumulator) (st, game) = do
 
       -- Poll events...
       GLFW.pollEvents
@@ -135,11 +165,25 @@ run win g = do
         then GLFW.setWindowShouldClose win True
         else return ()
 
+      -- Figure out timestep
+      curTime <- getCurrentTime
+      let newAccum = accumulator + (diffUTCTime curTime lastFrameTime)
+
       -- Step
-      (timestep, nextsession) <- W.stepSession session
-      let wholeState = mergeState (staticGameState game) st
-          ((nextState, nextWires), newIpt, actions) =
-            runRWS (step game timestep) wholeState input
+      let stepGame :: GameSession -> NominalDiffTime ->
+                      Game -> GameState -> Input -> [LogAction] ->
+                      IO (GameSession, NominalDiffTime, GameState, Game, Input, [LogAction])
+          stepGame sess accum g' gs' ipt logs
+            | accum < physicsDeltaUTC = return (sess, accum, gs', g', ipt, logs)
+            | otherwise = do
+              (ts, nextSess) <- W.stepSession sess
+              let wholeState = mergeState (staticGameState game) gs'
+                  ((nextState, nextGame), newIpt, actions) =
+                    runRWS (step g' ts) wholeState ipt
+              stepGame nextSess (accum - physicsDeltaUTC) nextGame nextState newIpt (logs ++ actions)
+
+      (nextsession, accum, nextState, nextGame, newIpt, actions) <-
+        stepGame session newAccum game st input []
 
       -- Anything happen?
       doOutput actions
@@ -152,4 +196,4 @@ run win g = do
 
       -- Check for exit
       q <- GLFW.windowShouldClose win
-      unless q $ run' ctl nextsession (nextState, nextWires)
+      unless q $ run' ctl nextsession (curTime, accum)  (nextState, nextGame)
