@@ -135,8 +135,9 @@ run win g = do
 
       -- Step
       (timestep, nextsession) <- W.stepSession session
-      let ((nextState, nextWires), newIpt, actions) =
-            runRWS (step game timestep) st input
+      let wholeState = mergeState (staticGameState game) st
+          ((nextState, nextWires), newIpt, actions) =
+            runRWS (step game timestep) wholeState input
 
       -- Anything happen?
       doOutput actions
