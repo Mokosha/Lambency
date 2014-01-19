@@ -24,15 +24,18 @@ import GHC.Float (double2Float)
 
 type CubeDemoObject = LR.Transform
 
-demoCam :: LR.GameWire LR.Camera
-demoCam = LR.mkDebugCam $ LR.mkPerspCamera
-           -- Pos           Dir              Up
-           ((-15) *& vec3Z) (mkNormal vec3Z) (mkNormal vec3Y)
-           (pi / 4) (4.0 / 3.0)
-           -- near far
-           0.1 1000.0
+initialCam :: LR.Camera
+initialCam = LR.mkPerspCamera
+             -- Pos           Dir              Up
+             ((-15) *& vec3Z) (mkNormal vec3Z) (mkNormal vec3Y)
+             (pi / 4) (4.0 / 3.0)
+             -- near far
+             0.1 1000.0
 
-planeWire :: IO (LR.GameWire [LR.GameObject])
+demoCam :: LR.GameWire LR.Camera
+demoCam = LR.mkDebugCam initialCam
+
+planeWire :: IO (LR.GameObject)
 planeWire = do
   tex <- LR.createSolidTexture (128, 128, 128, 255)
   ro <- LR.createRenderObject LR.plane (LR.createTexturedMaterial tex)
@@ -60,10 +63,14 @@ cubeWire = do
 
 initGame :: IO (LR.Game)
 initGame = do
-  [cube, plane] <- sequence [cubeWire, planeWire]
+  plane <- planeWire
+  cube <- cubeWire
   let lightPos = 10 *& (Vec3 (-1) 1 0)
   spotlight <- LR.createSpotlight lightPos (mkNormal $ neg lightPos) 0
-  return (demoCam, [W.mkConst $ Right spotlight], [cube, plane])
+  return $ LR.Game { LR.staticGameState = (initialCam, [spotlight], [plane]),
+                     LR.mainCamera = demoCam,
+                     LR.dynamicLights = [],
+                     LR.gameObjects = [cube] }
 
 main :: IO ()
 main = do

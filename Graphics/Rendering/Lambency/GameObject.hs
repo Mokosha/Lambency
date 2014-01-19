@@ -1,9 +1,7 @@
 module Graphics.Rendering.Lambency.GameObject (
-  emptyState,
   positioned,
   rendersWith, collidesWith,
   mkObject, mkStaticObject,
-  mkStaticLight,
   withVelocity,
   keyPressed
 ) where
@@ -27,13 +25,6 @@ import Control.Monad.State.Class
 
 --------------------------------------------------------------------------------
 
-emptyState :: GameState
-emptyState = (mkOrthoCamera
-              vec3X
-              (toNormalUnsafe vec3Z)
-              (toNormalUnsafe vec3Y)
-              0 0 0 0 0 0, [], [])
-
 positioned :: Camera -> Transform -> ShaderMap
 positioned cam xform = let
   model :: Mat4
@@ -54,12 +45,9 @@ mkObject :: RenderObject -> GameWire Transform -> GameWire [GameObject]
 mkObject ro xfw =
   xfw >>> (mkPure_ $ \xf -> Right $ [GameObject xf [RenderComponent ro]])
 
-mkStaticObject :: RenderObject -> Transform -> GameWire [GameObject]
-mkStaticObject ro xform = mkConst $ Right $ [GameObject xform [RenderComponent ro]]
+mkStaticObject :: RenderObject -> Transform -> GameObject
+mkStaticObject ro xform = GameObject xform [RenderComponent ro]
 
-mkStaticLight :: Monad m => Light -> Wire s e m a Light
-mkStaticLight l = mkConst $ Right l
-  
 withVelocity :: Monad m =>
                 Transform -> Wire Timestep e m a Vec3 ->
                 Wire Timestep e m a Transform

@@ -8,7 +8,7 @@ module Graphics.Rendering.Lambency.Types (
   Component(..),
   LogAction(..),
   GameWire, Timestep, GameMonad, GameState,
-  GameObject(..), Game
+  GameObject(..), Game(..)
 ) where
 
 --------------------------------------------------------------------------------
@@ -171,4 +171,9 @@ data GameObject = GameObject XForm.Transform [Component]
 
 -- A GameState is a camera with a collection of game objects
 type GameState = (Camera, [Light], [GameObject])
-type Game = (GameWire Camera, [GameWire Light], [GameWire [GameObject]])
+data Game = Game {
+  staticGameState :: GameState,
+  mainCamera :: GameWire Camera,
+  dynamicLights :: [GameWire Light],
+  gameObjects :: [GameWire [GameObject]]
+  }

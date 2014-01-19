@@ -57,7 +57,7 @@ run :: GLFW.Window -> Game -> IO ()
 run win g = do
   ctl <- mkInputControl win
   let session = W.countSession 0.05
-  run' ctl session (g, emptyState)
+  run' ctl session (g, staticGameState g)
   where
 
     renderState :: GameState -> IO ()
@@ -90,13 +90,13 @@ run win g = do
             toRenderObj (GameObject xf cs) = map (place xf) (collect cs)
 
     step :: Game -> Timestep -> GameMonad (GameState, Game)
-    step (camWire, lightWires, gameWires) ts = do
-      (Right cam, nCamWire) <- W.stepWire camWire ts (Right ())
-      gameObjs <- mapM (\w -> W.stepWire w ts $ Right ()) gameWires
-      lightObjs <- mapM (\w -> W.stepWire w ts $ Right ()) lightWires
+    step game ts = do
+      (Right cam, nCamWire) <- W.stepWire (mainCamera game) ts (Right ())
+      gameObjs <- mapM (\w -> W.stepWire w ts $ Right ()) (gameObjects game)
+      lightObjs <- mapM (\w -> W.stepWire w ts $ Right ()) (dynamicLights game)
       let (objs, wires) = collect gameObjs
           (lights, lwires) = collect lightObjs
-      return ((cam, lights, concat objs), (nCamWire, lwires, wires))
+      return ((cam, lights, concat objs), newGame nCamWire lwires wires)
       where
         collect :: [(Either e a, GameWire a)] -> ([a], [GameWire a])
         collect [] = ([], [])
@@ -105,6 +105,17 @@ run win g = do
           (objs, wires) = collect rest
           in
            (obj : objs, wire : wires)
+
+        newGame :: GameWire Camera -> [GameWire Light] -> [GameWire [GameObject]] -> Game
+        newGame cam lights objs = Game {
+          staticGameState = (staticGameState game),
+          mainCamera = cam,
+          dynamicLights = lights,
+          gameObjects = objs}
+
+    mergeState :: GameState -> GameState -> GameState
+    mergeState (_, slights, sobjs) (cam, dlights, dobjs) =
+      (cam, slights ++ dlights, sobjs ++ dobjs)
 
     doOutput :: [LogAction] -> IO ()
     doOutput [] = return ()
@@ -131,7 +142,7 @@ run win g = do
       doOutput actions
 
       -- Render
-      renderState nextState
+      renderState $ mergeState (staticGameState game) nextState
 
       -- Reset the input
       setInput ctl newIpt
