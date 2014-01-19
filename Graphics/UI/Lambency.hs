@@ -55,6 +55,7 @@ destroyWindow m = do
 
 run :: GLFW.Window -> Game -> IO ()
 run win g = do
+  GLFW.swapInterval 1
   ctl <- mkInputControl win
   let session = W.countSession 0.05
   run' ctl session (g, staticGameState g)
