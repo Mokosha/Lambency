@@ -108,22 +108,22 @@ run win initialGame = do
       GLFW.swapBuffers win
 
       where
+        collect :: [Component] -> [RenderObject]
+        collect [] = []
+        collect (RenderComponent ro : cs) = ro : (collect cs)
+        collect (_ : cs) = collect cs
+
+        place :: Transform -> RenderObject -> RenderObject
+        place xf ro = RenderObject {
+          material = Map.union (positioned cam xf) (material ro),
+          render = (render ro)
+          }
+
+        toRenderObj :: GameObject -> [RenderObject]
+        toRenderObj (GameObject xf cs) = map (place xf) (collect cs)
+
         toRenderObjs :: [GameObject] -> [RenderObject]
         toRenderObjs = (>>= toRenderObj)
-          where
-            collect :: [Component] -> [RenderObject]
-            collect [] = []
-            collect (RenderComponent ro : cs) = ro : (collect cs)
-            collect (_ : cs) = collect cs
-
-            place :: Transform -> RenderObject -> RenderObject
-            place xf ro = RenderObject {
-              material = Map.union (positioned cam xf) (material ro),
-              render = (render ro)
-              }
-
-            toRenderObj :: GameObject -> [RenderObject]
-            toRenderObj (GameObject xf cs) = map (place xf) (collect cs)
 
     step :: Game -> Timestep -> GameMonad (GameState, Game)
     step game ts = do
@@ -188,7 +188,6 @@ run win initialGame = do
       -- Step
       curTime <- getCurrentTime
       let newAccum = accumulator + (diffUTCTime curTime lastFrameTime)
-
       ((nextsession, accum), (nextState, nextGame, newIpt), actions) <-
         stepGame (staticGameState game) (session, newAccum) (st, game, input) []
 
@@ -203,4 +202,4 @@ run win initialGame = do
 
       -- Check for exit
       q <- GLFW.windowShouldClose win
-      unless q $ run' ctl nextsession (curTime, accum)  (nextState, nextGame)
+      unless q $ run' ctl nextsession (curTime, accum) (nextState, nextGame)
