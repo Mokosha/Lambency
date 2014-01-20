@@ -37,6 +37,7 @@ makeWindow width height title = do
     putStrLn "Done"
     GLFW.setErrorCallback $ Just errorCallback
     putStr $ "Creating window of size (" ++ (show width) ++ ", " ++ (show height) ++ ")..."
+    GLFW.windowHint $ GLFW.WindowHint'Samples 4
     m <- GLFW.createWindow width height title Nothing Nothing
     if m == (Nothing) then ioError (userError "Failed!") else do
       putStrLn "Done."
@@ -46,6 +47,7 @@ makeWindow width height title = do
       GL.depthFunc GL.$= Just GL.Lequal
       GL.cullFace GL.$= Just GL.Back
       initLambency
+      GL.dither GL.$= GL.Disabled
       return m
 
 destroyWindow :: Maybe GLFW.Window -> IO ()
