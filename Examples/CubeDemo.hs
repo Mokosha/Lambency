@@ -54,8 +54,7 @@ cubeWire = do
     rotate xform =
       W.mkPure (\ts _ -> let
                    W.Timed dt () = ts ()
-                   newxform = LR.rotateWorld (rotU vec3Y dt) xform
-
+                   newxform = LR.rotateWorld (rotU vec3Y (3.0 * dt)) xform
                    in (Right newxform, rotate newxform))
 
     initial :: LR.Transform

@@ -207,7 +207,7 @@ mkDebugCam (Camera xform camTy camSz) =
             (XForm.Transform -> XForm.Transform)
       tr k sc dir = let
         vdir = fromNormal . dir
-        s = dt * sc
+        s = 3.0 * dt * sc
         in
          withPressedKey ipt k (\x -> XForm.translate (s *& (vdir x)) x)
 
