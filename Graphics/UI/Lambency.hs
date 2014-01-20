@@ -82,13 +82,18 @@ physicsDeltaUTC = let
   in
    diffUTCTime dayEnd dayStart
 
+type TimeStepper = (GameSession, NominalDiffTime)
+type StateStepper = (GameState, Game, Input)
+
 run :: GLFW.Window -> Game -> IO ()
-run win g = do
+run win initialGame = do
   GLFW.swapInterval 1
   ctl <- mkInputControl win
   let session = W.countSession (double2Float physicsDeltaTime)
   curTime <- getCurrentTime
-  run' ctl session (curTime, diffUTCTime curTime curTime) (staticGameState g, g)
+  run' ctl session
+    (curTime, diffUTCTime curTime curTime)
+    (staticGameState initialGame, initialGame)
   where
 
     renderState :: GameState -> IO ()
@@ -144,6 +149,21 @@ run win g = do
           dynamicLights = lights,
           gameObjects = objs}
 
+    stepGame :: GameState -> TimeStepper -> StateStepper -> [LogAction] ->
+                IO (TimeStepper, StateStepper, [LogAction])
+    stepGame static tstep@(sess, accum) sstep@(gs, g, ipt) logs
+      | accum < physicsDeltaUTC = return (tstep, sstep, logs)
+      | otherwise = do
+        (ts, nextSess) <- W.stepSession sess
+        let wholeState = mergeState static gs
+            ((nextState, nextGame), newIpt, actions) =
+              runRWS (step g ts) wholeState ipt
+        stepGame
+          static                                -- GameState
+          (nextSess, (accum - physicsDeltaUTC)) -- TimeStepper
+          (nextState, nextGame, newIpt)         -- StateStepper
+          (logs ++ actions)                     -- Logs
+
     mergeState :: GameState -> GameState -> GameState
     mergeState (_, slights, sobjs) (cam, dlights, dobjs) =
       (cam, slights ++ dlights, sobjs ++ dobjs)
@@ -165,25 +185,12 @@ run win g = do
         then GLFW.setWindowShouldClose win True
         else return ()
 
-      -- Figure out timestep
+      -- Step
       curTime <- getCurrentTime
       let newAccum = accumulator + (diffUTCTime curTime lastFrameTime)
 
-      -- Step
-      let stepGame :: GameSession -> NominalDiffTime ->
-                      Game -> GameState -> Input -> [LogAction] ->
-                      IO (GameSession, NominalDiffTime, GameState, Game, Input, [LogAction])
-          stepGame sess accum g' gs' ipt logs
-            | accum < physicsDeltaUTC = return (sess, accum, gs', g', ipt, logs)
-            | otherwise = do
-              (ts, nextSess) <- W.stepSession sess
-              let wholeState = mergeState (staticGameState game) gs'
-                  ((nextState, nextGame), newIpt, actions) =
-                    runRWS (step g' ts) wholeState ipt
-              stepGame nextSess (accum - physicsDeltaUTC) nextGame nextState newIpt (logs ++ actions)
-
-      (nextsession, accum, nextState, nextGame, newIpt, actions) <-
-        stepGame session newAccum game st input []
+      ((nextsession, accum), (nextState, nextGame, newIpt), actions) <-
+        stepGame (staticGameState game) (session, newAccum) (st, game, input) []
 
       -- Anything happen?
       doOutput actions
