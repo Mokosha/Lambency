@@ -28,6 +28,7 @@ library
   other-modules:       Graphics.Rendering.Lambency.Bounds
                        Graphics.Rendering.Lambency.Camera
                        Graphics.Rendering.Lambency.Light
+                       Graphics.Rendering.Lambency.Loaders
                        Graphics.Rendering.Lambency.Material
                        Graphics.Rendering.Lambency.Mesh
                        Graphics.Rendering.Lambency.GameObject
