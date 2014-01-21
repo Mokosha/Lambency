@@ -1,4 +1,5 @@
 module Graphics.Rendering.Lambency.Mesh (
+  Mesh,
   triangle,
   cube,
   plane,
