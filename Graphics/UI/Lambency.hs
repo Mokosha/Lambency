@@ -2,7 +2,8 @@ module Graphics.UI.Lambency (
   Input(..),
   makeWindow,
   destroyWindow,
-  run
+  run,
+  module Graphics.UI.Lambency.Sound
 ) where
 
 --------------------------------------------------------------------------------
@@ -14,6 +15,7 @@ import Graphics.Rendering.Lambency
 import Graphics.Rendering.Lambency.Types
 
 import Graphics.UI.Lambency.Input
+import Graphics.UI.Lambency.Sound
 
 import Control.Monad.RWS.Strict
 import qualified Control.Wire as W
@@ -47,6 +49,7 @@ makeWindow width height title = do
       GL.depthFunc GL.$= Just GL.Lequal
       GL.cullFace GL.$= Just GL.Back
       initLambency
+      initSound
       GL.dither GL.$= GL.Disabled
       return m
 
@@ -56,7 +59,8 @@ destroyWindow m = do
     (Just win) -> do
       GLFW.destroyWindow win
     Nothing -> return ()
-  GLFW.terminate  
+  GLFW.terminate
+  freeSound
 
 -- The physics framerate in frames per second
 physicsFramerate :: Double
@@ -90,13 +94,28 @@ type StateStepper = (GameState, Game, Input)
 run :: GLFW.Window -> Game -> IO ()
 run win initialGame = do
   GLFW.swapInterval 1
-  ctl <- mkInputControl win
+  sctl <- createSoundCtl
+  ictl <- mkInputControl win
   let session = W.countSession (double2Float physicsDeltaTime)
   curTime <- getCurrentTime
-  run' ctl session
+  run' sctl ictl session
     (curTime, diffUTCTime curTime curTime)
     (staticGameState initialGame, initialGame)
   where
+
+    hearState :: SoundCtl -> GameState -> IO ()
+    hearState ctl (_, _, gameObjs) = mapM_ (handleCommand ctl) (toSoundObjs gameObjs)
+      where
+        collect :: [Component] -> [SoundObject]
+        collect [] = []
+        collect (SoundComponent so : cs) = so : (collect cs)
+        collect (_ : cs) = collect cs
+        
+        toSoundObj :: GameObject -> [SoundObject]
+        toSoundObj (GameObject _ cs) = collect cs
+        
+        toSoundObjs :: [GameObject] -> [SoundObject]
+        toSoundObjs = (>>= toSoundObj)
 
     renderState :: GameState -> IO ()
     renderState (cam, lights, gameObjs) = do
@@ -128,28 +147,28 @@ run win initialGame = do
         toRenderObjs = (>>= toRenderObj)
 
     step :: Game -> Timestep -> GameMonad (GameState, Game)
-    step game ts = do
-      (Right cam, nCamWire) <- W.stepWire (mainCamera game) ts (Right ())
-      gameObjs <- mapM (\w -> W.stepWire w ts $ Right ()) (gameObjects game)
-      lightObjs <- mapM (\w -> W.stepWire w ts $ Right ()) (dynamicLights game)
+    step game dt = do
+      (Right cam, nCamWire) <- W.stepWire (mainCamera game) dt (Right ())
+      gameObjs <- mapM (\w -> W.stepWire w dt $ Right ()) (gameObjects game)
+      lightObjs <- mapM (\w -> W.stepWire w dt $ Right ()) (dynamicLights game)
       let (objs, wires) = collect gameObjs
           (lights, lwires) = collect lightObjs
       return ((cam, lights, concat objs), newGame nCamWire lwires wires)
-      where
-        collect :: [(Either e a, GameWire a)] -> ([a], [GameWire a])
-        collect [] = ([], [])
-        collect ((Left _, _) : rest) = collect rest
-        collect ((Right obj, wire) : rest) = let
-          (objs, wires) = collect rest
-          in
-           (obj : objs, wire : wires)
+        where
+          collect :: [(Either e a, GameWire a)] -> ([a], [GameWire a])
+          collect [] = ([], [])
+          collect ((Left _, _) : rest) = collect rest
+          collect ((Right obj, wire) : rest) = let
+            (objs, wires) = collect rest
+            in
+             (obj : objs, wire : wires)
 
-        newGame :: GameWire Camera -> [GameWire Light] -> [GameWire [GameObject]] -> Game
-        newGame cam lights objs = Game {
-          staticGameState = (staticGameState game),
-          mainCamera = cam,
-          dynamicLights = lights,
-          gameObjects = objs}
+          newGame :: GameWire Camera -> [GameWire Light] -> [GameWire [GameObject]] -> Game
+          newGame cam lights objs = Game {
+            staticGameState = (staticGameState game),
+            mainCamera = cam,
+            dynamicLights = lights,
+            gameObjects = objs}
 
     stepGame :: GameState -> TimeStepper -> StateStepper -> [LogAction] ->
                 IO (TimeStepper, StateStepper, [LogAction])
@@ -159,7 +178,7 @@ run win initialGame = do
         (ts, nextSess) <- W.stepSession sess
         let wholeState = mergeState static gs
             ((nextState, nextGame), newIpt, actions) =
-              runRWS (step g ts) wholeState ipt
+              runRWS (step g $ ts ()) wholeState ipt
         stepGame
           static                                -- GameState
           (nextSess, (accum - physicsDeltaUTC)) -- TimeStepper
@@ -176,13 +195,18 @@ run win initialGame = do
       print s
       doOutput la
 
-    run' :: InputControl -> GameSession -> GameTime -> (GameState, Game) -> IO ()
-    run' ctl session (lastFrameTime, accumulator) (st, game) = do
+    run' :: SoundCtl ->
+            InputControl ->
+            GameSession ->
+            GameTime ->
+            (GameState, Game) ->
+            IO ()
+    run' sctl ictl session (lastFrameTime, accumulator) (st, game) = do
 
       -- Poll events...
       GLFW.pollEvents
 
-      input <- getInput ctl
+      input <- getInput ictl
       if Set.member GLFW.Key'Q (keysPressed input)
         then GLFW.setWindowShouldClose win True
         else return ()
@@ -199,9 +223,12 @@ run win initialGame = do
       -- Render
       renderState $ mergeState (staticGameState game) nextState
 
+      -- Do audio
+      hearState sctl nextState
+
       -- Reset the input
-      setInput ctl newIpt
+      setInput ictl newIpt
 
       -- Check for exit
       q <- GLFW.windowShouldClose win
-      unless q $ run' ctl nextsession (curTime, accum) (nextState, nextGame)
+      unless q $ run' sctl ictl nextsession (curTime, accum) (nextState, nextGame)

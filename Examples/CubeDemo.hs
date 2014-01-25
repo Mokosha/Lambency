@@ -46,14 +46,23 @@ planeWire = do
 
 cubeWire :: IO (LR.GameWire [LR.GameObject])
 cubeWire = do
+  sound <- getDataFileName ("stereol" <.> "wav") >>= L.loadSound
   (Just tex) <- getDataFileName ("crate" <.> "png") >>= LR.loadTextureFromPNG
   ro <- LR.createRenderObject LR.cube (LR.createTexturedMaterial tex)
-  return $ LR.mkObject ro (rotate initial)
+  return $ LR.mkGameObject $
+    (playSound sound &&& LR.mkObject ro (rotate initial)) >>>
+    (arr $ uncurry $ flip LR.attachSound)
   where
+    playSound :: L.SoundObject -> LR.GameWire L.SoundObject
+    playSound sound =
+      (W.mkConst (Right $ L.startSound sound) >>>
+       W.periodic 3.0 >>>
+       LR.onEvent)
+      W.<|> W.mkConst (Right sound)
+    
     rotate :: Monad m => LR.Transform -> W.Wire LR.Timestep e m a LR.Transform
     rotate xform =
-      W.mkPure (\ts _ -> let
-                   W.Timed dt () = ts ()
+      W.mkPure (\(W.Timed dt ()) _ -> let
                    newxform = LR.rotateWorld (rotU vec3Y (3.0 * dt)) xform
                    in (Right newxform, rotate newxform))
 

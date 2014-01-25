@@ -17,6 +17,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
 
 import Graphics.UI.Lambency.Input
+import Graphics.UI.Lambency.Sound
 
 import qualified Graphics.Rendering.Lambency.Transform as XForm
 import qualified Graphics.Rendering.Lambency.Bounds as BV
@@ -150,6 +151,7 @@ data RenderObject = RenderObject {
 -- to register collision with other objects that have a collider, etc.
 data Component = CollisionComponent BV.BoundingVolume
                | RenderComponent RenderObject
+               | SoundComponent SoundObject
 
 --------------------------------------------------------------------------------
 
@@ -179,10 +181,10 @@ data Game = Game {
 
 -- Game State
 
-type Timestep = () -> W.Timed Float ()
+type Timestep = W.Timed Float ()
 type GameMonad = RWS GameState [LogAction] Input
 type GameWire a = W.Wire Timestep () GameMonad () a
-type GameSession = W.Session IO Timestep
+type GameSession = W.Session IO (() -> Timestep)
 
 -- The game timer has two parts. The first is the time after the last rendering
 -- and the second is the amount of time left over from performing the

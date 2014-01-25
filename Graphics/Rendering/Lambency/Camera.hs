@@ -187,14 +187,12 @@ mkFixedCam cam = W.mkConst $ Right cam
   
 mkDebugCam :: Camera -> W.Wire Timestep e GameMonad a Camera
 mkDebugCam (Camera xform camTy camSz) =
-  W.mkGen $ \time _ -> let
-    W.Timed dt () = time ()
-    in do
-      ipt <- get
-      let newcam :: Camera
-          newcam = updCam dt ipt
-      put $ resetCursorPos ipt
-      return (Right newcam, mkDebugCam newcam)
+  W.mkGen $ \(W.Timed dt ()) _ -> do
+    ipt <- get
+    let newcam :: Camera
+        newcam = updCam dt ipt
+    put $ resetCursorPos ipt
+    return (Right newcam, mkDebugCam newcam)
   where
     updCam :: Float -> Input -> Camera
     updCam dt ipt = Camera finalXForm camTy camSz
