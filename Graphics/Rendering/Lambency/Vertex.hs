@@ -24,6 +24,7 @@ data Vertex = Vertex2 Vec2
             | Vertex3 Vec3
             | TVertex3 Vec3 Vec2
             | OTVertex3 Vec3 Vec3 Vec2
+            deriving (Show)
 
 getDescriptors :: Vertex -> [GL.VertexArrayDescriptor Float]
 getDescriptors (TVertex3 _ _) = [
