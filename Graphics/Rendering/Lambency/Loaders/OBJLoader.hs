@@ -19,7 +19,6 @@ import Data.Array.Unboxed (UArray, listArray, (!))
 import Text.Parsec
 import Text.Parsec.Text (Parser)
 
-import Debug.Trace
 --------------------------------------------------------------------------------
 
 type OBJVertex = Vec3
@@ -54,8 +53,12 @@ data OBJGeometry = OBJGeometry {
 triangulate :: OBJFaceList -> OBJIndexList
 triangulate fs = let
   tglte :: OBJFace -> [OBJFace] -> [OBJFace]
-  tglte (i1 : i2 : i3 : rest) faces = tglte (i1 : i3 : rest) ([i1, i2, i3] : faces)
-  tglte f fcs = f : fcs
+  tglte f faces
+    | length f <= 3 = f : faces
+    | otherwise =
+      case f of
+        (i1 : i2 : i3 : rest) -> tglte (i1 : i3 : rest) ([i1, i2, i3] : faces)
+        _ -> error "Wat"
   in
    concat . concat $ map (flip tglte []) fs
 
@@ -71,7 +74,7 @@ mkVec2Lookup vecs = let
   arr = listArray
         (1, (length vecs + 1) * 2)
         (concat $ map (\(Vec2 x y) -> [x, y]) vecs)
-  in (\i -> Vec2 (arr ! (2*i)) (arr ! (2*i+1)))
+  in (\i -> Vec2 (arr ! (2*i-1)) (arr ! (2*i)))
 
 mkVec3Lookup :: [Vec3] -> (Int -> Vec3)
 mkVec3Lookup vecs = let
@@ -79,7 +82,7 @@ mkVec3Lookup vecs = let
   arr = listArray
         (1, (length vecs + 1)  * 3)
         (concat $ map (\(Vec3 x y z) -> [x, y, z]) vecs)
-  in (\i -> Vec3 (arr ! (3*i)) (arr ! (3*i+1)) (arr ! (3*i+2)))
+  in (\i -> Vec3 (arr ! (3*i - 2)) (arr ! (3*i-1)) (arr ! (3*i)))
 
 genMesh :: OBJIndexList -> (OBJIndex -> Vertex) -> Mesh
 genMesh idxs f = let
@@ -124,7 +127,7 @@ normTexturedObj2Mesh :: OBJVertexList -> OBJTexCoordList -> OBJNormalList -> OBJ
 normTexturedObj2Mesh verts texcoords normals faces = let
   ns = mkVec3Lookup $ map fromNormal normals
   tcs = mkVec2Lookup texcoords
-  vs = trace ("Num verts: " ++ (show $ length verts)) $ mkVec3Lookup verts
+  vs = mkVec3Lookup verts
 
   idx2Vertex :: OBJIndex -> Vertex
   idx2Vertex (x, Just tc, Just n) = mkNormTexVertex3 (vs x) (ns n) (tcs tc)
@@ -179,7 +182,7 @@ parseFile = let
 
   -- FIXME -- 
   errata :: Parser ()
-  errata = oneOf "os" >> many (noneOf ['\n']) >> newline >> return ()
+  errata = oneOf "osg" >> many (noneOf ['\n']) >> newline >> return ()
 
   blankLine :: Parser ()
   blankLine = (newline <|> (skipMany1 (tab <|> char ' ') >> newline)) >> return ()
@@ -198,26 +201,21 @@ parseFile = let
     return $ read v
 
   index :: Parser OBJIndex
-  index = let
-    ix = char '/' >> integer
-    iix = string "//" >> integer >>= (return . Just)
-    in 
-     do
-       skipMany (tab <|> char ' ')
-       idx <- integer
-       ixs <- many ix
-       if ixs == [] then do i <- option Nothing iix
-                            return (idx, Nothing, i)
-         else
-         case ixs of
-           (x : []) -> return (idx, Just x, Nothing)
-           (x1 : x2 : []) -> return (idx, Just x1, Just x2)
-           _ -> return (idx, Nothing, Nothing)
+  index = do
+    skipMany (tab <|> char ' ')
+    idx <- integer
+    (tc, n) <- (do _ <- char '/'
+                   mtc <- option Nothing $ integer >>= (return . Just)
+                   mn <- (char '/' >> integer >>= (return.Just)) <|> (return Nothing)
+                   return (mtc, mn))
+               <|>
+               (return (Nothing, Nothing))
+    skipMany (tab <|> char ' ')
+    return (idx, tc, n)
 
   face :: Parser Value
   face = do
-    _ <- char 'f'
-    idxs <- many1 index
+    idxs <- char 'f' >> (many1 index)
     return $ Face idxs
 
   value :: Parser Value
