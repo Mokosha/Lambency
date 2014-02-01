@@ -21,11 +21,11 @@ import Data.Vect.Float
 import Foreign.Ptr
 --------------------------------------------------------------------------------
 
-data Vertex = Vertex2 Vec2
-            | Vertex3 Vec3
-            | TVertex3 Vec3 Vec2
-            | OVertex3 Vec3 Vec3
-            | OTVertex3 Vec3 Vec3 Vec2
+data Vertex = Vertex2 !Vec2
+            | Vertex3 !Vec3
+            | TVertex3 !Vec3 !Vec2
+            | OVertex3 !Vec3 !Vec3
+            | OTVertex3 !Vec3 !Vec3 !Vec2
             deriving (Show)
 
 getDescriptors :: Vertex -> [GL.VertexArrayDescriptor Float]
