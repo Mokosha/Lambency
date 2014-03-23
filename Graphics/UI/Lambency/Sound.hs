@@ -1,12 +1,10 @@
 module Graphics.UI.Lambency.Sound (
-  Sound, SoundObject, SoundCtl,
+  Sound, SoundCtl, SoundCommand(..),
   initSound,
   freeSound,
   createSoundCtl,
   loadSound,
   handleCommand,
-  startSound,
-  stopSound
 ) where
 
 --------------------------------------------------------------------------------
@@ -22,6 +20,8 @@ import qualified Data.Map as Map
 
 type Sound = Mix.Chunk
 type SoundCtl = TVar (Map.Map Sound Mix.Channel)
+data SoundCommand = StartSound
+                  | StopSound
 
 createSoundCtl :: IO (SoundCtl)
 createSoundCtl = newTVarIO $ Map.empty
@@ -35,50 +35,28 @@ initSound = do
         audioChannels = 256
         audioBuffers  = 4096
 
-loadSound :: FilePath -> IO (SoundObject)
-loadSound fp = do
-  s <- Mix.loadWAV fp
-  return $ SoundObject { sound = s, command = Nothing }
+loadSound :: FilePath -> IO (Sound)
+loadSound fp = return =<< Mix.loadWAV fp
 
-handleCommand :: SoundCtl -> SoundObject -> IO ()
-handleCommand ctl so = do
+handleCommand :: SoundCtl -> Sound -> SoundCommand -> IO ()
+handleCommand ctl sound StartSound = do
   smap <- readTVarIO ctl
-  nmap <-
-    case (command so) of
+  nmap <- do
+    ch <- Mix.playChannel (-1) sound 0
+    return $ Map.insert sound ch smap
+  atomically $ writeTVar ctl nmap
+
+handleCommand ctl sound StopSound = do
+  smap <- readTVarIO ctl
+  nmap <- do
+    case (Map.lookup sound smap) of
       Nothing -> return smap
-      Just StartSound -> do
-        let s = (sound so)
-        ch <- Mix.playChannel (-1) s 0
-        return $ Map.insert s ch smap
-
-      Just StopSound ->
-        case (Map.lookup (sound so) smap) of
-          Nothing -> return smap
-          Just ch -> do
-            Mix.haltChannel ch
-            return $ Map.delete (sound so) smap
-
+      Just ch -> do
+        Mix.haltChannel ch
+        return $ Map.delete sound smap
   atomically $ writeTVar ctl nmap
 
 freeSound :: IO ()
 freeSound = do
   Mix.closeAudio
   SDL.quit
-
---------------------------------------------------------------------------------
-
--- Audio Objects
-
-data SoundObject = SoundObject {
-  sound :: Sound,
-  command :: Maybe SoundCommand
-}
-
-data SoundCommand = StartSound
-                  | StopSound
-
-startSound :: SoundObject -> SoundObject
-startSound = (\so -> so { command = Just StartSound })
-
-stopSound :: SoundObject -> SoundObject
-stopSound = (\so -> so { command = Just StopSound })

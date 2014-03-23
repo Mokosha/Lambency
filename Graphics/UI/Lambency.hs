@@ -1,5 +1,5 @@
 module Graphics.UI.Lambency (
-  Input(..),
+  Input(..), isKeyPressed,
   makeWindow,
   destroyWindow,
   run,
@@ -23,6 +23,7 @@ import qualified Control.Wire as W
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import Data.Time
+import Data.Vect.Float
 
 import GHC.Float
 
@@ -46,6 +47,8 @@ makeWindow width height title = do
       GLFW.makeContextCurrent m
 
       -- Initial defaults
+      GL.blend GL.$= GL.Enabled
+      GL.blendFunc GL.$= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
       GL.depthFunc GL.$= Just GL.Lequal
       GL.cullFace GL.$= Just GL.Back
       initLambency
@@ -89,73 +92,45 @@ physicsDeltaUTC = let
    diffUTCTime dayEnd dayStart
 
 type TimeStepper = (GameSession, NominalDiffTime)
-type StateStepper = (GameState, Game, Input)
+type StateStepper a = (Game a, Input)
 
-run :: GLFW.Window -> Game -> IO ()
-run win initialGame = do
+run :: GLFW.Window -> a -> Game a -> IO ()
+run win initialGameObject initialGame = do
   GLFW.swapInterval 1
   sctl <- createSoundCtl
   ictl <- mkInputControl win
   let session = W.countSession (double2Float physicsDeltaTime)
   curTime <- getCurrentTime
-  run' sctl ictl session
+  run' sctl ictl
+    initialGameObject
+    session
     (curTime, diffUTCTime curTime curTime)
-    (staticGameState initialGame, initialGame)
+    initialGame
   where
 
-    hearState :: SoundCtl -> GameState -> IO ()
-    hearState ctl (_, _, gameObjs) = mapM_ (handleCommand ctl) (toSoundObjs gameObjs)
-      where
-        collect :: [Component] -> [SoundObject]
-        collect [] = []
-        collect (SoundComponent so : cs) = so : (collect cs)
-        collect (_ : cs) = collect cs
-        
-        toSoundObj :: GameObject -> [SoundObject]
-        toSoundObj (GameObject _ cs) = collect cs
-        
-        toSoundObjs :: [GameObject] -> [SoundObject]
-        toSoundObjs = (>>= toSoundObj)
+    place :: Transform -> Camera -> RenderObject -> RenderObject
+    place xf cam ro = let
+      model :: Mat4
+      model = xform2Matrix xf
 
-    renderState :: GameState -> IO ()
-    renderState (cam, lights, gameObjs) = do
-      -- !FIXME! This should be moved to the camera...
-      GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
-      clearBuffers
-      mapM_ (flip renderLight $ toRenderObjs gameObjs) lights
-      GL.flush
+      sm :: ShaderMap
+      sm = Map.fromList [
+        ("mvpMatrix", Matrix4Val $ model .*. (getViewProjMatrix cam)),
+        ("m2wMatrix", Matrix4Val $ model)]
+      in
+       RenderObject {
+         material = Map.union sm (material ro),
+         render = (render ro)}
 
-      -- Swap buffers and poll events...
-      GLFW.swapBuffers win
-
-      where
-        collect :: [Component] -> [RenderObject]
-        collect [] = []
-        collect (RenderComponent ro : cs) = ro : (collect cs)
-        collect (_ : cs) = collect cs
-
-        place :: Transform -> RenderObject -> RenderObject
-        place xf ro = RenderObject {
-          material = Map.union (positioned cam xf) (material ro),
-          render = (render ro)
-          }
-
-        toRenderObj :: GameObject -> [RenderObject]
-        toRenderObj (GameObject xf cs) = map (place xf) (collect cs)
-
-        toRenderObjs :: [GameObject] -> [RenderObject]
-        toRenderObjs = (>>= toRenderObj)
-
-    step :: Game -> Timestep -> GameMonad (GameState, Game)
-    step game dt = do
+    step :: a -> Game a -> Timestep -> GameMonad (a, Camera, [Light], Game a)
+    step go game dt = do
       (Right cam, nCamWire) <- W.stepWire (mainCamera game) dt (Right ())
-      gameObjs <- mapM (\w -> W.stepWire w dt $ Right ()) (gameObjects game)
+      (Right gameObj, gameWire) <- W.stepWire (gameLogic game) dt (Right go)
       lightObjs <- mapM (\w -> W.stepWire w dt $ Right ()) (dynamicLights game)
-      let (objs, wires) = collect gameObjs
-          (lights, lwires) = collect lightObjs
-      return ((cam, lights, concat objs), newGame nCamWire lwires wires)
+      let (lights, lwires) = collect lightObjs
+      return (gameObj, cam, lights ++ (staticLights game), newGame nCamWire lwires gameWire)
         where
-          collect :: [(Either e a, GameWire a)] -> ([a], [GameWire a])
+          collect :: [(Either e b, GameWire a b)] -> ([b], [GameWire a b])
           collect [] = ([], [])
           collect ((Left _, _) : rest) = collect rest
           collect ((Right obj, wire) : rest) = let
@@ -163,45 +138,72 @@ run win initialGame = do
             in
              (obj : objs, wire : wires)
 
-          newGame :: GameWire Camera -> [GameWire Light] -> [GameWire [GameObject]] -> Game
-          newGame cam lights objs = Game {
-            staticGameState = (staticGameState game),
+          newGame cam lights logic = Game {
+            staticLights = (staticLights game),
+            staticGeometry = (staticGeometry game),
             mainCamera = cam,
             dynamicLights = lights,
-            gameObjects = objs}
+            gameLogic = logic}
 
-    stepGame :: GameState -> TimeStepper -> StateStepper -> [LogAction] ->
-                IO (TimeStepper, StateStepper, [LogAction])
-    stepGame static tstep@(sess, accum) sstep@(gs, g, ipt) logs
-      | accum < physicsDeltaUTC = return (tstep, sstep, logs)
-      | otherwise = do
-        (ts, nextSess) <- W.stepSession sess
-        let wholeState = mergeState static gs
-            ((nextState, nextGame), newIpt, actions) =
-              runRWS (step g $ ts ()) wholeState ipt
-        stepGame
-          static                                -- GameState
-          (nextSess, (accum - physicsDeltaUTC)) -- TimeStepper
-          (nextState, nextGame, newIpt)         -- StateStepper
-          (logs ++ actions)                     -- Logs
+    performAction :: (OutputAction -> IO(Maybe OutputAction)) ->
+                     [OutputAction] -> IO ([OutputAction])
+    performAction _ [] = return []
+    performAction fn (act : acts) = do
+      res <- fn act
+      case res of
+        Nothing -> performAction fn acts
+        Just a -> do
+          ress <- performAction fn acts
+          return $ a : ress
 
-    mergeState :: GameState -> GameState -> GameState
-    mergeState (_, slights, sobjs) (cam, dlights, dobjs) =
-      (cam, slights ++ dlights, sobjs ++ dobjs)
+    playSounds :: SoundCtl -> [OutputAction] -> IO ([OutputAction])
+    playSounds sctl =
+      performAction (\act -> case act of
+                        SoundAction sound cmd -> do
+                          handleCommand sctl sound cmd
+                          return Nothing
+                        _ -> do
+                          return (Just act))
 
-    doOutput :: [LogAction] -> IO ()
-    doOutput [] = return ()
-    doOutput (StringOutput s : la) = do
+    printLogs :: [OutputAction] -> IO ([OutputAction])
+    printLogs [] = return []
+    printLogs (LogAction s : rest) = do
       print s
-      doOutput la
+      printLogs rest
+    printLogs (act : acts) = do
+      rest <- printLogs acts
+      return (act : rest)
 
-    run' :: SoundCtl ->
-            InputControl ->
-            GameSession ->
-            GameTime ->
-            (GameState, Game) ->
+    renderObjects :: [Light] -> Camera -> [OutputAction] -> IO ([OutputAction])
+                  -- This is the best line in my code
+    renderObjects lights camera action = do
+      let ros = do
+            act <- action
+            (xf, ro) <- case act of
+              Render3DAction xf' ro' -> [(xf', ro')]
+              _ -> []
+            return $ place xf camera ro
+
+      if length ros > 0 then
+        do
+          -- !FIXME! This should be moved to the camera...
+          GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
+          clearBuffers
+
+          mapM_ (flip renderLight ros) lights
+
+          GL.flush
+          GLFW.swapBuffers win
+        else return ()
+
+      return $ filter (\act -> case act of
+                          Render3DAction _ _ -> False
+                          _ -> True) action
+
+    run' :: SoundCtl -> InputControl ->
+            a -> GameSession -> GameTime -> Game a ->
             IO ()
-    run' sctl ictl session (lastFrameTime, accumulator) (st, game) = do
+    run' sctl ictl gameObject session (lastFrameTime, accumulator) game = do
 
       -- Poll events...
       GLFW.pollEvents
@@ -214,21 +216,37 @@ run win initialGame = do
       -- Step
       curTime <- getCurrentTime
       let newAccum = accumulator + (diffUTCTime curTime lastFrameTime)
-      ((nextsession, accum), (nextState, nextGame, newIpt), actions) <-
-        stepGame (staticGameState game) (session, newAccum) (st, game, input) []
-
-      -- Anything happen?
-      doOutput actions
-
-      -- Render
-      renderState $ mergeState (staticGameState game) nextState
-
-      -- Do audio
-      hearState sctl nextState
+      (go, (nextsession, accum), (nextGame, newIpt)) <-
+        stepGame gameObject (session, newAccum) (game, input)
 
       -- Reset the input
       setInput ictl newIpt
 
       -- Check for exit
       q <- GLFW.windowShouldClose win
-      unless q $ run' sctl ictl nextsession (curTime, accum) (nextState, nextGame)
+      unless q $ run' sctl ictl go nextsession (curTime, accum) nextGame
+     where
+       buildRO :: (Transform, RenderObject) -> OutputAction
+       buildRO = uncurry Render3DAction
+
+       stepGame :: a -> TimeStepper -> StateStepper a ->
+                   IO (a, TimeStepper, StateStepper a)
+       stepGame go tstep@(sess, accum) sstep@(g, ipt)
+         | accum < physicsDeltaUTC = return (go, tstep, sstep)
+         | otherwise = do
+           (ts, nextSess) <- W.stepSession sess
+           let ((obj, cam, lights, nextGame), newIpt, actions) =
+                 runRWS (step go g $ ts ()) () ipt
+           if (accum - physicsDeltaUTC) < physicsDeltaUTC then
+             -- Anything happen? Do rendering first, then rest of the actions
+             foldM_ (\acts f -> f acts) actions [
+               (renderObjects lights cam) . ((map buildRO $ staticGeometry g) ++),
+               printLogs,
+               playSounds sctl]
+             else do
+             _ <- printLogs actions
+             return ()
+
+           stepGame obj
+             (nextSess, (accum - physicsDeltaUTC)) -- TimeStepper
+             (nextGame, newIpt)                    -- StateStepper

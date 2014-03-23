@@ -104,7 +104,7 @@ initializeTexture ptr (w, h) fmt = do
   GL.textureWrapMode GL.Texture2D GL.S GL.$= (GL.Repeated, GL.Repeat)
   GL.textureWrapMode GL.Texture2D GL.T GL.$= (GL.Repeated, GL.Repeat)
 
-  putStrLn $ "Loaded texture with dimensions " ++ (show (w, h))
+  putStrLn $ "Loaded " ++ (show fmt) ++ "texture with dimensions " ++ (show (w, h))
   return $ Texture handle fmt
 
 loadTextureFromPNG :: FilePath -> IO(Maybe Texture)
@@ -122,6 +122,10 @@ loadTextureFromPNG filename = do
         (JP.ImageRGBA8 (JP.Image width height dat)) -> do
           tex <- Vector.unsafeWith dat $ \ptr ->
             initializeTexture ptr (fromIntegral width, fromIntegral height) RGBA8
+          return $ Just tex
+        (JP.ImageRGB8 (JP.Image width height dat)) -> do
+          tex <- Vector.unsafeWith dat $ \ptr ->
+            initializeTexture ptr (fromIntegral width, fromIntegral height) RGB8
           return $ Just tex
         _ -> return Nothing
 

@@ -5,10 +5,9 @@ module Graphics.Rendering.Lambency.Types (
   Texture(..), TextureFormat(..), FBOHandle, TextureHandle,
   Material,
   RenderObject(..),
-  Component(..),
-  LogAction(..),
+  OutputAction(..),
   GameWire, Timestep, GameMonad, GameState, GameSession, GameTime,
-  GameObject(..), Game(..)
+  Game(..)
 ) where
 
 --------------------------------------------------------------------------------
@@ -20,7 +19,6 @@ import Graphics.UI.Lambency.Input
 import Graphics.UI.Lambency.Sound
 
 import qualified Graphics.Rendering.Lambency.Transform as XForm
-import qualified Graphics.Rendering.Lambency.Bounds as BV
 
 import Data.Vect.Float
 import Data.Time.Clock
@@ -141,40 +139,33 @@ data RenderObject = RenderObject {
   render :: Shader -> ShaderMap -> IO ()
 }
 
---------------------------------------------------------------------------------
-
--- Components
--- 
--- A component is a way to annotate a game object with certain properties. For
--- example, a component may be a collider or a render object. Only game objects
--- that have a render object will be rendered. A game object will only be able
--- to register collision with other objects that have a collider, etc.
-data Component = CollisionComponent BV.BoundingVolume
-               | RenderComponent RenderObject
-               | SoundComponent SoundObject
+type RenderInstance = (XForm.Transform, RenderObject)
 
 --------------------------------------------------------------------------------
 
--- Logging functions
+-- Output functions
 --
-data LogAction = StringOutput String
+-- These functions are used to create side effects from our game wires. In
+-- general, the most common action will likely be to render something, however
+-- we may also want to output sound or a debug string as well.
+data OutputAction = LogAction String
+                  | SoundAction Sound SoundCommand
+                  | Render3DAction XForm.Transform RenderObject
 
 --------------------------------------------------------------------------------
 
--- Game Objects
+-- !FIXME! Game state should be a list of configuration parameters like screen
+-- size so that we can do raycasting from mouse coordinates and maybe some
+-- other things...
+type GameState = ()
 
--- GameObjects are a set of components and the way to update the components
--- based on user input. The output of the wire associated with a game object is
--- all of the new objects that will be added to the game environment.
-data GameObject = GameObject XForm.Transform [Component]
-
--- A GameState is a camera with a collection of game objects
-type GameState = (Camera, [Light], [GameObject])
-data Game = Game {
-  staticGameState :: GameState,
-  mainCamera :: GameWire Camera,
-  dynamicLights :: [GameWire Light],
-  gameObjects :: [GameWire [GameObject]]
+-- Game
+data Game a = Game {
+  staticLights :: [Light],
+  staticGeometry :: [RenderInstance],
+  mainCamera :: GameWire () Camera,
+  dynamicLights :: [GameWire () Light],
+  gameLogic :: GameWire a a
   }
 
 --------------------------------------------------------------------------------
@@ -182,8 +173,8 @@ data Game = Game {
 -- Game State
 
 type Timestep = W.Timed Float ()
-type GameMonad = RWS GameState [LogAction] Input
-type GameWire a = W.Wire Timestep () GameMonad () a
+type GameMonad = RWS GameState [OutputAction] Input
+type GameWire a b = W.Wire Timestep () GameMonad a b
 type GameSession = W.Session IO (() -> Timestep)
 
 -- The game timer has two parts. The first is the time after the last rendering
