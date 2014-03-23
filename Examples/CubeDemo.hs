@@ -23,8 +23,7 @@ initialCam = LR.mkPerspCamera
              0.1 1000.0
 
 demoCam :: LR.GameWire () LR.Camera
--- demoCam = LR.mkDebugCam initialCam
-demoCam = LR.mkFixedCam initialCam
+demoCam = LR.mkDebugCam initialCam
 
 planeWire :: IO (LR.Transform, LR.RenderObject)
 planeWire = do
