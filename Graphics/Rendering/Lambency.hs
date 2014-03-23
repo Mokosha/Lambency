@@ -4,8 +4,9 @@ module Graphics.Rendering.Lambency (
   module Graphics.Rendering.Lambency.Camera,
   module Graphics.Rendering.Lambency.GameObject,
   module Graphics.Rendering.Lambency.Light,
+  module Graphics.Rendering.Lambency.Loaders,  
   module Graphics.Rendering.Lambency.Material,
-  module Graphics.Rendering.Lambency.Mesh,
+  Mesh, triangle, cube, plane, quad,
   module Graphics.Rendering.Lambency.Renderable,
   module Graphics.Rendering.Lambency.Shader,
   module Graphics.Rendering.Lambency.Texture,
@@ -27,6 +28,7 @@ import Graphics.Rendering.Lambency.Bounds
 import Graphics.Rendering.Lambency.Camera
 import Graphics.Rendering.Lambency.GameObject
 import Graphics.Rendering.Lambency.Light
+import Graphics.Rendering.Lambency.Loaders
 import Graphics.Rendering.Lambency.Material
 import Graphics.Rendering.Lambency.Mesh
 import Graphics.Rendering.Lambency.Renderable

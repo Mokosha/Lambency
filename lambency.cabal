@@ -28,6 +28,8 @@ library
   other-modules:       Graphics.Rendering.Lambency.Bounds
                        Graphics.Rendering.Lambency.Camera
                        Graphics.Rendering.Lambency.Light
+                       Graphics.Rendering.Lambency.Loaders
+                       Graphics.Rendering.Lambency.Loaders.OBJLoader
                        Graphics.Rendering.Lambency.Material
                        Graphics.Rendering.Lambency.Mesh
                        Graphics.Rendering.Lambency.GameObject
@@ -48,6 +50,7 @@ library
                        OpenGLRaw ==1.4.0.0,
                        JuicyPixels >= 3.1.2,
                        vect == 0.4.7,
+                       parsec, text,
                        stm >= 2.4,
                        mtl >= 2.1.2,
                        netwire >= 5.0.0,
