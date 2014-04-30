@@ -41,6 +41,7 @@ library
                        Graphics.Rendering.Lambency.Vertex
                        Graphics.Rendering.Lambency.Utils
                        Graphics.UI.Lambency.Input
+                       Graphics.UI.Lambency.Sound
                        Paths_lambency
   ghc-options:         -Wall
   build-depends:       base > 4.5,
@@ -53,6 +54,7 @@ library
                        stm >= 2.4,
                        mtl >= 2.1.2,
                        netwire >= 5.0.0,
+                       SDL, SDL-mixer,
                        time,
                        containers,
                        bytestring,

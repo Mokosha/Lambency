@@ -1,8 +1,8 @@
 module Graphics.Rendering.Lambency.GameObject (
-  positioned,
-  rendersWith, collidesWith,
-  mkObject, mkStaticObject,
+  mkObject,
   withVelocity,
+  pulseSound,
+  onEvent,
   keyPressed
 ) where
 
@@ -10,57 +10,59 @@ module Graphics.Rendering.Lambency.GameObject (
 import qualified Graphics.UI.GLFW as GLFW
 
 import Graphics.UI.Lambency.Input
+import Graphics.UI.Lambency.Sound
 
-import Graphics.Rendering.Lambency.Bounds
-import Graphics.Rendering.Lambency.Camera
 import Graphics.Rendering.Lambency.Transform
 import Graphics.Rendering.Lambency.Types
 
 import Data.Vect.Float
-import qualified Data.Map as Map
 
 import Control.Arrow
 import Control.Wire
+import Control.Wire.Unsafe.Event
 import Control.Monad.State.Class
+import Control.Monad.Writer
 
 --------------------------------------------------------------------------------
 
-positioned :: Camera -> Transform -> ShaderMap
-positioned cam xform = let
-  model :: Mat4
-  model = xform2Matrix xform
-  in Map.fromList
-     [("mvpMatrix", Matrix4Val $ model .*. (getViewProjMatrix cam)),
-      ("m2wMatrix", Matrix4Val $ model)]
-
-rendersWith :: RenderObject -> GameObject -> GameObject
-rendersWith ro (GameObject xf cs) =
-  GameObject xf (RenderComponent ro : cs)
-
-collidesWith :: BoundingVolume -> GameObject -> GameObject
-collidesWith bv (GameObject xf cs) =
-  GameObject xf (CollisionComponent bv : cs)
-
-mkObject :: RenderObject -> GameWire Transform -> GameWire [GameObject]
-mkObject ro xfw =
-  xfw >>> (mkPure_ $ \xf -> Right $ [GameObject xf [RenderComponent ro]])
-
-mkStaticObject :: RenderObject -> Transform -> GameObject
-mkStaticObject ro xform = GameObject xform [RenderComponent ro]
+mkObject :: RenderObject -> GameWire a Transform -> GameWire a a
+mkObject ro xfw = mkGen $ \dt val -> do
+  (xform, nextWire) <- stepWire xfw dt (Right val)
+  case xform of
+    Right xf -> do
+      censor (Render3DAction xf ro :) $
+        return (Right val, mkObject ro nextWire)
+    Left i -> do
+      return $ (Left i, mkObject ro nextWire)
 
 withVelocity :: Monad m =>
                 Transform -> Wire Timestep e m a Vec3 ->
                 Wire Timestep e m a Transform
-withVelocity xform velWire = velWire >>> (moveXForm xform)
+withVelocity initial velWire = velWire >>> (moveXForm initial)
   where moveXForm :: Transform -> Wire Timestep e m Vec3 Transform
-        moveXForm xf = mkPure $ \ts vel -> let
-          Timed dt () = ts ()
+        moveXForm xf = mkPure $ \(Timed dt ()) vel -> let
           newxform = translate (dt *& vel) xf
           in (Right newxform, moveXForm newxform)
 
+pulseSound :: Sound -> GameWire a b -> GameWire a b
+pulseSound sound wire = mkGen $ \dt val -> do
+  (result, nextWire) <- stepWire wire dt (Right val)
+  censor (SoundAction sound StartSound :) $ return (result, nextWire)
+
+onEvent :: GameWire a (Event b) -> (b -> OutputAction) ->
+           GameWire a c -> GameWire a c
+onEvent eventWire actionFn wire = mkGen $ \dt val -> do
+  (e, nextE) <- stepWire eventWire dt (Right val)
+  (result, nextWire) <- stepWire wire dt (Right val)
+  case e of
+    Right (Event x) ->
+      censor (actionFn x :) $
+      return (result, onEvent nextE actionFn nextWire)
+    _ -> return (result, onEvent nextE actionFn nextWire)
+
 -- This wire produces the given value when the key is pressed otherwise
 -- it inhibits
-keyPressed :: GLFW.Key -> GameWire a -> GameWire a
+keyPressed :: GLFW.Key -> GameWire a b -> GameWire a b
 keyPressed key wire =
   wire >>>
   (mkGen_ $ \val -> do

@@ -14,15 +14,18 @@ maintainer:          krajcevski@gmail.com
 category:            Graphics
 build-type:          Simple
 cabal-version:       >=1.8
-data-files:          crate.png
+data-files:          crate.png,
+                     stereol.wav
 data-dir:            Assets
 
 executable lambcubedemo
   main-is:        CubeDemo.hs
+  ghc-options:    -Wall
   build-depends:  base > 4.5,
                   netwire >= 5,
                   lambency,
                   vect == 0.4.7,
+                  mtl,
                   containers,
                   directory,
                   filepath
