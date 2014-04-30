@@ -19,6 +19,7 @@ import Data.Array.Unboxed (UArray, listArray, (!))
 import Text.Parsec
 import Text.Parsec.Text (Parser)
 
+import Debug.Trace
 --------------------------------------------------------------------------------
 
 type OBJVertex = Vec3
@@ -70,19 +71,32 @@ simpleObj2Mesh verts faces = Mesh {
 
 mkVec2Lookup :: [Vec2] -> (Int -> Vec2)
 mkVec2Lookup vecs = let
+
+  l :: Int
+  l = length vecs
+  
   arr :: UArray Int Float
   arr = listArray
-        (1, (length vecs + 1) * 2)
+        (1, (l + 1) * 2)
         (concat $ map (\(Vec2 x y) -> [x, y]) vecs)
-  in (\i -> Vec2 (arr ! (2*i-1)) (arr ! (2*i)))
+
+  in (\i ->
+       let idx = if (i < 0) then (l + i + 1) else i
+       in Vec2 (arr ! (2*idx - 1)) (arr ! (2 * idx)))
 
 mkVec3Lookup :: [Vec3] -> (Int -> Vec3)
 mkVec3Lookup vecs = let
+  l :: Int
+  l = length vecs
+  
   arr :: UArray Int Float
   arr = listArray
-        (1, (length vecs + 1)  * 3)
+        (1, (l + 1) * 3)
         (concat $ map (\(Vec3 x y z) -> [x, y, z]) vecs)
-  in (\i -> Vec3 (arr ! (3*i - 2)) (arr ! (3*i-1)) (arr ! (3*i)))
+
+  in \i ->
+       let idx = if (i < 0) then (l + i + 1) else i
+        in Vec3 (arr ! (3*idx - 2)) (arr ! (3*idx - 1)) (arr ! (3 * idx))
 
 genMesh :: OBJIndexList -> (OBJIndex -> Vertex) -> Mesh
 genMesh idxs f = let
@@ -156,13 +170,15 @@ parseFile = let
     spaces
     sign <- option 1 $ do s <- oneOf "+-"
                           return $ if s == '-' then (-1.0) else 1.0
-    t <- many digit
-    _ <- if t == [] then (char '.') else (try $ char '.')
-    d <- many digit
-    e <- option "0" $ do _ <- char 'e'
-                         many1 digit
+    t <- option "0" $ many digit
+    _ <- if t == [] then (char '.') else ((try $ char '.') <|> (return ' '))
+    d <- option "0" $ many1 digit
+    let
+      denom :: Float
+      denom = if d == "0" then 1.0 else (fromIntegral $ length d)
+    e <- option "0" $ char 'e' >> (many1 digit)
 
-    return $ ((read t) + ((read d) / (10 ** (fromIntegral $ length d)))) * (10 ** (read e)) * sign
+    return $ ((read t) + ((read d) / (10 ** denom))) * (10 ** (read e)) * sign
 
   vector2 :: Parser Vec2
   vector2 = do
@@ -177,12 +193,17 @@ parseFile = let
     z <- float
     return $ Vec3 x y z
 
+  ignoreRestOfLine :: Parser ()
+  ignoreRestOfLine = many (noneOf ['\n']) >> newline >> return ()
+
   comment :: Parser ()
-  comment = char '#' >> many (noneOf ['\n']) >> newline >> return ()
+  comment = char '#' >> ignoreRestOfLine
 
   -- FIXME -- 
   errata :: Parser ()
-  errata = oneOf "osg" >> many (noneOf ['\n']) >> newline >> return ()
+  errata = try (string "mtllib" >> ignoreRestOfLine) <|>
+           try (string "usemtl" >> ignoreRestOfLine) <|>
+           (oneOf "osg" >> ignoreRestOfLine)
 
   blankLine :: Parser ()
   blankLine = (newline <|> (skipMany1 (tab <|> char ' ') >> newline)) >> return ()
@@ -197,8 +218,11 @@ parseFile = let
   integer :: Parser Int
   integer = do
     skipMany (tab <|> char ' ')
+    m <- option 1 $ do
+      _ <- char '-'
+      return (-1)
     v <- many1 digit
-    return $ read v
+    return $ m * (read v)
 
   index :: Parser OBJIndex
   index = do
@@ -221,12 +245,15 @@ parseFile = let
   value :: Parser Value
   value = vert <|> face
 
+  ignorableLines :: Parser ()
+  ignorableLines = many (errata <|> comment <|> blankLine) >> return ()
+
   parseLine :: Parser Value
   parseLine = let
-    ignorable = many (comment <|> blankLine <|> errata)
     in do
-      v <- ignorable >> value
-      ignorable >> return v
+      v <- ignorableLines >> value
+      skipMany (tab <|> char ' ')
+      ((try $ newline >> return ()) <|> (try eof)) >> return v
 
   initialGeom = OBJGeometry {
     objVerts = [],
@@ -248,6 +275,7 @@ parseFile = let
 
   in do
     vals <- many1 parseLine
+    _ <- try (ignorableLines >> eof) >> return ()
     return $ constructGeometry (reverse vals) initialGeom
 
 loadOBJ :: FilePath -> IO (Mesh)
@@ -257,6 +285,5 @@ loadOBJ filepath = let
     case parse parseFile filepath (pack s) of
       Left x -> error $ show x
       Right y -> y
-
   in
    readFile filepath >>= return . obj2Mesh . parseOBJ
