@@ -18,8 +18,6 @@ import Data.Array.Unboxed (UArray, listArray, (!))
 
 import Text.Parsec
 import Text.Parsec.Text (Parser)
-
-import Debug.Trace
 --------------------------------------------------------------------------------
 
 type OBJVertex = Vec3

@@ -40,7 +40,7 @@ initSound = do
 
 loadSound :: FilePath -> IO (Sound)
 -- loadSound fp = return =<< Mix.loadWAV fp
-loadSound fp = return ()
+loadSound _ = return ()
 
 handleCommand :: SoundCtl -> Sound -> SoundCommand -> IO ()
 --handleCommand ctl sound StartSound = do
@@ -60,7 +60,7 @@ handleCommand _ _ StartSound = return ()
 --        Mix.haltChannel ch
 --        return $ Map.delete sound smap
 --  atomically $ writeTVar ctl nmap
-handleCommand _ _ StartSound = return ()
+handleCommand _ _ StopSound = return ()
 
 freeSound :: IO ()
 --freeSound = do
