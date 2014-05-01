@@ -54,7 +54,7 @@ library
                        stm >= 2.4,
                        mtl >= 2.1.2,
                        netwire >= 5.0.0,
-                       SDL, SDL-mixer,
+                       -- SDL, SDL-mixer,
                        time,
                        containers,
                        bytestring,

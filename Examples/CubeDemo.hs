@@ -38,6 +38,7 @@ cubeWire :: IO (LR.GameWire () ())
 cubeWire = do
   sound <- getDataFileName ("stereol" <.> "wav") >>= L.loadSound
   (Just tex) <- getDataFileName ("crate" <.> "png") >>= LR.loadTextureFromPNG
+  -- mesh <- LR.loadOBJ "../test/cube.obj"
   ro <- LR.createRenderObject LR.cube (LR.createTexturedMaterial tex)
   return $ playSound sound 3.0 $ LR.mkObject ro (rotate initial)
   where
@@ -52,7 +53,9 @@ cubeWire = do
                    in (Right newxform, rotate newxform))
 
     initial :: LR.Transform
-    initial = LR.rotate (rotU (Vec3 1 0 1) 0.6) LR.identity
+    initial = LR.rotate (rotU (Vec3 1 0 1) 0.6) $
+              LR.uniformScale 2.0 $
+              LR.identity
 
 initGame :: IO (LR.Game ())
 initGame = do
