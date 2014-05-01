@@ -1,69 +1,93 @@
 module Graphics.UI.Lambency.Sound (
-  Sound, SoundCtl, SoundCommand(..),
+  Sound, SoundCommand(..),
   initSound,
   freeSound,
-  createSoundCtl,
   loadSound,
   handleCommand,
 ) where
 
 --------------------------------------------------------------------------------
 
-import Control.Concurrent.STM
+import GHC.Int
+import Data.Array.Storable
 
--- import qualified Graphics.UI.SDL as SDL
--- import qualified Graphics.UI.SDL.Mixer as Mix
+import qualified Codec.Wav as Wav
+import Data.Audio
+import qualified Sound.OpenAL.AL as AL
+import qualified Sound.OpenAL.ALC as ALC
 
-import qualified Data.Map as Map
+import qualified Graphics.Rendering.OpenGL as GL
 
 --------------------------------------------------------------------------------
 
 -- type Sound = Mix.Chunk
-type Sound = ()
--- type SoundCtl = TVar (Map.Map Sound Mix.Channel)
-type SoundCtl = TVar (Map.Map Sound ())
+type Sound = AL.Source
 data SoundCommand = StartSound
                   | StopSound
 
-createSoundCtl :: IO (SoundCtl)
-createSoundCtl = newTVarIO $ Map.empty
-
 initSound :: IO ()
 initSound = do
-  return ()
---  SDL.init [SDL.InitAudio]
---  Mix.openAudio audioRate audioFormat audioChannels audioBuffers
---  where audioRate     = 22050
---        audioFormat   = Mix.AudioS16LSB
---        audioChannels = 256
---        audioBuffers  = 4096
+  device <- ALC.openDevice Nothing
+  case device of
+    Nothing -> error "Failed to find audio device"
+    Just d -> do
+      context <- ALC.createContext d []
+      ALC.currentContext GL.$= context
+      case context of
+        Nothing -> putStrLn "WARNING: Failed to set current audio context"
+        Just _ -> putStrLn "Audio context successfully initiated."
+
+      -- Setup source and listener...
+      AL.listenerPosition GL.$= (GL.Vertex3 0 0 0)
+      AL.listenerVelocity GL.$= (GL.Vector3 0 0 0)
+      AL.orientation GL.$= (GL.Vector3 0 0 (-1), GL.Vector3 0 1 0)
 
 loadSound :: FilePath -> IO (Sound)
--- loadSound fp = return =<< Mix.loadWAV fp
-loadSound _ = return ()
+loadSound fp = do
+  -- Generate OpenAL source
+  source <- GL.genObjectName
+  AL.pitch source GL.$= 1
+  AL.sourceGain source GL.$= 1
+  AL.sourcePosition source GL.$= (GL.Vertex3 0 0 0)
+  AL.sourceVelocity source GL.$= (GL.Vector3 0 0 0)
+  AL.loopingMode source GL.$= AL.OneShot
 
-handleCommand :: SoundCtl -> Sound -> SoundCommand -> IO ()
---handleCommand ctl sound StartSound = do
---  smap <- readTVarIO ctl
---  nmap <- do
---    ch <- Mix.playChannel (-1) sound 0
---    return $ Map.insert sound ch smap
---  atomically $ writeTVar ctl nmap
-handleCommand _ _ StartSound = return ()
+  -- Load wav file
+  result <- (Wav.importFile :: FilePath -> IO (Either String (Audio Int16))) fp
+  a <- case result of
+    Left s -> error s
+    Right audio -> return audio
+  samples <- thaw (sampleData a)
 
---handleCommand ctl sound StopSound = do
---  smap <- readTVarIO ctl
---  nmap <- do
---    case (Map.lookup sound smap) of
---      Nothing -> return smap
---      Just ch -> do
---        Mix.haltChannel ch
---        return $ Map.delete sound smap
---  atomically $ writeTVar ctl nmap
-handleCommand _ _ StopSound = return ()
+  -- Generate OpenAL buffer
+  buffer <- GL.genObjectName
+  withStorableArray samples $ \ptr -> do
+    (sidx, eidx) <- getBounds samples
+    let nSamples = (fromIntegral eidx) - (fromIntegral sidx) + 1
+        nChannels = fromIntegral (channelNumber a)
+        -- Stereo means multiple samples per channel
+        mem = AL.MemoryRegion ptr (nChannels * nSamples)
+        format = if nChannels > 1 then AL.Stereo16 else AL.Mono16
+        freq = fromIntegral (sampleRate a)
+        soundData = AL.BufferData mem format freq
+    AL.bufferData buffer GL.$= soundData
+
+  -- Attach the source to the buffer...
+  AL.buffer source GL.$= (Just buffer)
+  return source
+
+handleCommand :: Sound -> SoundCommand -> IO ()
+handleCommand src StartSound = AL.play [src]
+handleCommand src StopSound = AL.stop [src]
 
 freeSound :: IO ()
---freeSound = do
---  Mix.closeAudio
---  SDL.quit
-freeSound = return ()
+freeSound = do
+  context <- GL.get ALC.currentContext
+  case context of
+    Nothing -> return ()
+    Just c -> do
+      (Just d) <- GL.get $ ALC.contextsDevice c
+      ALC.currentContext GL.$= Nothing
+      ALC.destroyContext c
+      result <- ALC.closeDevice d
+      if result then return () else error "Failed to close device!"

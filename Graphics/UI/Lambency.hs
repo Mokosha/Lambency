@@ -97,11 +97,10 @@ type StateStepper a = (Game a, Input)
 run :: GLFW.Window -> a -> Game a -> IO ()
 run win initialGameObject initialGame = do
   GLFW.swapInterval 1
-  sctl <- createSoundCtl
   ictl <- mkInputControl win
   let session = W.countSession (double2Float physicsDeltaTime)
   curTime <- getCurrentTime
-  run' sctl ictl
+  run' ictl
     initialGameObject
     session
     (curTime, diffUTCTime curTime curTime)
@@ -156,14 +155,14 @@ run win initialGameObject initialGame = do
           ress <- performAction fn acts
           return $ a : ress
 
-    playSounds :: SoundCtl -> [OutputAction] -> IO ([OutputAction])
-    playSounds sctl =
-      performAction (\act -> case act of
-                        SoundAction sound cmd -> do
-                          handleCommand sctl sound cmd
-                          return Nothing
-                        _ -> do
-                          return (Just act))
+    playSounds :: [OutputAction] -> IO ([OutputAction])
+    playSounds = performAction $
+                 (\act -> case act of
+                     SoundAction sound cmd -> do
+                       handleCommand sound cmd
+                       return Nothing
+                     _ -> do
+                       return (Just act))
 
     printLogs :: [OutputAction] -> IO ([OutputAction])
     printLogs [] = return []
@@ -200,10 +199,10 @@ run win initialGameObject initialGame = do
                           Render3DAction _ _ -> False
                           _ -> True) action
 
-    run' :: SoundCtl -> InputControl ->
+    run' :: InputControl ->
             a -> GameSession -> GameTime -> Game a ->
             IO ()
-    run' sctl ictl gameObject session (lastFrameTime, accumulator) game = do
+    run' ictl gameObject session (lastFrameTime, accumulator) game = do
 
       -- Poll events...
       GLFW.pollEvents
@@ -224,7 +223,7 @@ run win initialGameObject initialGame = do
 
       -- Check for exit
       q <- GLFW.windowShouldClose win
-      unless q $ run' sctl ictl go nextsession (curTime, accum) nextGame
+      unless q $ run' ictl go nextsession (curTime, accum) nextGame
      where
        buildRO :: (Transform, RenderObject) -> OutputAction
        buildRO = uncurry Render3DAction
@@ -242,7 +241,7 @@ run win initialGameObject initialGame = do
              foldM_ (\acts f -> f acts) actions [
                (renderObjects lights cam) . ((map buildRO $ staticGeometry g) ++),
                printLogs,
-               playSounds sctl]
+               playSounds]
              else do
              _ <- printLogs actions
              return ()
