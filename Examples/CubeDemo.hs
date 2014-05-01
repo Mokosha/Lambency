@@ -25,8 +25,8 @@ initialCam = LR.mkPerspCamera
 demoCam :: LR.GameWire () LR.Camera
 demoCam = LR.mkDebugCam initialCam
 
-planeWire :: IO (LR.Transform, LR.RenderObject)
-planeWire = do
+mkPlane :: IO (LR.Transform, LR.RenderObject)
+mkPlane = do
   tex <- LR.createSolidTexture (128, 128, 128, 255)
   ro <- LR.createRenderObject LR.plane (LR.createTexturedMaterial tex)
   return (xform, ro)
@@ -34,12 +34,22 @@ planeWire = do
                 LR.translate (Vec3 0 (-2) 0) $
                 LR.identity
 
+mkBunny:: IO (LR.Transform, LR.RenderObject)
+mkBunny = do
+  tex <- LR.createSolidTexture (67, 128, 67, 255)
+  mesh <- getDataFileName ("bunnyN" <.> "obj") >>= LR.loadOBJ
+  ro <- LR.createRenderObject mesh (LR.createTexturedMaterial tex)
+  return (xform, ro)
+  where xform = LR.rotate (rotU (Vec3 0 1 0) pi) $
+                LR.translate (Vec3 (-4) (-4.8) (-5)) $
+                LR.identity
+
 cubeWire :: IO (LR.GameWire () ())
 cubeWire = do
   sound <- getDataFileName ("stereol" <.> "wav") >>= L.loadSound
   (Just tex) <- getDataFileName ("crate" <.> "png") >>= LR.loadTextureFromPNG
-  -- mesh <- LR.loadOBJ "../test/cube.obj"
-  ro <- LR.createRenderObject LR.cube (LR.createTexturedMaterial tex)
+  mesh <- getDataFileName ("cube" <.> "obj") >>= LR.loadOBJ
+  ro <- LR.createRenderObject mesh (LR.createTexturedMaterial tex)
   return $ playSound sound 3.0 $ LR.mkObject ro (rotate initial)
   where
     playSound :: L.Sound -> Float -> LR.GameWire a a -> LR.GameWire a a
@@ -59,12 +69,13 @@ cubeWire = do
 
 initGame :: IO (LR.Game ())
 initGame = do
-  plane <- planeWire
+  plane <- mkPlane
+  bunny <- mkBunny
   cube <- cubeWire
   let lightPos = 10 *& (Vec3 (-1) 1 0)
   spotlight <- LR.createSpotlight lightPos (mkNormal $ neg lightPos) 0
   return $ LR.Game { LR.staticLights = [spotlight],
-                     LR.staticGeometry = [plane],
+                     LR.staticGeometry = [plane, bunny],
                      LR.mainCamera = demoCam,
                      LR.dynamicLights = [],
                      LR.gameLogic = cube }
