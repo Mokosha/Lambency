@@ -28,6 +28,9 @@ import qualified Data.Vector.Storable as Vector
 import qualified Data.ByteString as BS
 --------------------------------------------------------------------------------
 
+kShadowMapSize :: GL.GLsizei
+kShadowMapSize = 1024
+
 getHandle :: Texture -> TextureHandle
 getHandle (Texture h _) = h
 getHandle (RenderTexture h _) = h
@@ -44,7 +47,7 @@ bindRenderTexture :: Texture -> IO ()
 bindRenderTexture (Texture _ _) = return ()
 bindRenderTexture (RenderTexture _ h) = do
   GL.bindFramebuffer GL.Framebuffer GL.$= h
-  GL.viewport GL.$= (GL.Position 0 0, GL.Size 512 512)
+  GL.viewport GL.$= (GL.Position 0 0, GL.Size kShadowMapSize kShadowMapSize)
 
 clearRenderTexture :: IO ()
 clearRenderTexture = do
@@ -52,16 +55,16 @@ clearRenderTexture = do
   exists <- doesFileExist depthfile
   unless exists $ do
     GL.flush
-    arr <- newArray_ ((0, 0), (511, 511))
+    arr <- newArray_ ((0, 0), (fromIntegral $ kShadowMapSize - 1, fromIntegral $ kShadowMapSize - 1))
     withStorableArray arr (\ptr -> do
       GL.readPixels (GL.Position 0 0)
-        (GL.Size 512 512)
+        (GL.Size kShadowMapSize kShadowMapSize)
         (GL.PixelData GL.DepthComponent GL.Float ptr)
       GL.flush)
     farr <- (freeze :: StorableArray (Int, Int) Float -> IO (UArray (Int, Int) Float)) arr
     let img = JP.generateImage
               (\x y -> (round :: Float -> Word16) $ 65535 * (farr ! (x, y)))
-              512 512
+              (fromIntegral kShadowMapSize) (fromIntegral kShadowMapSize)
 
         smallest :: Integer
         smallest = fromIntegral $ Vector.minimum (JP.imageData img)
@@ -140,7 +143,7 @@ createDepthTexture = do
   GL.textureCompareMode GL.Texture2D GL.$= (Just GL.Greater)
   GL.depthTextureMode GL.Texture2D GL.$= GL.Intensity
   GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.DepthComponent32
-    (GL.TextureSize2D 512 512) 0 $ GL.PixelData GL.DepthComponent GL.UnsignedInt nullPtr
+    (GL.TextureSize2D kShadowMapSize kShadowMapSize) 0 $ GL.PixelData GL.DepthComponent GL.UnsignedInt nullPtr
 
   putStrLn "Creating framebuffer object..."
   rbHandle <- GL.genObjectName
