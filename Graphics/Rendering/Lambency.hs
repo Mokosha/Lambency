@@ -16,7 +16,7 @@ module Graphics.Rendering.Lambency (
   Material,
   RenderObject,
   OutputAction(..),
-  Timestep, Game(..), GameWire, GameState, GameMonad,
+  Game(..), GameWire, GameState, GameMonad,
   module Graphics.Rendering.Lambency.Utils,
 ) where
 

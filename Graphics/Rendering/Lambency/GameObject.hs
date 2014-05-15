@@ -36,13 +36,13 @@ mkObject ro xfw = mkGen $ \dt val -> do
       return $ (Left i, mkObject ro nextWire)
 
 withVelocity :: (Monad m, Monoid s) =>
-                Transform -> Wire (Timed Timestep s) e m a Vec3 ->
-                Wire (Timed Timestep s) e m a Transform
+                Transform -> Wire (Timed Float s) e m a Vec3 ->
+                Wire (Timed Float s) e m a Transform
 withVelocity initial velWire = velWire >>> (moveXForm initial)
   where moveXForm :: (Monad m, Monoid s) =>
-                     Transform -> Wire (Timed Timestep s) e m Vec3 Transform
-        moveXForm xf = mkPure $ \dt vel -> let
-          newxform = translate (dtime dt *& vel) xf
+                     Transform -> Wire (Timed Float s) e m Vec3 Transform
+        moveXForm xf = mkPure $ \t vel -> let
+          newxform = translate (dtime t *& vel) xf
           in (Right newxform, moveXForm newxform)
 
 pulseSound :: Sound -> GameWire a b -> GameWire a b

@@ -121,11 +121,11 @@ run win initialGameObject initialGame = do
          material = Map.union sm (material ro),
          render = (render ro)}
 
-    step :: a -> Game a -> TimeValue -> GameMonad (a, Camera, [Light], Game a)
-    step go game dt = do
-      (Right cam, nCamWire) <- W.stepWire (mainCamera game) dt (Right ())
-      (Right gameObj, gameWire) <- W.stepWire (gameLogic game) dt (Right go)
-      lightObjs <- mapM (\w -> W.stepWire w dt $ Right ()) (dynamicLights game)
+    step :: a -> Game a -> TimeStep -> GameMonad (a, Camera, [Light], Game a)
+    step go game t = do
+      (Right cam, nCamWire) <- W.stepWire (mainCamera game) t (Right ())
+      (Right gameObj, gameWire) <- W.stepWire (gameLogic game) t (Right go)
+      lightObjs <- mapM (\w -> W.stepWire w t $ Right ()) (dynamicLights game)
       let (lights, lwires) = collect lightObjs
       return (gameObj, cam, lights ++ (staticLights game), newGame nCamWire lwires gameWire)
         where
