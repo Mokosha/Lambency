@@ -6,7 +6,8 @@ module Graphics.Rendering.Lambency.Types (
   Material,
   RenderObject(..),
   OutputAction(..),
-  GameWire, Timestep, GameMonad, GameState, GameSession, GameTime,
+  Timestep, TimeValue,
+  GameWire, GameMonad, GameState, GameSession, GameTime,
   Game(..)
 ) where
 
@@ -168,14 +169,19 @@ data Game a = Game {
   gameLogic :: GameWire a a
   }
 
+-- !FIXME! Timestep shouldn't need to be a Num, but since
+-- Netwire requires HasTime t s for t to be a Real, it should
+-- be a Num too....
+type Timestep = Float
+type TimeValue = W.Timed Timestep ()
+
 --------------------------------------------------------------------------------
 
 -- Game State
 
-type Timestep = W.Timed Float ()
 type GameMonad = RWS GameState [OutputAction] Input
-type GameWire a b = W.Wire Timestep () GameMonad a b
-type GameSession = W.Session IO (() -> Timestep)
+type GameWire a b = W.Wire TimeValue () GameMonad a b
+type GameSession = W.Session IO TimeValue
 
 -- The game timer has two parts. The first is the time after the last rendering
 -- and the second is the amount of time left over from performing the

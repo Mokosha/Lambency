@@ -185,44 +185,46 @@ getViewProjMatrix c = (getViewMatrix c) .*. (getProjMatrix c)
 mkFixedCam :: Monad m => Camera -> W.Wire s e m a Camera
 mkFixedCam cam = W.mkConst $ Right cam
   
-mkDebugCam :: Camera -> W.Wire Timestep e GameMonad a Camera
-mkDebugCam (Camera xform camTy camSz) =
-  W.mkGen $ \(W.Timed dt ()) _ -> do
-    ipt <- get
-    let newcam :: Camera
-        newcam = updCam dt ipt
-    put $ resetCursorPos ipt
-    return (Right newcam, mkDebugCam newcam)
-  where
-    updCam :: Float -> Input -> Camera
-    updCam dt ipt = Camera finalXForm camTy camSz
-     where
-      (mx, my) = case (cursor ipt) of
-        Just x -> x
-        Nothing -> (0, 0)
-
-      tr :: GLFW.Key -> Float -> (XForm.Transform -> Normal3) ->
-            (XForm.Transform -> XForm.Transform)
-      tr k sc dir = let
-        vdir = fromNormal . dir
-        s = 3.0 * dt * sc
-        in
-         withPressedKey ipt k (\x -> XForm.translate (s *& (vdir x)) x)
+mkDebugCam :: Monoid s =>
+              Camera -> W.Wire (W.Timed Timestep s) e GameMonad a Camera
+mkDebugCam (Camera xform camTy camSz) = let
+  updCam :: Timestep -> Input -> Camera
+  updCam dt ipt = Camera finalXForm camTy camSz
+    where
+      finalXForm = let
+        newXForm = movement xform
+        in mkXForm
+           (XForm.position newXForm)
+           (negN $ XForm.forward newXForm)
+           (toNormalUnsafe vec3Y)
 
       movement :: XForm.Transform -> XForm.Transform
-      movement = foldl1 (.) [
-        tr GLFW.Key'W (-1.0) XForm.forward,
-        tr GLFW.Key'S (1.0) XForm.forward,
-        tr GLFW.Key'A (-1.0) XForm.right,
-        tr GLFW.Key'D (1.0) XForm.right,
-        XForm.rotate $ foldl1 (.*.) [
-          rotU' (XForm.up xform) (-asin mx),
-          rotU' (XForm.right xform) (-asin my)]
-        ]
+      movement = let
+        tr :: GLFW.Key -> Float -> (XForm.Transform -> Normal3) ->
+              (XForm.Transform -> XForm.Transform)
+        tr k sc dir = let
+          vdir = fromNormal . dir
+          s = 3.0 * dt * sc
+         in
+          withPressedKey ipt k (\x -> XForm.translate (s *& (vdir x)) x)
 
-      finalXForm = mkXForm
-                   (XForm.position newXForm)
-                   (negN $ XForm.forward newXForm)
-                   (toNormalUnsafe vec3Y)
-        where
-          newXForm = movement xform
+        (mx, my) = case (cursor ipt) of
+          Just x -> x
+          Nothing -> (0, 0)
+
+       in
+        foldl1 (.) [
+          tr GLFW.Key'W (-1.0) XForm.forward,
+          tr GLFW.Key'S (1.0) XForm.forward,
+          tr GLFW.Key'A (-1.0) XForm.right,
+          tr GLFW.Key'D (1.0) XForm.right,
+          XForm.rotate $ foldl1 (.*.) [
+            rotU' (XForm.up xform) (-asin mx),
+            rotU' (XForm.right xform) (-asin my)]
+          ]
+  in
+   W.mkGen $ \dt _ -> do
+     ipt <- get
+     let newcam = updCam (W.dtime dt) ipt
+     put $ resetCursorPos ipt
+     return (Right newcam, mkDebugCam newcam)

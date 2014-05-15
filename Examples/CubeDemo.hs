@@ -56,10 +56,10 @@ cubeWire = do
     playSound sound period wire =
       LR.onEvent (W.periodic period) (\_ -> LR.SoundAction sound L.StartSound) wire
 
-    rotate :: Monad m => LR.Transform -> W.Wire LR.Timestep e m a LR.Transform
+    rotate :: LR.Transform -> LR.GameWire a LR.Transform
     rotate xform =
-      W.mkPure (\(W.Timed dt ()) _ -> let
-                   newxform = LR.rotateWorld (rotU vec3Y (3.0 * dt)) xform
+      W.mkPure (\t _ -> let
+                   newxform = LR.rotateWorld (rotU vec3Y (3.0 * (W.dtime t))) xform
                    in (Right newxform, rotate newxform))
 
     initial :: LR.Transform

@@ -98,7 +98,7 @@ run :: GLFW.Window -> a -> Game a -> IO ()
 run win initialGameObject initialGame = do
   GLFW.swapInterval 1
   ictl <- mkInputControl win
-  let session = W.countSession (double2Float physicsDeltaTime)
+  let session = W.countSession (double2Float physicsDeltaTime) W.<*> W.pure ()
   curTime <- getCurrentTime
   run' ictl
     initialGameObject
@@ -121,7 +121,7 @@ run win initialGameObject initialGame = do
          material = Map.union sm (material ro),
          render = (render ro)}
 
-    step :: a -> Game a -> Timestep -> GameMonad (a, Camera, [Light], Game a)
+    step :: a -> Game a -> TimeValue -> GameMonad (a, Camera, [Light], Game a)
     step go game dt = do
       (Right cam, nCamWire) <- W.stepWire (mainCamera game) dt (Right ())
       (Right gameObj, gameWire) <- W.stepWire (gameLogic game) dt (Right go)
@@ -235,7 +235,7 @@ run win initialGameObject initialGame = do
          | otherwise = do
            (ts, nextSess) <- W.stepSession sess
            let ((obj, cam, lights, nextGame), newIpt, actions) =
-                 runRWS (step go g $ ts ()) () ipt
+                 runRWS (step go g ts) () ipt
            if (accum - physicsDeltaUTC) < physicsDeltaUTC then
              -- Anything happen? Do rendering first, then rest of the actions
              foldM_ (\acts f -> f acts) actions [
