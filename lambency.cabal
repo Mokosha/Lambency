@@ -43,7 +43,7 @@ library
                        Graphics.UI.Lambency.Input
                        Graphics.UI.Lambency.Sound
                        Paths_lambency
-  ghc-options:         -Wall
+  ghc-options:         -Wall -O3
   build-depends:       base > 4.5,
                        GLFW-b,
                        OpenGL >=2.9.2.0,

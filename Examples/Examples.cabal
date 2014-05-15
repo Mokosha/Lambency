@@ -22,7 +22,7 @@ data-dir:            Assets
 
 executable lambcubedemo
   main-is:        CubeDemo.hs
-  ghc-options:    -Wall
+  ghc-options:    -Wall -rtsopts -O3
   build-depends:  base > 4.5,
                   netwire >= 5,
                   lambency,
