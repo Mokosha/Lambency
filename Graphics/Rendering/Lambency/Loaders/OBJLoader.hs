@@ -16,6 +16,8 @@ import Data.Text (pack)
 import Data.Vect.Float
 import Data.Array.Unboxed (UArray, listArray, (!))
 
+import Control.Applicative hiding (many, (<|>))
+
 import Text.Parsec
 import Text.Parsec.Text (Parser)
 --------------------------------------------------------------------------------
@@ -179,17 +181,10 @@ parseFile = let
     return $ ((read t) + ((read d) / (10 ** denom))) * (10 ** (read e)) * sign
 
   vector2 :: Parser Vec2
-  vector2 = do
-    x <- float
-    y <- float
-    return $ Vec2 x y
+  vector2 = Vec2 <$> float <*> float
 
   vector3 :: Parser Vec3
-  vector3 = do
-    x <- float
-    y <- float
-    z <- float
-    return $ Vec3 x y z
+  vector3 = Vec3 <$> float <*> float <*> float
 
   ignoreRestOfLine :: Parser ()
   ignoreRestOfLine = many (noneOf ['\n']) >> newline >> return ()
