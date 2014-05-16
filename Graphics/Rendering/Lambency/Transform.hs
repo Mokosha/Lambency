@@ -127,18 +127,18 @@ renormalize xf = updateAxis (right xf) u' f' xf
 rotateWorld :: UnitQuaternion -> Transform -> Transform
 rotateWorld quat xf = let
 
-  r = right xf
-  u = up xf
-  f = forward xf
+  r = right' xf
+  u = up' xf
+  f = forward' xf
   
   invWorldMat :: Mat3
-  invWorldMat = Mat3 (fromNormal r) (fromNormal u) (fromNormal f)
+  invWorldMat = Mat3 r u f
 
   worldMat :: Mat3
   worldMat = transpose invWorldMat
 
-  rotateAxis :: Normal3 -> Normal3
-  rotateAxis = mkNormal . (worldMat *.) . (actU quat) . (invWorldMat *.) . fromNormal
+  rotateAxis :: Vec3 -> Normal3
+  rotateAxis = mkNormal . (worldMat *.) . (actU quat) . (invWorldMat *.)
 
   in
    renormalize $ updateAxis (rotateAxis r) (rotateAxis u) (rotateAxis f) xf
