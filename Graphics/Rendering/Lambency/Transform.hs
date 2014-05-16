@@ -13,7 +13,7 @@ module Graphics.Rendering.Lambency.Transform (
 import Data.Vect.Float
 import Data.Vect.Float.Util.Quaternion
 
--- import qualified Control.Wire as W
+import qualified Control.Wire as W
 
 --------------------------------------------------------------------------------
 
@@ -214,4 +214,23 @@ instance Transformable3D Vec3 where
   rotate = actU
   nonuniformScale = (&!)
 
+instance (W.Monoid s, Monad m, Transformable3D b) =>
+         Transformable3D (W.Wire s e m a b) where
+  translate v w = W.mkGen $ \t a -> do
+    (result, w') <- W.stepWire w t (Right a)
+    case result of
+      Left _ -> return $ (result, translate v w')
+      Right r -> return $ (Right $ translate v r, translate v w')
+
+  nonuniformScale s w = W.mkGen $ \t a -> do
+    (result, w') <- W.stepWire w t (Right a)
+    case result of
+      Left _ -> return $ (result, translate s w')
+      Right r -> return $ (Right $ nonuniformScale s r, nonuniformScale s w')
+
+  rotate r w = W.mkGen $ \t a -> do
+    (result, w') <- W.stepWire w t (Right a)
+    case result of
+      Left _ -> return $ (result, rotate r w')
+      Right b -> return $ (Right $ rotate r b, rotate r w')
 -- instance Transformable3D b => Transformable3D (W.Wire s e m a b) where
