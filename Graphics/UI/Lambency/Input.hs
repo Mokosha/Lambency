@@ -100,7 +100,7 @@ cursorPosCallback (IptCtl ctl _) win x y = do
 mkInputControl :: GLFW.Window -> IO (InputControl)
 mkInputControl win = do
 
-  GLFW.setCursorInputMode win GLFW.CursorInputMode'Hidden
+  GLFW.setCursorInputMode win GLFW.CursorInputMode'Disabled
 
   ctlvar <- newTVarIO kEmptyInput
   let ctl = IptCtl ctlvar win
