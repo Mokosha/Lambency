@@ -2,7 +2,6 @@ module Graphics.Rendering.Lambency.GameObject (
   mkObject,
   withVelocity,
   pulseSound,
-  onEvent,
   keyPressed
 ) where
 
@@ -19,7 +18,6 @@ import Data.Vect.Float
 
 import Control.Arrow
 import Control.Wire
-import Control.Wire.Unsafe.Event
 import Control.Monad.State.Class
 import Control.Monad.Writer
 
@@ -49,17 +47,6 @@ pulseSound :: Sound -> GameWire a b -> GameWire a b
 pulseSound sound wire = mkGen $ \dt val -> do
   (result, nextWire) <- stepWire wire dt (Right val)
   censor (SoundAction sound StartSound :) $ return (result, nextWire)
-
-onEvent :: GameWire a (Event b) -> (b -> OutputAction) ->
-           GameWire a c -> GameWire a c
-onEvent eventWire actionFn wire = mkGen $ \dt val -> do
-  (e, nextE) <- stepWire eventWire dt (Right val)
-  (result, nextWire) <- stepWire wire dt (Right val)
-  case e of
-    Right (Event x) ->
-      censor (actionFn x :) $
-      return (result, onEvent nextE actionFn nextWire)
-    _ -> return (result, onEvent nextE actionFn nextWire)
 
 -- This wire produces the given value when the key is pressed otherwise
 -- it inhibits

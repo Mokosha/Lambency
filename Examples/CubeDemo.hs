@@ -12,6 +12,7 @@ import System.FilePath
 import Paths_lambency_examples
 
 import qualified Control.Wire as W
+import Control.Monad.Writer
 ---------------------------------------------------------------------------------
 
 initialCam :: LR.Camera
@@ -50,16 +51,20 @@ cubeWire = do
   (Just tex) <- getDataFileName ("crate" <.> "png") >>= LR.loadTextureFromPNG
   mesh <- getDataFileName ("cube" <.> "obj") >>= LR.loadOBJ
   ro <- LR.createRenderObject mesh (LR.createTexturedMaterial tex)
-  return $ playSound sound 3.0 $ LR.mkObject ro (rotate initial)
+  return $ playSound sound 3.0 W.>>> (LR.mkObject ro (rotate initial))
   where
-    playSound :: L.Sound -> Float -> LR.GameWire a a -> LR.GameWire a a
-    playSound sound period wire =
-      LR.onEvent (W.periodic period) (\_ -> LR.SoundAction sound L.StartSound) wire
+    playSound :: L.Sound -> Float -> LR.GameWire a a
+    playSound sound period = let
+      soundWire = W.mkGen_ $ \v ->
+        censor (LR.SoundAction sound L.StartSound :) (return $ Right v)
+      in
+       ((W.periodic period) W.>>> (W.holdFor 1e-10) W.>>> soundWire) W.<|> W.id
 
     rotate :: LR.Transform -> LR.GameWire a LR.Transform
     rotate xform =
       W.mkPure (\t _ -> let
-                   newxform = LR.rotateWorld (rotU vec3Y (3.0 * (W.dtime t))) xform
+                   rotation = rotU vec3Y $ 3.0 * (W.dtime t)
+                   newxform = LR.rotateWorld rotation xform
                    in (Right newxform, rotate newxform))
 
     initial :: LR.Transform
