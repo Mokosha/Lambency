@@ -130,7 +130,7 @@ rotateWorld quat xf = let
   r = right' xf
   u = up' xf
   f = forward' xf
-  
+
   invWorldMat :: Mat3
   invWorldMat = Mat3 r u f
 
@@ -245,4 +245,3 @@ instance (W.Monoid s, Monad m, Transformable3D b) =>
     case result of
       Left _ -> return $ (result, rotate r w')
       Right b -> return $ (Right $ rotate r b, rotate r w')
--- instance Transformable3D b => Transformable3D (W.Wire s e m a b) where
