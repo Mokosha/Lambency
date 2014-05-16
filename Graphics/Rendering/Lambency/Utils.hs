@@ -3,7 +3,9 @@ module Graphics.Rendering.Lambency.Utils (
   compareClose,
   destructMat4,
   negN,
+  clamp,
   newRange,
+  newRangeC,
 ) where
 
 --------------------------------------------------------------------------------
@@ -28,6 +30,12 @@ destructMat4 mat = let
 negN :: UnitVector v u => u -> u
 negN = toNormalUnsafe . neg . fromNormal
 
+clamp :: Ord a => a -> a -> a -> a
+clamp x a b = if x < a then a else if x > b then b else x
+
 newRange :: Floating a => a -> (a, a) -> (a, a) -> a
 newRange x (omin, omax) (nmin, nmax) =
   nmin + (nmax - nmin) * ((x - omin) / (omax - omin))
+
+newRangeC :: (Ord a, Floating a) => a -> (a, a) -> (a, a) -> a
+newRangeC x o n@(nmin, nmax) = clamp (newRange x o n) nmin nmax

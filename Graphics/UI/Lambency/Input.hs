@@ -46,6 +46,11 @@ debounceKey key = (\input -> input { keysPressed = Set.delete key (keysPressed i
 data InputControl = IptCtl (TVar Input) GLFW.Window
 
 -- Returns a snapshot of the input
+setCursorToWindowCenter :: GLFW.Window -> IO ()
+setCursorToWindowCenter win = do
+  (w, h) <- GLFW.getWindowSize win
+  GLFW.setCursorPos win (fromIntegral w / 2.0) (fromIntegral h / 2.0)
+
 getInput :: InputControl -> IO(Input)
 getInput (IptCtl var _) = readTVarIO var
 
@@ -53,9 +58,7 @@ setInput :: InputControl -> Input -> IO ()
 setInput (IptCtl var win) ipt = do
   case (cursor ipt) of
     Just _ -> return ()
-    Nothing -> do
-      (w, h) <- GLFW.getWindowSize win
-      GLFW.setCursorPos win (fromIntegral w / 2.0) (fromIntegral h / 2.0)
+    Nothing -> setCursorToWindowCenter win
   atomically $ writeTVar var ipt
 
 resetCursorPos :: Input -> Input
@@ -87,15 +90,16 @@ keyCallback (IptCtl ctl _) _ key _ keystate _ = atomically $ modifyTVar' ctl mod
       GLFW.KeyState'Released -> updateKeys $ Set.delete key
       _ -> id
 
+-- !HACK! Right now we're simply setting the cursor position as disabled
+-- regardless of application ... we should really expose this to the user
+-- somehow...
+
 cursorPosCallback :: InputControl -> GLFW.Window -> Double -> Double -> IO ()
 cursorPosCallback (IptCtl ctl _) win x y = do
   (w, h) <- GLFW.getWindowSize win
-  let xf = double2Float x
-      yf = double2Float y
-  atomically $ modifyTVar' ctl
-    (\ipt -> ipt { cursor = Just
-                   (newRange xf (0, fromIntegral w) (-1, 1),
-                    newRange yf (0, fromIntegral h) (-1, 1)) })
+  let xf = newRangeC (double2Float x) (0, fromIntegral w) (-1, 1)
+      yf = newRangeC (double2Float y) (0, fromIntegral h) (-1, 1)
+  atomically $ modifyTVar' ctl (\ipt -> ipt { cursor = Just (xf, yf)})
 
 mkInputControl :: GLFW.Window -> IO (InputControl)
 mkInputControl win = do
