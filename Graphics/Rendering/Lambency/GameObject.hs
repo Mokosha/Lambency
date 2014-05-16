@@ -43,10 +43,10 @@ withVelocity initial velWire = velWire >>> (moveXForm initial)
           newxform = translate (dtime t *& vel) xf
           in (Right newxform, moveXForm newxform)
 
-pulseSound :: Sound -> GameWire a b -> GameWire a b
-pulseSound sound wire = mkGen $ \dt val -> do
-  (result, nextWire) <- stepWire wire dt (Right val)
-  censor (SoundAction sound StartSound :) $ return (result, nextWire)
+pulseSound :: Sound -> GameWire a a
+pulseSound sound = mkGenN $ \val ->
+  censor (SoundAction sound StartSound :) $
+  return (Right val, Control.Wire.id)
 
 -- This wire produces the given value when the key is pressed otherwise
 -- it inhibits
