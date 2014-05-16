@@ -191,6 +191,18 @@ class Transformable3D a where
   uniformScale :: Float -> a -> a
   uniformScale s = nonuniformScale $ Vec3 s s s
 
+  transform :: Transform -> a -> a
+  transform Identity = id
+  transform (Scale s xf) = (nonuniformScale s) . (transform xf)
+  transform (OrthoNormal (r, u, _) xf) = let
+    determineRot :: Vec3 -> Vec3 -> UnitQuaternion
+    determineRot v1 v2 = rotU (v1 &^ v2) (acos $ v1 &. v2)
+    firstRot = determineRot (fromNormal r) vec3X
+    secondRot = determineRot (actU firstRot (fromNormal u)) vec3Y
+   in
+    rotate (firstRot `multU` secondRot) . (transform xf)
+  transform (Translate t xf) = (translate t) . (transform xf)
+
 instance Transformable3D Transform where
   translate t Identity = Translate t Identity
   translate t (Scale s xf) = Translate t $ Scale s xf
