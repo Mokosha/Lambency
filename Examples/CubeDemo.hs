@@ -53,9 +53,8 @@ cubeWire = do
   return $ playSound sound 3.0 W.>>> (LR.mkObject ro (rotate initial))
   where
     playSound :: L.Sound -> Float -> LR.GameWire a a
-    playSound sound p =
-      (LR.pulseSound sound W.&&& (W.at p) W.>>> W.until) W.-->
-      (playSound sound p)
+    playSound sound p = LR.pulseSound sound W.>>> (W.for p) W.-->
+                        playSound sound p
 
     rotate :: LR.Transform -> LR.GameWire a LR.Transform
     rotate xform =
