@@ -184,8 +184,8 @@ getViewProjMatrix c = (getViewMatrix c) .*. (getProjMatrix c)
 
 mkFixedCam :: Monad m => Camera -> W.Wire s e m a Camera
 mkFixedCam cam = W.mkConst $ Right cam
-  
-mkDebugCam :: Monoid s => Camera -> W.Wire (W.Timed Float s) e GameMonad a Camera
+
+mkDebugCam :: Camera -> GameWire a Camera
 mkDebugCam (Camera xform camTy camSz) = let
   updCam :: Float -> Input -> Camera
   updCam dt ipt = Camera finalXForm camTy camSz
