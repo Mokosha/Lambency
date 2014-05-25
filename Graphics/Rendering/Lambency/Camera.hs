@@ -26,24 +26,27 @@ import qualified Graphics.UI.GLFW as GLFW
 
 import Graphics.UI.Lambency.Input
 
-import Graphics.Rendering.Lambency.Utils
 import Graphics.Rendering.Lambency.Types
 import qualified Graphics.Rendering.Lambency.Transform as XForm
 
-import Data.Vect.Float
-import Data.Vect.Float.Util.Quaternion
-
 import qualified Control.Wire as W
 import Control.Monad.RWS.Strict
+
+import Linear.Matrix
+import Linear.Metric
+import qualified Linear.Quaternion as Quat
+import Linear.Vector
+import Linear.V3
+import Linear.V4
 --------------------------------------------------------------------------------
 
-mkXForm :: Vec3 -> Normal3 -> Normal3 -> XForm.Transform
+mkXForm :: Vec3f -> Vec3f -> Vec3f -> XForm.Transform
 mkXForm pos dir up = let
-  r = dir &^ up
-  u' = r &^ dir
-  in XForm.translate pos $ XForm.fromCoordinateBasis (r, u', negN dir)
+  r = signorm $ dir `cross` up
+  u' = signorm $ r `cross` dir
+  in XForm.translate pos $ XForm.fromCoordinateBasis (r, u', negate dir)
 
-mkOrthoCamera :: Vec3 -> Normal3 -> Normal3 ->
+mkOrthoCamera :: Vec3f -> Vec3f -> Vec3f  ->
                  Float -> Float -> Float -> Float -> Float -> Float ->
                  Camera
 mkOrthoCamera pos dir up l r t b n f = Camera
@@ -62,7 +65,7 @@ mkOrthoCamera pos dir up l r t b n f = Camera
     far = f
   }
 
-mkPerspCamera :: Vec3 -> Normal3 -> Normal3 ->
+mkPerspCamera :: Vec3f -> Vec3f -> Vec3f ->
                  Float -> Float -> Float -> Float -> Camera
 mkPerspCamera pos dir up fovy aspratio n f = Camera
 
@@ -91,21 +94,21 @@ getCamDist (Camera _ _ dist) = dist
 setCamDist :: Camera -> CameraViewDistance -> Camera
 setCamDist (Camera loc cam _) dist = Camera loc cam dist
 
-getCamPos :: Camera -> Vec3
+getCamPos :: Camera -> Vec3f
 getCamPos = XForm.position . getCamXForm
 
-setCamPos :: Camera -> Vec3 -> Camera
+setCamPos :: Camera -> Vec3f -> Camera
 setCamPos c p = let
   xf = getCamXForm c
   nd = XForm.forward xf
   u = XForm.up xf
   in
-   setCamXForm c $ mkXForm p (negN nd) u
+   setCamXForm c $ mkXForm p (negate nd) u
 
-getCamDir :: Camera -> Normal3
-getCamDir = negN . XForm.forward . getCamXForm
+getCamDir :: Camera -> Vec3f
+getCamDir = negate . XForm.forward . getCamXForm
 
-setCamDir :: Camera -> Normal3 -> Camera
+setCamDir :: Camera -> Vec3f -> Camera
 setCamDir c d = let
   xf = getCamXForm c
   u = XForm.up xf
@@ -113,16 +116,16 @@ setCamDir c d = let
   in
    setCamXForm c $ mkXForm p d u
 
-getCamUp :: Camera -> Normal3
+getCamUp :: Camera -> Vec3f
 getCamUp = XForm.up . getCamXForm
 
-setCamUp :: Camera -> Normal3 -> Camera
+setCamUp :: Camera -> Vec3f -> Camera
 setCamUp c u = let
   xf = getCamXForm c
   nd = XForm.forward xf
   p = XForm.position xf
   in
-   setCamXForm c $ mkXForm p (negN nd) u
+   setCamXForm c $ mkXForm p (negate nd) u
 
 getCamNear :: Camera -> Float
 getCamNear = near . getCamDist
@@ -142,28 +145,30 @@ setCamFar c f = let
   in
    setCamDist c $ (\d -> d { far = f }) dist
 
-getViewMatrix :: Camera -> Mat4
+getViewMatrix :: Camera -> Mat4f
 getViewMatrix (Camera xf _ _) =
   let
-    pos = neg . XForm.position $ xf
-    sca = XForm.scale xf
+    extendWith :: Float -> Vec3f -> Vec4f
+    extendWith w (V3 x y z) = V4 x y z w
+    pos = negate . XForm.position $ xf
+    (V3 sx sy sz) = XForm.scale xf
     r = XForm.right xf
     u = XForm.up xf
     f = XForm.forward xf
-    te :: Normal3 -> (Vec3 -> Float) -> Vec4
-    te n sc = extendWith (pos &. (fromNormal n)) (sc sca *& (fromNormal n))
-  in transpose $ Mat4 (te r _1) (te u _2) (te f _3) (Vec4 0 0 0 1)
+    te :: Vec3f -> Float -> Vec4f
+    te n sc = extendWith (pos `dot` n) (sc *^ n)
+  in adjoint $ V4 (te r sx) (te u sy) (te f sz) (V4 0 0 0 1)
 
-getProjMatrix :: Camera -> Mat4
+getProjMatrix :: Camera -> Mat4f
 getProjMatrix (Camera _ (Ortho {top = t, bottom = b, left = l, right = r}) dist) = let
   n = near dist
   f = far dist
   in
-   Mat4
-   (Vec4 (2.0 / (r - l)) 0 0 0)
-   (Vec4 0 (2.0 / (t - b)) 0 0)
-   (Vec4 0 0 ((-2.0) / (f - n)) 0)
-   (Vec4 (-(r+l)/(r-l)) (-(t+b)/(t-b)) (-(f+n)/(f-n)) 1)
+   V4
+   (V4 (2.0 / (r - l)) 0 0 0)
+   (V4 0 (2.0 / (t - b)) 0 0)
+   (V4 0 0 ((-2.0) / (f - n)) 0)
+   (V4 (-(r+l)/(r-l)) (-(t+b)/(t-b)) (-(f+n)/(f-n)) 1)
 
 getProjMatrix (Camera _ (Persp {fovY = fovy, aspect = a}) dist) = let
   n = near dist
@@ -171,14 +176,14 @@ getProjMatrix (Camera _ (Persp {fovY = fovy, aspect = a}) dist) = let
   t = n * (tan (fovy * 0.5))
   r = t * a
   in
-   Mat4
-   (Vec4 (n / r) 0 0 0)
-   (Vec4 0 (n / t) 0 0)
-   (Vec4 0 0 (-(f+n)/(f-n)) (-1))
-   (Vec4 0 0 (-(2*f*n)/(f-n)) 0)
+   V4
+   (V4 (n / r) 0 0 0)
+   (V4 0 (n / t) 0 0)
+   (V4 0 0 (-(f+n)/(f-n)) (-1))
+   (V4 0 0 (-(2*f*n)/(f-n)) 0)
 
-getViewProjMatrix :: Camera -> Mat4
-getViewProjMatrix c = (getViewMatrix c) .*. (getProjMatrix c)
+getViewProjMatrix :: Camera -> Mat4f
+getViewProjMatrix c = (getViewMatrix c) !*! (getProjMatrix c)
 
 --
 
@@ -194,18 +199,16 @@ mkDebugCam (Camera xform camTy camSz) = let
         newXForm = movement xform
         in mkXForm
            (XForm.position newXForm)
-           (negN $ XForm.forward newXForm)
-           (toNormalUnsafe vec3Y)
+           (negate $ XForm.forward newXForm)
+           (V3 0 1 0)
 
       movement :: XForm.Transform -> XForm.Transform
       movement = let
-        tr :: GLFW.Key -> Float -> (XForm.Transform -> Normal3) ->
+        tr :: GLFW.Key -> Float -> (XForm.Transform -> Vec3f) ->
               (XForm.Transform -> XForm.Transform)
-        tr k sc dir = let
-          vdir = fromNormal . dir
-          s = 3.0 * dt * sc
-         in
-          withPressedKey ipt k (\x -> XForm.translate (s *& (vdir x)) x)
+        tr k sc dir =
+          withPressedKey ipt k
+          (\x -> XForm.translate (3.0 * dt * sc *^ (dir x)) x)
 
         (mx, my) = case (cursor ipt) of
           Just x -> x
@@ -217,9 +220,9 @@ mkDebugCam (Camera xform camTy camSz) = let
           tr GLFW.Key'S (1.0) XForm.forward,
           tr GLFW.Key'A (-1.0) XForm.right,
           tr GLFW.Key'D (1.0) XForm.right,
-          XForm.rotate $ foldl1 (.*.) [
-            rotU' (XForm.up xform) (-asin mx),
-            rotU' (XForm.right xform) (-asin my)]
+          XForm.rotate $ foldl1 (*) [
+            Quat.axisAngle (XForm.up xform) (-asin mx),
+            Quat.axisAngle (XForm.right xform) (-asin my)]
           ]
   in
    W.mkGen $ \t _ -> do

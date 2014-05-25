@@ -14,12 +14,12 @@ import Graphics.UI.Lambency.Sound
 import Graphics.Rendering.Lambency.Transform
 import Graphics.Rendering.Lambency.Types
 
-import Data.Vect.Float
-
 import Control.Arrow
 import Control.Wire
 import Control.Monad.State.Class
 import Control.Monad.Writer
+
+import Linear.Vector
 
 --------------------------------------------------------------------------------
 
@@ -34,13 +34,13 @@ mkObject ro xfw = mkGen $ \dt val -> do
       return $ (Left i, mkObject ro nextWire)
 
 withVelocity :: (Monad m, Monoid s) =>
-                Transform -> Wire (Timed Float s) e m a Vec3 ->
+                Transform -> Wire (Timed Float s) e m a Vec3f ->
                 Wire (Timed Float s) e m a Transform
 withVelocity initial velWire = velWire >>> (moveXForm initial)
   where moveXForm :: (Monad m, Monoid s) =>
-                     Transform -> Wire (Timed Float s) e m Vec3 Transform
+                     Transform -> Wire (Timed Float s) e m Vec3f Transform
         moveXForm xf = mkPure $ \t vel -> let
-          newxform = translate (dtime t *& vel) xf
+          newxform = translate (dtime t *^ vel) xf
           in (Right newxform, moveXForm newxform)
 
 pulseSound :: Sound -> GameWire a a

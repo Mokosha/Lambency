@@ -23,9 +23,10 @@ import qualified Control.Wire as W
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import Data.Time
-import Data.Vect.Float
 
 import GHC.Float
+
+import Linear.Matrix
 
 --------------------------------------------------------------------------------
 
@@ -109,12 +110,12 @@ run win initialGameObject initialGame = do
 
     place :: Transform -> Camera -> RenderObject -> RenderObject
     place xf cam ro = let
-      model :: Mat4
+      model :: M44 Float
       model = xform2Matrix xf
 
       sm :: ShaderMap
       sm = Map.fromList [
-        ("mvpMatrix", Matrix4Val $ model .*. (getViewProjMatrix cam)),
+        ("mvpMatrix", Matrix4Val $ model !*! (getViewProjMatrix cam)),
         ("m2wMatrix", Matrix4Val $ model)]
       in
        RenderObject {

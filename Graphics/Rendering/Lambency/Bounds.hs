@@ -8,10 +8,17 @@ module Graphics.Rendering.Lambency.Bounds (
 
 --------------------------------------------------------------------------------
 
+import Graphics.Rendering.Lambency.Types
 import Graphics.Rendering.Lambency.Transform
 
-import Data.Vect.Float hiding (distance)
-import Data.Vect.Float.Util.Quaternion
+import Linear.Epsilon
+import Linear.Matrix
+import Linear.Metric
+import qualified Linear.Quaternion as Quat
+import Linear.Vector
+import Linear.V3
+
+import Control.Applicative
 
 --------------------------------------------------------------------------------
 
@@ -19,23 +26,23 @@ import Data.Vect.Float.Util.Quaternion
 
 data BoundingVolume = BoundingBox Float Float Float
                     | BoundingEllipse Float Float Float
-                    | RotatedVolume UnitQuaternion BoundingVolume
-                    | TranslatedVolume Vec3 BoundingVolume
+                    | RotatedVolume Quatf BoundingVolume
+                    | TranslatedVolume Vec3f BoundingVolume
                     | Union BoundingVolume BoundingVolume
 
 instance Transformable3D BoundingVolume where
-  translate t (TranslatedVolume t' bv) = TranslatedVolume (t &+ t') bv
+  translate t (TranslatedVolume t' bv) = TranslatedVolume (t ^+^ t') bv
   translate t (Union bv1 bv2) = Union (translate t bv1) (translate t bv2)
   translate t bv = TranslatedVolume t bv
 
-  rotate quat (RotatedVolume uq bv) = RotatedVolume (uq .*. quat) bv
+  rotate quat (RotatedVolume uq bv) = RotatedVolume (uq * quat) bv
   rotate quat (TranslatedVolume t bv) = TranslatedVolume t (rotate quat bv)
   rotate quat bv = RotatedVolume quat bv
 
-  nonuniformScale (Vec3 sx sy sz) (BoundingBox ex ey ez) =
-    BoundingBox (ex * sx) (ey * sy) (ez * sz)
-  nonuniformScale (Vec3 sx sy sz) (BoundingEllipse ex ey ez) =
-    BoundingEllipse (ex * sx) (ey * sy) (ez * sz)
+  nonuniformScale (V3 sx sy sz) (BoundingBox x y z) =
+    BoundingBox (x * sx) (y * sy) (z * sz)
+  nonuniformScale (V3 sx sy sz) (BoundingEllipse x y z) =
+    BoundingEllipse (x * sx) (y * sy) (z * sz)
 
   nonuniformScale s (RotatedVolume uq bv) = RotatedVolume uq (nonuniformScale s bv)
   nonuniformScale s (TranslatedVolume t bv) = TranslatedVolume t (nonuniformScale s bv)
@@ -43,35 +50,35 @@ instance Transformable3D BoundingVolume where
 
 -------------------------------------------------------------------------------
 
-aabb :: Vec3 -> Vec3 -> BoundingVolume
-aabb v1@(Vec3 x1 y1 z1) v2@(Vec3 x2 y2 z2) = let
+aabb :: Vec3f -> Vec3f -> BoundingVolume
+aabb v1@(V3 x1 y1 z1) v2@(V3 x2 y2 z2) = let
   szx = abs (x2 - x1)
   szy = abs (y2 - y1)
   szz = abs (z2 - z1)
-  c = (v1 &+ v2) &* 0.5
+  c = (v1 ^+^ v2) ^* 0.5
   in translate c $ BoundingBox (szx * 0.5) (szy * 0.5) (szz * 0.5)
 
-boundingSphere :: Vec3 -> Float -> BoundingVolume
+boundingSphere :: Vec3f -> Float -> BoundingVolume
 boundingSphere c r = translate c $ BoundingEllipse r r r
 
-containsPoint :: BoundingVolume -> Vec3 -> Bool
-containsPoint (BoundingBox x y z) (Vec3 x' y' z') =
+containsPoint :: BoundingVolume -> Vec3f -> Bool
+containsPoint (BoundingBox x y z) (V3 x' y' z') =
   and $ zipWith (\v w -> ((-w) >= v) && (v <= w)) [x', y', z'] [x, y, z]
-containsPoint (BoundingEllipse x y z) (Vec3 x' y' z') =
+containsPoint (BoundingEllipse x y z) (V3 x' y' z') =
   (sqr $ x' / x) + (sqr $ y' / y) + (sqr $ z' / z) < 1
   where
     sqr :: Num a => a -> a
     sqr k = k * k
 containsPoint (Union bv1 bv2) v = (containsPoint bv1 v) || (containsPoint bv2 v)
-containsPoint (TranslatedVolume t bv) v = containsPoint bv (v &- t)
-containsPoint (RotatedVolume q bv) v = containsPoint bv (actU (invU q) v)
+containsPoint (TranslatedVolume t bv) v = containsPoint bv (v ^-^ t)
+containsPoint (RotatedVolume q bv) v = containsPoint bv (Quat.rotate (negate q) v)
 
 -- An orientation is simply a position in world space, a rotation matrix, and
 -- and extents vector for each of the new coordinate axes
-type Orientation = (Vec3, Ortho3, Vec3)
+type Orientation = (Vec3f, Mat3f, Vec3f)
 
 io :: Orientation
-io = (zero, one, Vec3 1 1 1)
+io = (zero, eye3, V3 1 1 1)
 
 data OrientedVolume = Box Orientation
                     | Ellipse Orientation
@@ -82,37 +89,36 @@ collideOriented (Box (t, o, s)) (Box (t', o', s')) =
   -- First we need to rotate and translate the first box into the coordinate
   -- space of the second.
   let
-    rotateAtoB :: Ortho3
-    rotateAtoB = (transpose o') .*. o
+    rotateAtoB :: Mat3f
+    rotateAtoB = (adjoint o') !*! o
 
-    cBwrtA :: Vec3
-    cBwrtA = (t' &- t) .* (transpose $ fromOrtho o)
+    cBwrtA :: Vec3f
+    cBwrtA = (t' ^-^ t) *! (adjoint o)
 
-    eBwrtA :: Vec3
-    eBwrtA = s' .* (transpose $ fromOrtho rotateAtoB)
+    eBwrtA :: Vec3f
+    eBwrtA = s' *! (adjoint rotateAtoB)
 
-    absDot :: Vec3 -> Vec3 -> Float
-    absDot (Vec3 x y z) (Vec3 x' y' z') =
+    absDot :: Vec3f -> Vec3f -> Float
+    absDot (V3 x y z) (V3 x' y' z') =
       (abs $ x * x') + (abs $ y * y') + (abs $ z * z')
 
-    testAxis :: Normal3 -> Bool
-    testAxis axis = let v = fromNormal axis in
-      abs (cBwrtA &. v) <= ((s `absDot` v) + (eBwrtA `absDot` v))
+    testAxis :: Vec3f -> Bool
+    testAxis v = abs (cBwrtA `dot` v) <= ((s `absDot` v) + (eBwrtA `absDot` v))
 
-    axesA :: [Vec3]
-    axesA = [vec3X, vec3Y, vec3Z]
+    axesA :: [Vec3f]
+    axesA = [V3 1 0 0, V3 0 1 0, V3 0 0 1]
 
-    axesB :: [Vec3]
-    axesB = map (.* (fromOrtho rotateAtoB)) axesA
+    axesB :: [Vec3f]
+    axesB = map (*! rotateAtoB) axesA
 
   in
    or $
-   map (testAxis . mkNormal) $
-   filter (\v -> lensqr v > 0.01) $
-   [v1 &^ v2 | v1 <- axesA, v2 <- axesB] ++ axesA ++ axesB
+   map (testAxis . signorm) $
+   filter (not . nearZero) $
+   [v1 `cross` v2 | v1 <- axesA, v2 <- axesB] ++ axesA ++ axesB
 
-collideOriented (Ellipse (t, o, s)) (Box (t', o', s')) = False
-collideOriented (Ellipse (t, o, s)) (Ellipse (t', o', s')) = False
+-- collideOriented (Ellipse (t, o, s)) (Box (t', o', s')) = False
+-- collideOriented (Ellipse (t, o, s)) (Ellipse (t', o', s')) = False
 
 -- The only pattern we're missing is box-ellipse
 collideOriented ov1 ov2 = collideOriented ov2 ov1
@@ -124,8 +130,8 @@ colliding bv1 bv2 =
   any id [collideOriented x y | x <- (getO bv1 io), y <- (getO bv2 io)]
   where
     getO :: BoundingVolume -> Orientation -> [OrientedVolume]
-    getO (BoundingBox x y z) (t, o, s) = [Box (t, o, s &! (Vec3 x y z))]
-    getO (BoundingEllipse x y z) (t, o, s) = [Ellipse (t, o, s &! (Vec3 x y z))]
-    getO (TranslatedVolume t bv) (t', o, s) = getO bv (t &+ t', o, s)
-    getO (RotatedVolume q bv) (t, o, s) = getO bv (t, (rightOrthoU q) .*. o, s)
+    getO (BoundingBox x y z) (t, o, s) = [Box (t, o, (*) <$> s <*> (V3 x y z))]
+    getO (BoundingEllipse x y z) (t, o, s) = [Ellipse (t, o, (*) <$> s <*> (V3 x y z))]
+    getO (TranslatedVolume t bv) (t', o, s) = getO bv (t ^+^ t', o, s)
+    getO (RotatedVolume q bv) (t, o, s) = getO bv (t, (fromQuaternion q) !*! o, s)
     getO (Union bv1' bv2') o = (getO bv1' o) ++ (getO bv2' o)

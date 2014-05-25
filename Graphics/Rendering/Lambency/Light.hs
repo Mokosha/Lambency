@@ -12,24 +12,28 @@ import Graphics.Rendering.Lambency.Shader
 import Graphics.Rendering.Lambency.Texture
 import Graphics.Rendering.Lambency.Types
 
-import Data.Vect.Float
+import Linear.Matrix
+import Linear.Metric
+import Linear.V3
+
 import qualified Data.Map as Map
 --------------------------------------------------------------------------------
 
-createSpotlight :: Vec3 -> Normal3 -> Float -> IO (Light)
-createSpotlight pos dir ang = do
+createSpotlight :: Vec3f -> Vec3f -> Float -> IO (Light)
+createSpotlight pos dirvec ang = do
   shdr <- createSpotlightShader
   depthTex <- createDepthTexture
   minShdr <- createMinimalShader
   -- !FIXME! The camera fovy should depend on the cosoffset
-  let lightCam = mkPerspCamera pos dir (mkNormal vec3Y) (pi / 4) 1 0.1 500.0
+  let dir = signorm dirvec
+      lightCam = mkPerspCamera pos dir (V3 0 1 0) (pi / 4) 1 0.1 500.0
       shdrMap = Map.fromList [
         ("shadowVP", Matrix4Val $ getViewProjMatrix lightCam),
         ("shadowMap", TextureVal depthTex),
-        ("lightDir", Vector3Val $ fromNormal dir),
+        ("lightDir", Vector3Val dir),
         ("lightPos", Vector3Val pos),
         ("lightCosCutoff", FloatVal ang),
-        ("ambient", Vector3Val $ Vec3 0.15 0.15 0.15)]
+        ("ambient", Vector3Val $ V3 0.15 0.15 0.15)]
   return $ Light shdr shdrMap (Just $ Shadow minShdr depthTex)
 
 createNoLight :: IO (Light)
@@ -51,10 +55,10 @@ renderLight (Light shdr shdrmap msm) ros = do
       mapM_
         (\ro -> do
             let
-              mat :: ShaderValue -> Mat4
+              mat :: ShaderValue -> Mat4f
               mat (Matrix4Val m) = m
-              mat _ = one
-              lightMVP = (mat $ material ro Map.! "m2wMatrix") .*.
+              mat _ = eye4
+              lightMVP = (mat $ material ro Map.! "m2wMatrix") !*!
                          (mat $ shdrmap Map.! "shadowVP")
               newmap = Map.insert "mvpMatrix" (Matrix4Val lightMVP) shdrmap
             (render ro) shadowShdr (Map.union newmap (material ro))) ros

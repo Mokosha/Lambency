@@ -10,25 +10,33 @@ module Graphics.Rendering.Lambency.Mesh (
 
 import Graphics.Rendering.Lambency.Renderable
 import Graphics.Rendering.Lambency.Vertex
-import Data.Vect.Float
 import Control.Applicative
 
 import Data.Int
 
+import Linear.V2
+import Linear.V3
+
 --------------------------------------------------------------------------------
+
+type Vec2f = V2 Float
+type Vec3f = V3 Float
 
 data Mesh = Mesh { vertices :: [Vertex],
                    indices :: [Int16] }
 
+mkV3 :: (Float, Float, Float) -> V3 Float
+mkV3 (a, b, c) = V3 a b c
+
 triangle :: Mesh
 triangle = Mesh {
-  vertices = mkVertex3 . mkVec3 <$> [ (-1, -1, 0), (1, -1, 0), (0, 1, 0)],
+  vertices = mkVertex3 . mkV3 <$> [ (-1, -1, 0), (1, -1, 0), (0, 1, 0)],
   indices = [0, 1, 2]
 }
 
 cube :: Mesh
 cube = Mesh {
-  vertices = zipWith3 mkNormTexVertex3 (mkVec3 <$> [ 
+  vertices = zipWith3 mkNormTexVertex3 (mkV3 <$> [
     -- Front face
     (-1.0, -1.0,  1.0),
     ( 1.0, -1.0,  1.0),
@@ -66,14 +74,14 @@ cube = Mesh {
     (-1.0,  1.0, -1.0)
   ])
   -- Normals
-  (concat [ replicate 4 (Vec3 0 0 1),
-            replicate 4 (Vec3 0 0 (-1)),
-            replicate 4 (Vec3 0 1 0),
-            replicate 4 (Vec3 0 (-1) 0),
-            replicate 4 (Vec3 1 0 0),
-            replicate 4 (Vec3 (-1) 0 0)])
+  (concat [ replicate 4 (V3 0 0 1),
+            replicate 4 (V3 0 0 (-1)),
+            replicate 4 (V3 0 1 0),
+            replicate 4 (V3 0 (-1) 0),
+            replicate 4 (V3 1 0 0),
+            replicate 4 (V3 (-1) 0 0)])
   -- Texture Coordinates
-  ((concat . (replicate 6)) [Vec2 0 0, Vec2 1 0, Vec2 1 1, Vec2 0 1]),
+  ((concat . (replicate 6)) [V2 0 0, V2 1 0, V2 1 1, V2 0 1]),
 
   indices = concat [[x, x+1, x+2, x, x+2, x+3] | x <- [0,4..20]]
 }
@@ -81,9 +89,9 @@ cube = Mesh {
 plane :: Mesh
 plane = Mesh {
   vertices = zipWith3 mkNormTexVertex3
-             [Vec3 x 0 z | z <- [(-1),(-0.9)..1], x <- [(-1),(-0.9)..1]]
-             (replicate (21*21) (Vec3 0 1 0))
-             [Vec2 u v | v <- [0,0.05..1], u <- [0,0.05..1]],
+             [V3 x 0 z | z <- [(-1),(-0.9)..1], x <- [(-1),(-0.9)..1]]
+             (replicate (21*21) (V3 0 1 0))
+             [V2 u v | v <- [0,0.05..1], u <- [0,0.05..1]],
   indices = concat [quadAt x y | y <- [0..19], x <- [0..19]]
 }
   where quadAt x y =
@@ -97,11 +105,11 @@ quad = Mesh {
   indices = [0, 2, 1, 1, 2, 3]
   }
   where
-    texcoords :: [ Vec2 ]
-    texcoords = [ Vec2 x y | x <- [0, 1], y <- [0, 1] ]
+    texcoords :: [ Vec2f ]
+    texcoords = [ V2 x y | x <- [0, 1], y <- [0, 1] ]
 
-    texToVert :: Vec2 -> Vec3
-    texToVert (Vec2 x y) = Vec3 (x * 2 - 1) (y * 2 - 1) 0
+    texToVert :: Vec2f -> Vec3f
+    texToVert (V2 x y) = V3 (x * 2 - 1) (y * 2 - 1) 0
 
 
 instance Renderable Mesh where

@@ -15,23 +15,23 @@ module Graphics.Rendering.Lambency.Shader (
 
 import Graphics.Rendering.Lambency.Texture
 import Graphics.Rendering.Lambency.Types
-import Graphics.Rendering.Lambency.Utils
 
 import Paths_lambency
 
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
-import Data.Vect.Float
 
 import qualified Data.Map as Map
 import qualified Data.ByteString as BS
 import qualified Control.Monad as M
 
 import Data.Maybe (catMaybes)
-import Data.Array.IO
-import Data.Array.Storable
+import Linear.Matrix
+import Linear.V3
 
 import System.FilePath
+import Foreign.Marshal.Utils
+import Foreign.Ptr
 --------------------------------------------------------------------------------
 
 type ShaderVarMap = Map.Map String ShaderVar
@@ -50,9 +50,11 @@ getUniforms :: Shader -> ShaderVarMap
 getUniforms = (Map.filter isUniform) . getShaderVars
 
 setUniformVar :: ShaderVar -> ShaderValue -> IO ()
-setUniformVar (Uniform Matrix4Ty (GL.UniformLocation loc)) (Matrix4Val mat)  = do
-  arr <- newListArray (0 :: Int, 15) (map realToFrac (destructMat4 mat))
-  withStorableArray arr (\ptr -> GLRaw.glUniformMatrix4fv loc 1 0 ptr)
+setUniformVar (Uniform Matrix4Ty (GL.UniformLocation loc)) (Matrix4Val mat) = do
+  with mat $ \ptr ->
+    GLRaw.glUniformMatrix4fv loc 1 0 (castPtr (ptr :: Ptr (M44 Float)))
+--  arr <- newListArray (0 :: Int, 15) (map realToFrac (destructMat4 mat))
+--  withStorableArray arr (\ptr  -> GLRaw.glUniformMatrix4fv loc 1 0 ptr)
 
 setUniformVar (Uniform (TextureTy unit) loc) (TextureVal tex) = do
   GL.activeTexture GL.$= (GL.TextureUnit unit)
@@ -62,7 +64,7 @@ setUniformVar (Uniform (TextureTy unit) loc) (TextureVal tex) = do
 setUniformVar (Uniform FloatTy loc) (FloatVal f) = do
   GL.uniform loc GL.$= GL.Index1 ((realToFrac f) :: GL.GLfloat)
 
-setUniformVar (Uniform Vector3Ty loc) (Vector3Val (Vec3 x y z)) = do
+setUniformVar (Uniform Vector3Ty loc) (Vector3Val (V3 x y z)) = do
   GL.uniform loc GL.$= GL.Vertex3 (f x) (f y) (f z)
   where
     f :: Float -> GL.GLfloat

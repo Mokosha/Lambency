@@ -13,26 +13,33 @@ import Data.List (sortBy)
 import Data.Ord (comparing)
 import Data.Text (pack)
 
-import Data.Vect.Float
 import Data.Array.Unboxed (UArray, listArray, (!))
 
 import Control.Applicative hiding (many, (<|>))
 
 import Text.Parsec
 import Text.Parsec.Text (Parser)
+
+import Linear.Metric
+import Linear.V2
+import Linear.V3
 --------------------------------------------------------------------------------
 
-type OBJVertex = Vec3
+type Vec2f = V2 Float
+type Vec3f = V3 Float
+
+type OBJVertex = Vec3f
 type OBJVertexList = [OBJVertex]
 
-type OBJTexCoord = Vec2
+type OBJTexCoord = Vec2f
 type OBJTexCoordList = [OBJTexCoord]
 
 emptyTexCoords :: OBJTexCoordList -> Bool
 emptyTexCoords [] = True
 emptyTexCoords _ = False
 
-type OBJNormal = Normal3
+-- type OBJNormal = Normal3
+type OBJNormal = Vec3f
 type OBJNormalList = [OBJNormal]
 
 emptyNormals :: OBJNormalList -> Bool
@@ -69,8 +76,8 @@ simpleObj2Mesh verts faces = Mesh {
   indices = map (\(x, _, _) -> fromIntegral x) $ triangulate faces
 }
 
-mkVec2Lookup :: [Vec2] -> (Int -> Vec2)
-mkVec2Lookup vecs = let
+mkVec2fLookup :: [Vec2f] -> (Int -> Vec2f)
+mkVec2fLookup vecs = let
 
   l :: Int
   l = length vecs
@@ -78,25 +85,25 @@ mkVec2Lookup vecs = let
   arr :: UArray Int Float
   arr = listArray
         (1, (l + 1) * 2)
-        (concat $ map (\(Vec2 x y) -> [x, y]) vecs)
+        (concat $ map (\(V2 x y) -> [x, y]) vecs)
 
   in (\i ->
        let idx = if (i < 0) then (l + i + 1) else i
-       in Vec2 (arr ! (2*idx - 1)) (arr ! (2 * idx)))
+       in V2 (arr ! (2*idx - 1)) (arr ! (2 * idx)))
 
-mkVec3Lookup :: [Vec3] -> (Int -> Vec3)
-mkVec3Lookup vecs = let
+mkVec3fLookup :: [Vec3f] -> (Int -> Vec3f)
+mkVec3fLookup vecs = let
   l :: Int
   l = length vecs
   
   arr :: UArray Int Float
   arr = listArray
         (1, (l + 1) * 3)
-        (concat $ map (\(Vec3 x y z) -> [x, y, z]) vecs)
+        (concat $ map (\(V3 x y z) -> [x, y, z]) vecs)
 
   in \i ->
        let idx = if (i < 0) then (l + i + 1) else i
-        in Vec3 (arr ! (3*idx - 2)) (arr ! (3*idx - 1)) (arr ! (3 * idx))
+        in V3 (arr ! (3*idx - 2)) (arr ! (3*idx - 1)) (arr ! (3 * idx))
 
 genMesh :: OBJIndexList -> (OBJIndex -> Vertex) -> Mesh
 genMesh idxs f = let
@@ -117,8 +124,9 @@ genMesh idxs f = let
 
 normalObj2Mesh :: OBJVertexList -> OBJNormalList -> OBJFaceList -> Mesh
 normalObj2Mesh verts normals faces = let
-  ns = mkVec3Lookup $ map fromNormal normals
-  vs = mkVec3Lookup verts
+  -- ns = mkVec3fLookup $ map fromNormal normals
+  ns = mkVec3fLookup normals
+  vs = mkVec3fLookup verts
 
   idx2Vertex :: OBJIndex -> Vertex
   idx2Vertex (x, _, Just n) = mkNormVertex3 (vs x) (ns n)
@@ -128,8 +136,8 @@ normalObj2Mesh verts normals faces = let
 
 texturedObj2Mesh :: OBJVertexList -> OBJTexCoordList -> OBJFaceList -> Mesh
 texturedObj2Mesh verts texcoords faces = let
-  tcs = mkVec2Lookup $ texcoords
-  vs = mkVec3Lookup verts
+  tcs = mkVec2fLookup texcoords
+  vs = mkVec3fLookup verts
 
   idx2Vertex :: OBJIndex -> Vertex
   idx2Vertex (x, Just tc, _) = mkTexVertex3 (vs x) (tcs tc)
@@ -139,9 +147,10 @@ texturedObj2Mesh verts texcoords faces = let
 
 normTexturedObj2Mesh :: OBJVertexList -> OBJTexCoordList -> OBJNormalList -> OBJFaceList -> Mesh
 normTexturedObj2Mesh verts texcoords normals faces = let
-  ns = mkVec3Lookup $ map fromNormal normals
-  tcs = mkVec2Lookup texcoords
-  vs = mkVec3Lookup verts
+  -- ns = mkVec3fLookup $ map fromNormal normals
+  ns = mkVec3fLookup normals
+  tcs = mkVec2fLookup texcoords
+  vs = mkVec3fLookup verts
 
   idx2Vertex :: OBJIndex -> Vertex
   idx2Vertex (x, Just tc, Just n) = mkNormTexVertex3 (vs x) (ns n) (tcs tc)
@@ -156,9 +165,9 @@ obj2Mesh (OBJGeometry {objVerts=vs, objTexCoords=tcs, objNormals=ns, objFaces=fs
   | emptyNormals ns = texturedObj2Mesh vs tcs fs
   | otherwise = normTexturedObj2Mesh vs tcs ns fs
 
-data Value = Normal Vec3
-           | Position Vec3
-           | TexCoord Vec2
+data Value = Normal Vec3f
+           | Position Vec3f
+           | TexCoord Vec2f
            | Face OBJFace
              deriving (Show)
 
@@ -180,11 +189,11 @@ parseFile = let
 
     return $ ((read t) + ((read d) / (10 ** denom))) * (10 ** (read e)) * sign
 
-  vector2 :: Parser Vec2
-  vector2 = Vec2 <$> float <*> float
+  vector2 :: Parser Vec2f
+  vector2 = V2 <$> float <*> float
 
-  vector3 :: Parser Vec3
-  vector3 = Vec3 <$> float <*> float <*> float
+  vector3 :: Parser Vec3f
+  vector3 = V3 <$> float <*> float <*> float
 
   ignoreRestOfLine :: Parser ()
   ignoreRestOfLine = many (noneOf ['\n']) >> newline >> return ()
@@ -257,7 +266,7 @@ parseFile = let
 
   constructGeometry :: [Value] -> OBJGeometry -> OBJGeometry
   constructGeometry (Normal n : rest) g =
-    constructGeometry rest $ (\og -> og { objNormals = (mkNormal n) : (objNormals g) }) g
+    constructGeometry rest $ (\og -> og { objNormals = (signorm n) : (objNormals g) }) g
   constructGeometry (Position p : rest) g =
     constructGeometry rest $ (\og -> og { objVerts = p : (objVerts g) }) g
   constructGeometry (TexCoord tc : rest) g =

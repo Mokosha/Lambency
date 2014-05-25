@@ -2,7 +2,6 @@ module Graphics.Rendering.Lambency.Utils (
   compareZero,
   compareClose,
   destructMat4,
-  negN,
   clamp,
   newRange,
   newRangeC,
@@ -10,25 +9,21 @@ module Graphics.Rendering.Lambency.Utils (
 
 --------------------------------------------------------------------------------
 
-import Data.Vect.Float
-import Data.Vect.Float.Util.Dim4
+import Linear.Epsilon
+import Linear.Metric
 
+import Prelude hiding (concat)
+import Data.Foldable
 --------------------------------------------------------------------------------
 
-compareZero :: (DotProd v) => v -> Bool
-compareZero v = (abs $ v &. v) < 1e-6
+compareZero :: (Ord a, Epsilon a, Metric v) => v a -> Bool
+compareZero x = nearZero $ (abs $ x `dot` x)
 
-compareClose :: (DotProd v) => v -> v -> Bool
-compareClose a b = max (b &. b) (a &. a) - (a &. b) < 1e-6
+compareClose :: (Ord a, Epsilon a, Metric v) => v a -> v a -> Bool
+compareClose x y = nearZero $ max (y `dot` y) (x `dot` x) - (x `dot` y)
 
-destructMat4 :: Mat4 -> [Float]
-destructMat4 mat = let
-  Mat4 r1 r2 r3 r4 = mat
-  in
-   destructVec4 [r1, r2, r3, r4]
-
-negN :: UnitVector v u => u -> u
-negN = toNormalUnsafe . neg . fromNormal
+destructMat4 :: (Functor f, Foldable f) => f (f a) -> [a]
+destructMat4 = concat . (fmap toList)
 
 clamp :: Ord a => a -> a -> a -> a
 clamp x a b = if x < a then a else if x > b then b else x

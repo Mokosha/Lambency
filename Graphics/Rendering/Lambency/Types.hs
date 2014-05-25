@@ -1,4 +1,5 @@
 module Graphics.Rendering.Lambency.Types (
+  Vec2f, Vec3f, Vec4f, Quatf, Mat2f, Mat3f, Mat4f,
   Camera(..), CameraType(..), CameraViewDistance(..),
   LightType(..), Light(..), Shadow(..),
   Shader(..), ShaderVarTy(..), ShaderValue(..), ShaderVar(..), ShaderMap,
@@ -21,13 +22,32 @@ import Graphics.UI.Lambency.Sound
 
 import qualified Graphics.Rendering.Lambency.Transform as XForm
 
-import Data.Vect.Float
 import Data.Time.Clock
 
 import qualified Data.Map as Map
 
 import qualified Control.Wire as W
 import Control.Monad.RWS.Strict
+
+import Linear.Matrix
+import Linear.V2
+import Linear.V3
+import Linear.V4
+import qualified Linear.Quaternion as Quat
+
+--------------------------------------------------------------------------------
+
+-- Vector Types
+
+type Vec2f = V2 Float
+type Vec3f = V3 Float
+type Vec4f = V4 Float
+
+type Quatf = Quat.Quaternion Float
+
+type Mat2f = M22 Float
+type Mat3f = M33 Float
+type Mat4f = M44 Float
 
 --------------------------------------------------------------------------------
 
@@ -78,14 +98,14 @@ data ShaderVar = Uniform ShaderVarTy GL.UniformLocation
 
 type ShaderVarMap = Map.Map String ShaderVar
 
-data ShaderValue = Matrix3Val Mat3
-                 | Matrix4Val Mat4
-                 | Matrix3ListVal [Mat3]
-                 | Matrix4ListVal [Mat4]
-                 | Vector3Val Vec3
-                 | Vector4Val Vec4
-                 | Vector3ListVal [Vec3]
-                 | Vector4ListVal [Vec4]
+data ShaderValue = Matrix3Val (Mat3f)
+                 | Matrix4Val (Mat4f)
+                 | Matrix3ListVal [Mat3f]
+                 | Matrix4ListVal [Mat4f]
+                 | Vector3Val Vec3f
+                 | Vector4Val Vec4f
+                 | Vector3ListVal [Vec3f]
+                 | Vector4ListVal [Vec4f]
                  | IntVal Int
                  | IntListVal [Int]
                  | FloatVal Float
@@ -114,9 +134,9 @@ data Texture = Texture TextureHandle TextureFormat
 
 -- Lights
 
-data LightType = SpotLight Vec3 Normal3 Float
-               | DirectionalLight Normal3
-               | PointLight Vec3
+data LightType = SpotLight Vec3f Vec3f Float
+               | DirectionalLight Vec3f
+               | PointLight Vec3f
                | NoLight
                deriving (Show)
 

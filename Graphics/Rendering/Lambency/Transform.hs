@@ -1,8 +1,7 @@
 module Graphics.Rendering.Lambency.Transform (
   Transform, Invertible(..), Transformable3D(..),
   fromForwardUp, fromCoordinateBasis, identity,
-  right, up, forward, right', up', forward',
-  localRight, localUp, localForward, localRight', localUp', localForward',
+  right, up, forward, localRight, localUp, localForward,
   scale, position,
 
   rotateWorld, xform2Matrix, transformPoint, invTransformPoint
@@ -10,44 +9,55 @@ module Graphics.Rendering.Lambency.Transform (
 
 --------------------------------------------------------------------------------
 
-import Data.Vect.Float
-import Data.Vect.Float.Util.Quaternion
+import Linear.Matrix
+import Linear.Metric
+import Linear.Vector
+import Linear.V3
+import Linear.V4
+import Linear.Quaternion hiding (rotate)
+import qualified Linear.Quaternion as Quat
 
 import qualified Control.Wire as W
+import Control.Applicative
 
 --------------------------------------------------------------------------------
 
+type Vec3f = V3 Float
+type Quatf = Quaternion Float
+
+type Mat3f = M33 Float
+type Mat4f = M44 Float
+
 -- A Transform consists of a right vector, an up vector, a forward vector, a
 -- position in world space, and a scaling vector.
-type CoordinateBasis = (Normal3, Normal3, Normal3)
+type CoordinateBasis = (Vec3f, Vec3f, Vec3f)
 
-fromForwardUp :: Normal3 -> Normal3 -> CoordinateBasis
+fromForwardUp :: Vec3f -> Vec3f -> CoordinateBasis
 fromForwardUp f u =
   let
-    r = u &^ f
-    u' = f &^ r
+    r = u `cross` f
+    u' = f `cross` r
   in (r, u', f)
 
-basis2Matrix :: CoordinateBasis -> Mat3
-basis2Matrix (r, u, f) = transpose $ Mat3 (n r) (n u) (n f)
-  where n = fromNormal
+basis2Matrix :: CoordinateBasis -> Mat3f
+basis2Matrix (r, u, f) = adjoint $ V3 r u f
 
 -- Basis is orthonormal, so inverse should be a simple transpose.
 invertBasis :: CoordinateBasis -> CoordinateBasis
 invertBasis (n1, n2, n3) =
   let
-    Vec3 x1 y1 z1 = fromNormal n1
-    Vec3 x2 y2 z2 = fromNormal n2
-    Vec3 x3 y3 z3 = fromNormal n3
+    V3 x1 y1 z1 = n1
+    V3 x2 y2 z2 = n2
+    V3 x3 y3 z3 = n3
   in
-  (toNormalUnsafe $ Vec3 x1 x2 x3,
-   toNormalUnsafe $ Vec3 y1 y2 y3,
-   toNormalUnsafe $ Vec3 z1 z2 z3)
+  (V3 x1 x2 x3,
+   V3 y1 y2 y3,
+   V3 z1 z2 z3)
 
 data Transform = Identity
-               | Scale Vec3 Transform
+               | Scale Vec3f Transform
                | OrthoNormal CoordinateBasis Transform
-               | Translate Vec3 Transform
+               | Translate Vec3f Transform
                  deriving (Show)
 
 identity :: Transform
@@ -56,64 +66,48 @@ identity = Identity
 fromCoordinateBasis :: CoordinateBasis -> Transform
 fromCoordinateBasis b = OrthoNormal b Identity
 
-localRight' :: Vec3
-localRight' = vec3X
+-- !FIXME! There are Lens definitions for these
+-- too, but they're used as ex ey and ez in Linear.
+localRight :: Vec3f
+localRight = V3 1 0 0
 
-localUp' :: Vec3
-localUp' = vec3Y
+localUp :: Vec3f
+localUp = V3 0 1 0
 
-localForward' :: Vec3
-localForward' = vec3Z
+localForward :: Vec3f
+localForward = V3 0 0 1
 
-localRight :: Normal3
-localRight = toNormalUnsafe vec3X
-
-localUp :: Normal3
-localUp = toNormalUnsafe vec3Y
-
-localForward :: Normal3
-localForward = toNormalUnsafe vec3Z
-
-right :: Transform -> Normal3
+right :: Transform -> Vec3f
 right Identity = localRight
 right (Scale _ xf) = right xf
 right (OrthoNormal (r, _, _) _) = r
 right (Translate _ xf) = right xf
 
-up :: Transform -> Normal3
+up :: Transform -> Vec3f
 up Identity = localUp
 up (Scale _ xf) = up xf
 up (OrthoNormal (_, u, _) _) = u
 up (Translate _ xf) = up xf
 
-forward :: Transform -> Normal3
+forward :: Transform -> Vec3f
 forward Identity = localForward
 forward (Scale _ xf) = forward xf
 forward (OrthoNormal (_, _, f) _) = f
 forward (Translate _ xf) = forward xf
 
-right' :: Transform -> Vec3
-right' = fromNormal . right
-
-up' :: Transform -> Vec3
-up' = fromNormal . up
-
-forward' :: Transform -> Vec3
-forward' = fromNormal . forward
-
-scale :: Transform -> Vec3
-scale Identity = Vec3 1 1 1
-scale (Scale s xf) = s &! (scale xf)
+scale :: Transform -> Vec3f
+scale Identity = V3 1 1 1
+scale (Scale s xf) = (*) <$> s <*> (scale xf)
 scale (OrthoNormal _ xf) = scale xf
 scale (Translate _ xf) = scale xf
 
-position :: Transform -> Vec3
+position :: Transform -> Vec3f
 position Identity = zero
 position (Scale _ xf) = position xf
 position (OrthoNormal _ xf) = position xf
-position (Translate t xf) = t &+ (position xf)
+position (Translate t xf) = t ^+^ (position xf)
 
-updateAxis :: Normal3 -> Normal3 -> Normal3 -> Transform -> Transform
+updateAxis :: Vec3f -> Vec3f -> Vec3f -> Transform -> Transform
 updateAxis nr nu nf Identity = OrthoNormal (nr, nu, nf) Identity
 updateAxis nr nu nf (Scale s xf) = OrthoNormal (nr, nu, nf) $ Scale s xf
 updateAxis nr nu nf (OrthoNormal _ xf) = OrthoNormal (nr, nu, nf) xf
@@ -121,24 +115,24 @@ updateAxis nr nu nf (Translate t xf) = Translate t $ updateAxis nr nu nf xf
 
 renormalize :: Transform -> Transform
 renormalize xf = updateAxis (right xf) u' f' xf
-  where f' = (right xf) &^ (up xf)
-        u' = f' &^ (right xf)
+  where f' = (right xf) `cross` (up xf)
+        u' = f' `cross` (right xf)
 
-rotateWorld :: UnitQuaternion -> Transform -> Transform
+rotateWorld :: Quatf -> Transform -> Transform
 rotateWorld quat xf = let
 
-  r = right' xf
-  u = up' xf
-  f = forward' xf
+  r = right xf
+  u = up xf
+  f = forward xf
 
-  invWorldMat :: Mat3
-  invWorldMat = Mat3 r u f
+  invWorldMat :: Mat3f
+  invWorldMat = V3 r u f
 
-  worldMat :: Mat3
-  worldMat = transpose invWorldMat
+  worldMat :: Mat3f
+  worldMat = adjoint invWorldMat
 
-  rotateAxis :: Vec3 -> Normal3
-  rotateAxis = mkNormal . (worldMat *.) . (actU quat) . (invWorldMat *.)
+  rotateAxis :: Vec3f -> Vec3f
+  rotateAxis = signorm . (worldMat !*) . (Quat.rotate quat) . (invWorldMat !*)
 
   in
    renormalize $ updateAxis (rotateAxis r) (rotateAxis u) (rotateAxis f) xf
@@ -148,18 +142,21 @@ rotateWorld quat xf = let
 -- coordinate space, and the three axes that define forward up and right are
 -- now the basis in Z, Y, and X respectively. Scale is applied localy in the
 -- original coordinate space.
-xform2Matrix :: Transform -> Mat4
+xform2Matrix :: Transform -> Mat4f
 xform2Matrix xf =
   let
-    Vec3 rx ry rz = right' xf
-    Vec3 ux uy uz = up' xf
-    Vec3 fx fy fz = forward' xf
-    Vec3 sx sy sz = scale xf
+    extendWith :: a -> V3 a -> V4 a
+    extendWith w (V3 x y z) = V4 x y z w
+
+    V3 rx ry rz = right xf
+    V3 ux uy uz = up xf
+    V3 fx fy fz = forward xf
+    V3 sx sy sz = scale xf
   in
-   Mat4
-   (extendZero $ (sx *&) $ Vec3 rx ux fx)
-   (extendZero $ (sy *&) $ Vec3 ry uy fy)
-   (extendZero $ (sz *&) $ Vec3 rz uz fz)
+   V4
+   (extendWith 0.0 $ (sx *^) $ V3 rx ux fx)
+   (extendWith 0.0 $ (sy *^) $ V3 ry uy fy)
+   (extendWith 0.0 $ (sz *^) $ V3 rz uz fz)
    (extendWith 1.0 $ position xf)
 
 class Invertible a where
@@ -170,61 +167,61 @@ instance Invertible Transform where
   invert xform = (foldl (.) id $ modifiers xform) Identity
     where modifiers :: Transform -> [Transform -> Transform]
           modifiers Identity = []
-          modifiers (Scale (Vec3 x y z) xf) = Scale (Vec3 (1/x) (1/y) (1/z)) : (modifiers xf)
+          modifiers (Scale (V3 x y z) xf) = Scale (V3 (1/x) (1/y) (1/z)) : (modifiers xf)
           modifiers (OrthoNormal b xf) = OrthoNormal (invertBasis b) : (modifiers xf)
-          modifiers (Translate t xf) = Translate (neg t) : (modifiers xf)
+          modifiers (Translate t xf) = Translate (negated t) : (modifiers xf)
 
-transformPoint :: Transform -> Vec3 -> Vec3
+transformPoint :: Transform -> Vec3f -> Vec3f
 transformPoint Identity = id
-transformPoint (Scale s xf) = (s &!) . (transformPoint xf)
-transformPoint (OrthoNormal b xf) = ((basis2Matrix b) *.) . (transformPoint xf)
-transformPoint (Translate t xf) = (&+ t) . (transformPoint xf)
+transformPoint (Scale s xf) = \x -> (*) <$> s <*> (transformPoint xf x)
+transformPoint (OrthoNormal b xf) = ((basis2Matrix b) !*) . (transformPoint xf)
+transformPoint (Translate t xf) = (^+^ t) . (transformPoint xf)
 
-invTransformPoint :: Transform -> Vec3 -> Vec3
+invTransformPoint :: Transform -> Vec3f -> Vec3f
 invTransformPoint xf = transformPoint (invert xf)
 
 class Transformable3D a where
-  translate :: Vec3 -> a -> a
-  rotate :: UnitQuaternion -> a -> a
-  nonuniformScale :: Vec3 -> a -> a
+  translate :: Vec3f -> a -> a
+  rotate :: Quatf -> a -> a
+  nonuniformScale :: Vec3f -> a -> a
 
   uniformScale :: Float -> a -> a
-  uniformScale s = nonuniformScale $ Vec3 s s s
+  uniformScale s = nonuniformScale $ V3 s s s
 
   transform :: Transform -> a -> a
   transform Identity = id
   transform (Scale s xf) = (nonuniformScale s) . (transform xf)
   transform (OrthoNormal (r, u, _) xf) = let
-    determineRot :: Vec3 -> Vec3 -> UnitQuaternion
-    determineRot v1 v2 = rotU (v1 &^ v2) (acos $ v1 &. v2)
-    firstRot = determineRot (fromNormal r) vec3X
-    secondRot = determineRot (actU firstRot (fromNormal u)) vec3Y
+    determineRot :: Vec3f -> Vec3f -> Quatf
+    determineRot v1 v2 = axisAngle (v1 `cross` v2) (acos $ v1 `dot` v2)
+    firstRot = determineRot  r localRight
+    secondRot = determineRot (Quat.rotate firstRot u) localUp
    in
-    rotate (firstRot `multU` secondRot) . (transform xf)
+    rotate (firstRot * secondRot) . (transform xf)
   transform (Translate t xf) = (translate t) . (transform xf)
 
 instance Transformable3D Transform where
   translate t Identity = Translate t Identity
   translate t (Scale s xf) = Translate t $ Scale s xf
   translate t (OrthoNormal b xf) = Translate t $ OrthoNormal b xf
-  translate t (Translate t' xf) = Translate (t &+ t') xf
+  translate t (Translate t' xf) = Translate (t ^+^ t') xf
 
   nonuniformScale s Identity = Scale s Identity
-  nonuniformScale s (Scale s' xf) = Scale (s &! s') xf
+  nonuniformScale s (Scale s' xf) = Scale ((*) <$> s <*> s') xf
   nonuniformScale s (OrthoNormal b xf) = OrthoNormal b $ nonuniformScale s xf
   nonuniformScale s (Translate t xf) = Translate t $ nonuniformScale s xf
 
   -- Rotates the coordinate axis of the transform by the given quaternion. This
   -- function performs a local rotation
   rotate quat xf = let
-    fn :: Normal3 -> Normal3
-    fn = toNormalUnsafe . (actU quat) . fromNormal
+    fn :: Vec3f -> Vec3f
+    fn = Quat.rotate quat
     in updateAxis (fn $ right xf) (fn $ up xf) (fn $ forward xf) xf
 
-instance Transformable3D Vec3 where
-  translate = (&+)
-  rotate = actU
-  nonuniformScale = (&!)
+--instance Transformable3D (V3 Float) where
+--  translate = (^+^)
+--  rotate = Quat.rotate
+--  nonuniformScale = liftA2 (*)
 
 instance (W.Monoid s, Monad m, Transformable3D b) =>
          Transformable3D (W.Wire s e m a b) where
