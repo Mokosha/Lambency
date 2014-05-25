@@ -54,6 +54,18 @@ invertBasis (n1, n2, n3) =
    V3 y1 y2 y3,
    V3 z1 z2 z3)
 
+-- !FIXME! Transform here is really just a series of operations
+-- and not a full blown transform. Ideally, we'd like a few types:
+--   1. TRS that represents a scale, rotation, and translation in
+--      that order
+--   2. Invertible transform that represents an arbitrary sequence
+--      of translations, rotations, and scalings.
+--   3. Transform that represents anything we can do in linear algebra
+--
+-- If we support these, then there is a clear way to go from TRS, which
+-- is what almost every object in a 3D scene needs to a Transform, which
+-- is what the underlying graphics engine is expecting, while still
+-- allowing customized transforms
 data Transform = Identity
                | Scale Vec3f Transform
                | OrthoNormal CoordinateBasis Transform
