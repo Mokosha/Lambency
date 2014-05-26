@@ -1,15 +1,18 @@
 module Main (main) where
 
 --------------------------------------------------------------------------------
+import qualified Graphics.UI.GLFW as GLFW
 
 import qualified Graphics.UI.Lambency as L
 import qualified Graphics.Rendering.Lambency as LR
 
 import System.FilePath
 
+import qualified Linear.Quaternion as Quat
 import Linear.Vector
 import Linear.V3
 
+import Control.Monad.RWS.Strict
 import qualified Control.Wire as W
 ---------------------------------------------------------------------------------
 
@@ -22,7 +25,7 @@ initialCam = LR.mkPerspCamera
              0.1 1000.0
 
 cam :: LR.GameWire () LR.Camera
-cam = LR.mkViewerCam initialCam
+cam = LR.mkFixedCam initialCam
 
 mkOBJ :: FilePath -> IO (LR.RenderObject)
 mkOBJ objfile = do
@@ -31,16 +34,35 @@ mkOBJ objfile = do
   ro <- LR.createRenderObject (LR.cube) (LR.createTexturedMaterial tex)
   return ro
 
+controlWire :: LR.RenderObject -> LR.GameWire a a
+controlWire ro = LR.mkObject ro (xForm LR.identity)
+  where
+    xForm :: LR.Transform -> LR.GameWire a LR.Transform
+    xForm xf = W.mkGenN $ \_ -> do
+      ipt <- get
+      let rotate = L.isButtonPressed GLFW.MouseButton'1 ipt
+          newxf = if rotate then rotation ipt else xf
+      put $ L.resetCursorPos ipt
+      return (Right newxf, xForm newxf)
+      where
+        rotation :: L.Input -> LR.Transform
+        rotation ipt = case (L.cursor ipt) of
+          Just (mx, my) -> flip LR.rotateWorld xf $
+                           foldl1 (*) [
+                             Quat.axisAngle LR.localUp (-asin mx),
+                             Quat.axisAngle LR.localRight $ asin my]
+          Nothing -> xf
+
 initGame :: FilePath -> IO (LR.Game ())
 initGame objfile = do
   obj <- mkOBJ objfile
-  let lightPos = 10 *^ (V3 (-1) 1 0)
+  let lightPos = 10 *^ (V3 0 1 (-1))
   spotlight <- LR.createSpotlight lightPos (negate lightPos) 0
   return $ LR.Game { LR.staticLights = [LR.setAmbient (V3 0.5 0.5 0.5) spotlight],
-                     LR.staticGeometry = [(LR.identity, obj)],
+                     LR.staticGeometry = [],
                      LR.mainCamera = cam,
                      LR.dynamicLights = [],
-                     LR.gameLogic = W.mkId }
+                     LR.gameLogic = controlWire obj }
 
 main :: IO ()
 main = do
