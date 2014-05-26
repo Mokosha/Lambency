@@ -1,6 +1,7 @@
 module Graphics.Rendering.Lambency.Light (
   createSpotlight,
   createNoLight,
+  setAmbient,
   renderLight
 ) where
 
@@ -35,6 +36,10 @@ createSpotlight pos dirvec ang = do
         ("lightCosCutoff", FloatVal ang),
         ("ambient", Vector3Val $ V3 0.15 0.15 0.15)]
   return $ Light shdr shdrMap (Just $ Shadow minShdr depthTex)
+
+setAmbient :: Vec3f -> Light -> Light
+setAmbient color (Light shdr shdrMap shadow) =
+  Light shdr (Map.insert "ambient" (Vector3Val color) shdrMap) shadow
 
 createNoLight :: IO (Light)
 createNoLight = do
