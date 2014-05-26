@@ -62,3 +62,25 @@ library
                        filepath,
                        -- Eventually replace these...
                        directory
+
+executable lobjview
+  main-is:        tools/OBJViewer.hs
+  ghc-options:    -Wall -rtsopts -O3
+  build-depends:  base > 4.5,
+                  GLFW-b,
+                  OpenGL >=2.9.2.0,
+                  OpenGLRaw ==1.4.0.0,
+                  JuicyPixels,
+                  linear,
+                  parsec, text,
+                  stm >= 2.4,
+                  mtl >= 2.1.2,
+                  netwire >= 5.0.0,
+                  OpenAL, HCodecs,
+                  time,
+                  containers,
+                  bytestring,
+                  array, vector,
+                  filepath,
+                  -- Eventually replace these...
+                  directory

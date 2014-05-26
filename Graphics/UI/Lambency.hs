@@ -1,5 +1,5 @@
 module Graphics.UI.Lambency (
-  Input(..), isKeyPressed,
+  Input(..), isKeyPressed, isButtonPressed, resetCursorPos,
   makeWindow,
   destroyWindow,
   run,
