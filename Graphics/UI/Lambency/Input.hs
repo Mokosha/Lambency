@@ -6,7 +6,8 @@ module Graphics.UI.Lambency.Input (
   getInput, setInput,
   resetCursorPos,
 
-  isKeyPressed, withPressedKey, debounceKey
+  isKeyPressed, withPressedKey, debounceKey,
+  isButtonPressed, withPressedButton, debounceButton
 ) where
 
 --------------------------------------------------------------------------------
@@ -26,22 +27,34 @@ data MiscInput = Scroll Double Double
 
 data Input = Input {
   keysPressed :: Set.Set GLFW.Key,
-  mbPressed :: [Int],
+  mbPressed :: Set.Set GLFW.MouseButton,
   cursor :: Maybe (Float, Float),
   misc :: [MiscInput]
 } deriving(Show)
 
 kEmptyInput :: Input
-kEmptyInput = Input { keysPressed = Set.empty, mbPressed = [], cursor = Nothing, misc = [] }
+kEmptyInput = Input { keysPressed = Set.empty,
+                      mbPressed = Set.empty,
+                      cursor = Nothing,
+                      misc = [] }
 
 isKeyPressed :: GLFW.Key -> Input -> Bool
 isKeyPressed key = (Set.member key) . keysPressed
 
 withPressedKey :: Input -> GLFW.Key -> (a -> a) -> a -> a
-withPressedKey input key fn v = if isKeyPressed key input then fn v else v
+withPressedKey input key fn = if isKeyPressed key input then fn else id
 
 debounceKey :: GLFW.Key -> Input -> Input
 debounceKey key = (\input -> input { keysPressed = Set.delete key (keysPressed input) })
+
+isButtonPressed :: GLFW.MouseButton -> Input -> Bool
+isButtonPressed mb = (Set.member mb) . mbPressed
+
+withPressedButton :: Input -> GLFW.MouseButton -> (a -> a) -> a -> a
+withPressedButton input mb fn = if isButtonPressed mb input then fn else id
+
+debounceButton :: GLFW.MouseButton -> Input -> Input
+debounceButton mb = (\input -> input { mbPressed = Set.delete mb (mbPressed input) })
 
 data InputControl = IptCtl (TVar Input) GLFW.Window
 
@@ -90,6 +103,21 @@ keyCallback (IptCtl ctl _) _ key _ keystate _ = atomically $ modifyTVar' ctl mod
       GLFW.KeyState'Released -> updateKeys $ Set.delete key
       _ -> id
 
+mouseButtonCallback :: InputControl -> GLFW.Window ->
+                       GLFW.MouseButton -> GLFW.MouseButtonState ->
+                       GLFW.ModifierKeys -> IO ()
+mouseButtonCallback (IptCtl ctl _) _ button state _ =
+  atomically $ modifyTVar' ctl modify
+  where
+    update :: (Set.Set GLFW.MouseButton -> Set.Set GLFW.MouseButton) ->
+              Input -> Input
+    update fn = (\ipt -> ipt { mbPressed = fn (mbPressed ipt) })
+
+    modify :: Input -> Input
+    modify = case state of
+      GLFW.MouseButtonState'Pressed -> update $ Set.insert button
+      GLFW.MouseButtonState'Released -> update $ Set.delete button
+
 -- !HACK! Right now we're simply setting the cursor position as disabled
 -- regardless of application ... we should really expose this to the user
 -- somehow...
@@ -111,4 +139,5 @@ mkInputControl win = do
   GLFW.setScrollCallback win (Just $ scrollCallback ctl)
   GLFW.setKeyCallback win (Just $ keyCallback ctl)
   GLFW.setCursorPosCallback win (Just $ cursorPosCallback ctl)
+  GLFW.setMouseButtonCallback win (Just $ mouseButtonCallback ctl)
   return ctl
