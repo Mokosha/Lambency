@@ -19,6 +19,7 @@ module Graphics.Rendering.Lambency.Camera (
   setCamFar,
 
   mkFixedCam,
+  mkViewerCam,
   mkDebugCam,
 ) where
 --------------------------------------------------------------------------------
@@ -189,6 +190,32 @@ getViewProjMatrix c = (getViewMatrix c) !*! (getProjMatrix c)
 
 mkFixedCam :: Monad m => Camera -> W.Wire s e m a Camera
 mkFixedCam cam = W.mkConst $ Right cam
+
+mkViewerCam :: Camera -> GameWire a Camera
+mkViewerCam cam@(Camera xform camTy camSz) = let
+  finalXForm :: Input -> XForm.Transform
+  finalXForm ipt = mkXForm newPos (signorm $ negate newPos) (XForm.up xform)
+    where
+      newPos :: Vec3f
+      newPos = XForm.transformPoint rotation $ getCamPos cam
+        where
+          rotation :: XForm.Transform
+          rotation = case (cursor ipt) of
+            Just (mx, my) -> flip XForm.rotateWorld XForm.identity $
+                             foldl1 (*) [
+                               Quat.axisAngle (XForm.up xform) (-asin mx),
+                               Quat.axisAngle (XForm.right xform) (-asin my)]
+            Nothing -> XForm.identity
+  in
+   W.mkGenN $ \_ -> do
+     ipt <- get
+     let newcam =
+           if isButtonPressed GLFW.MouseButton'1 ipt then
+             Camera (finalXForm ipt) camTy camSz
+           else
+             cam
+     put $ resetCursorPos ipt
+     return (Right newcam, mkViewerCam newcam)
 
 mkDebugCam :: Camera -> GameWire a Camera
 mkDebugCam (Camera xform camTy camSz) = let
