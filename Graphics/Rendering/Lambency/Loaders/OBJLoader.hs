@@ -208,14 +208,17 @@ parseFile = let
            (oneOf "osg" >> ignoreRestOfLine)
 
   blankLine :: Parser ()
-  blankLine = (newline <|> (skipMany1 (tab <|> char ' ') >> newline)) >> return ()
+  blankLine = (newline <|>
+               (skipMany1 (tab <|> char ' ') >> newline)) >> return ()
 
   vert :: Parser Value
-  vert =
-    char 'v' >>
-    ((char ' ' >> vector3 >>= return . Position)
-     <|> (char 'n' >> vector3 >>= return . Normal)
-     <|> (char 't' >> vector2 >>= return . TexCoord))
+  vert = do
+    v <- char 'v' >>
+         ((char ' ' >> vector3 >>= return . Position)
+          <|> (char 'n' >> vector3 >>= return . Normal)
+          <|> (char 't' >> vector2 >>= return . TexCoord))
+    _ <- many (noneOf ['\n'])
+    return v
 
   integer :: Parser Int
   integer = do
@@ -242,6 +245,7 @@ parseFile = let
   face :: Parser Value
   face = do
     idxs <- char 'f' >> (many1 index)
+    _ <- many (noneOf ['\n'])
     return $ Face idxs
 
   value :: Parser Value
@@ -251,11 +255,10 @@ parseFile = let
   ignorableLines = many (errata <|> comment <|> blankLine) >> return ()
 
   parseLine :: Parser Value
-  parseLine = let
-    in do
-      v <- ignorableLines >> value
-      skipMany (tab <|> char ' ')
-      ((try $ newline >> return ()) <|> (try eof)) >> return v
+  parseLine = do
+    v <- value
+    ignorableLines
+    return v
 
   initialGeom = OBJGeometry {
     objVerts = [],
@@ -276,6 +279,7 @@ parseFile = let
   constructGeometry _ g = g
 
   in do
+    ignorableLines
     vals <- many1 parseLine
     _ <- try (ignorableLines >> eof) >> return ()
     return $ constructGeometry (reverse vals) initialGeom
