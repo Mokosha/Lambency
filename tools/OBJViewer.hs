@@ -6,7 +6,7 @@ import qualified Graphics.UI.GLFW as GLFW
 import qualified Graphics.UI.Lambency as L
 import qualified Graphics.Rendering.Lambency as LR
 
-import System.FilePath
+import System.Environment
 
 import qualified Linear.Quaternion as Quat
 import Linear.Vector
@@ -30,8 +30,8 @@ cam = LR.mkFixedCam initialCam
 mkOBJ :: FilePath -> IO (LR.RenderObject)
 mkOBJ objfile = do
   tex <- LR.createSolidTexture (67, 128, 67, 255)
---  mesh <- LR.loadOBJ objfile
-  ro <- LR.createRenderObject (LR.cube) (LR.createTexturedMaterial tex)
+  mesh <- LR.loadOBJ objfile
+  ro <- LR.createRenderObject mesh (LR.createTexturedMaterial tex)
   return ro
 
 controlWire :: LR.RenderObject -> LR.GameWire a a
@@ -66,8 +66,14 @@ initGame objfile = do
 
 main :: IO ()
 main = do
+  args <- getArgs
+  let
+    objfile :: FilePath
+    objfile = case args of
+        (x : []) -> x
+        _ -> error "Usage: lobjview OBJFILE"
   m <- L.makeWindow 640 480 "OBJ Viewer"
-  game <- initGame ""
+  game <- initGame objfile
   case m of
     (Just win) -> L.run win () game
     Nothing -> return ()
