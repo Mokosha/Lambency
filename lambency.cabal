@@ -20,9 +20,10 @@ data-files:          simple.vert
                      spotlight.frag
                      minimal.vert
                      minimal.frag
-data-dir:            Graphics/Rendering/Lambency/Shaders
+data-dir:            lib/Graphics/Rendering/Lambency/Shaders
 
 library
+  hs-source-dirs:      lib
   exposed-modules:     Graphics.UI.Lambency
                        Graphics.Rendering.Lambency
   other-modules:       Graphics.Rendering.Lambency.Bounds
@@ -64,12 +65,14 @@ library
                        directory
 
 executable lobjview
-  main-is:        tools/OBJViewer.hs
+  main-is:        OBJViewer.hs
+  hs-source-dirs: tools
   ghc-options:    -Wall -rtsopts -O3
   build-depends:  base > 4.5,
                   GLFW-b,
                   OpenGL >=2.9.2.0,
                   OpenGLRaw ==1.4.0.0,
+                  lambency,
                   JuicyPixels,
                   linear,
                   parsec, text,
