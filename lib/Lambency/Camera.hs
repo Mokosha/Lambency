@@ -1,4 +1,4 @@
-module Graphics.Rendering.Lambency.Camera (
+module Lambency.Camera (
   mkOrthoCamera,
   mkPerspCamera,
   getViewProjMatrix,
@@ -25,10 +25,9 @@ module Graphics.Rendering.Lambency.Camera (
 --------------------------------------------------------------------------------
 import qualified Graphics.UI.GLFW as GLFW
 
-import Graphics.UI.Lambency.Input
-
-import Graphics.Rendering.Lambency.Types
-import qualified Graphics.Rendering.Lambency.Transform as XForm
+import Lambency.Input
+import Lambency.Types
+import qualified Lambency.Transform as XForm
 
 import qualified Control.Wire as W
 import Control.Monad.RWS.Strict

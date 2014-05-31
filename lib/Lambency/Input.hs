@@ -1,4 +1,4 @@
-module Graphics.UI.Lambency.Input (
+module Lambency.Input (
   MiscInput(..),
   Input(..),
   InputControl,
@@ -11,8 +11,9 @@ module Graphics.UI.Lambency.Input (
 ) where
 
 --------------------------------------------------------------------------------
-import Graphics.Rendering.Lambency.Utils
 import qualified Graphics.UI.GLFW as GLFW
+
+import Lambency.Utils
 
 import Control.Concurrent.STM
 

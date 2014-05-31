@@ -1,4 +1,4 @@
-module Graphics.Rendering.Lambency.Bounds (
+module Lambency.Bounds (
   BoundingVolume,
   aabb,
   boundingSphere,
@@ -8,8 +8,8 @@ module Graphics.Rendering.Lambency.Bounds (
 
 --------------------------------------------------------------------------------
 
-import Graphics.Rendering.Lambency.Types
-import Graphics.Rendering.Lambency.Transform
+import Lambency.Types
+import Lambency.Transform
 
 import Linear.Epsilon
 import Linear.Matrix

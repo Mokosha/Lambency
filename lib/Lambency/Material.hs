@@ -1,4 +1,4 @@
-module Graphics.Rendering.Lambency.Material (
+module Lambency.Material (
   getShaderMap,
   getMaterialVar,
   createSimpleMaterial,
@@ -7,8 +7,8 @@ module Graphics.Rendering.Lambency.Material (
 ) where
 
 --------------------------------------------------------------------------------
-import Graphics.Rendering.Lambency.Types
-import Graphics.Rendering.Lambency.Texture
+import Lambency.Types
+import Lambency.Texture
 
 import qualified Data.Map as Map
 --------------------------------------------------------------------------------

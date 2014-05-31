@@ -1,4 +1,4 @@
-module Graphics.Rendering.Lambency.Vertex (
+module Lambency.Vertex (
   Vertex,
   getDescriptors,
   getAttribNames,

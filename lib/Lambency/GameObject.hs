@@ -1,4 +1,4 @@
-module Graphics.Rendering.Lambency.GameObject (
+module Lambency.GameObject (
   mkObject,
   withVelocity,
   pulseSound,
@@ -8,11 +8,10 @@ module Graphics.Rendering.Lambency.GameObject (
 --------------------------------------------------------------------------------
 import qualified Graphics.UI.GLFW as GLFW
 
-import Graphics.UI.Lambency.Input
-import Graphics.UI.Lambency.Sound
-
-import Graphics.Rendering.Lambency.Transform
-import Graphics.Rendering.Lambency.Types
+import Lambency.Input
+import Lambency.Sound
+import Lambency.Transform
+import Lambency.Types
 
 import Control.Arrow
 import Control.Wire

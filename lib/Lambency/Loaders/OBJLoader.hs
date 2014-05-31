@@ -1,11 +1,11 @@
-module Graphics.Rendering.Lambency.Loaders.OBJLoader (
+module Lambency.Loaders.OBJLoader (
   loadOBJ
 ) where
 
 --------------------------------------------------------------------------------
 
-import Graphics.Rendering.Lambency.Mesh
-import Graphics.Rendering.Lambency.Vertex
+import Lambency.Mesh
+import Lambency.Vertex
 
 import qualified Data.Map as Map
 

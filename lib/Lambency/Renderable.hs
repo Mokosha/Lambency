@@ -1,4 +1,4 @@
-module Graphics.Rendering.Lambency.Renderable (
+module Lambency.Renderable (
   Renderable(..),
   createBasicRO,
   clearBuffers
@@ -6,10 +6,10 @@ module Graphics.Rendering.Lambency.Renderable (
 
 --------------------------------------------------------------------------------
 import qualified Graphics.Rendering.OpenGL as GL
-import Graphics.Rendering.Lambency.Material
-import Graphics.Rendering.Lambency.Shader
-import Graphics.Rendering.Lambency.Types
-import Graphics.Rendering.Lambency.Vertex
+import Lambency.Material
+import Lambency.Shader
+import Lambency.Types
+import Lambency.Vertex
 
 import qualified Data.Map as Map
 import Data.Array.IO

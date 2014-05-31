@@ -3,8 +3,7 @@ module Main (main) where
 --------------------------------------------------------------------------------
 import qualified Graphics.UI.GLFW as GLFW
 
-import qualified Graphics.UI.Lambency as L
-import qualified Graphics.Rendering.Lambency as LR
+import qualified Lambency as L
 
 import System.Environment
 
@@ -16,28 +15,28 @@ import Control.Monad.RWS.Strict
 import qualified Control.Wire as W
 ---------------------------------------------------------------------------------
 
-initialCam :: LR.Camera
-initialCam = LR.mkPerspCamera
+initialCam :: L.Camera
+initialCam = L.mkPerspCamera
              -- Pos           Dir              Up
-             ((-15) *^ LR.localForward) (LR.localForward) (LR.localUp)
+             ((-15) *^ L.localForward) (L.localForward) (L.localUp)
              (pi / 4) (4.0 / 3.0)
              -- near far
              0.1 1000.0
 
-cam :: LR.GameWire () LR.Camera
-cam = LR.mkFixedCam initialCam
+cam :: L.GameWire () L.Camera
+cam = L.mkFixedCam initialCam
 
-mkOBJ :: FilePath -> IO (LR.RenderObject)
+mkOBJ :: FilePath -> IO (L.RenderObject)
 mkOBJ objfile = do
-  tex <- LR.createSolidTexture (67, 128, 67, 255)
-  mesh <- LR.loadOBJ objfile
-  ro <- LR.createRenderObject mesh (LR.createTexturedMaterial tex)
+  tex <- L.createSolidTexture (67, 128, 67, 255)
+  mesh <- L.loadOBJ objfile
+  ro <- L.createRenderObject mesh (L.createTexturedMaterial tex)
   return ro
 
-controlWire :: LR.RenderObject -> LR.GameWire a a
-controlWire ro = LR.mkObject ro (xForm LR.identity)
+controlWire :: L.RenderObject -> L.GameWire a a
+controlWire ro = L.mkObject ro (xForm L.identity)
   where
-    xForm :: LR.Transform -> LR.GameWire a LR.Transform
+    xForm :: L.Transform -> L.GameWire a L.Transform
     xForm xf = W.mkGenN $ \_ -> do
       ipt <- get
       let rotate = L.isButtonPressed GLFW.MouseButton'1 ipt
@@ -45,24 +44,24 @@ controlWire ro = LR.mkObject ro (xForm LR.identity)
       put $ L.resetCursorPos ipt
       return (Right newxf, xForm newxf)
       where
-        rotation :: L.Input -> LR.Transform
+        rotation :: L.Input -> L.Transform
         rotation ipt = case (L.cursor ipt) of
-          Just (mx, my) -> flip LR.rotateWorld xf $
+          Just (mx, my) -> flip L.rotateWorld xf $
                            foldl1 (*) [
-                             Quat.axisAngle LR.localUp (-asin mx),
-                             Quat.axisAngle LR.localRight $ asin my]
+                             Quat.axisAngle L.localUp (-asin mx),
+                             Quat.axisAngle L.localRight $ asin my]
           Nothing -> xf
 
-initGame :: FilePath -> IO (LR.Game ())
+initGame :: FilePath -> IO (L.Game ())
 initGame objfile = do
   obj <- mkOBJ objfile
   let lightPos = 10 *^ (V3 0 1 (-1))
-  spotlight <- LR.createSpotlight lightPos (negate lightPos) 0
-  return $ LR.Game { LR.staticLights = [LR.setAmbient (V3 0.5 0.5 0.5) spotlight],
-                     LR.staticGeometry = [],
-                     LR.mainCamera = cam,
-                     LR.dynamicLights = [],
-                     LR.gameLogic = controlWire obj }
+  spotlight <- L.createSpotlight lightPos (negate lightPos) 0
+  return $ L.Game { L.staticLights = [L.setAmbient (V3 0.5 0.5 0.5) spotlight],
+                     L.staticGeometry = [],
+                     L.mainCamera = cam,
+                     L.dynamicLights = [],
+                     L.gameLogic = controlWire obj }
 
 main :: IO ()
 main = do

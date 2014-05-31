@@ -1,4 +1,4 @@
-module Graphics.Rendering.Lambency.Shader (
+module Lambency.Shader (
   getProgram,
   getShaderVars,
   isUniform,
@@ -13,8 +13,8 @@ module Graphics.Rendering.Lambency.Shader (
 
 --------------------------------------------------------------------------------
 
-import Graphics.Rendering.Lambency.Texture
-import Graphics.Rendering.Lambency.Types
+import Lambency.Texture
+import Lambency.Types
 
 import Paths_lambency
 
@@ -53,8 +53,6 @@ setUniformVar :: ShaderVar -> ShaderValue -> IO ()
 setUniformVar (Uniform Matrix4Ty (GL.UniformLocation loc)) (Matrix4Val mat) = do
   with mat $ \ptr ->
     GLRaw.glUniformMatrix4fv loc 1 0 (castPtr (ptr :: Ptr (M44 Float)))
---  arr <- newListArray (0 :: Int, 15) (map realToFrac (destructMat4 mat))
---  withStorableArray arr (\ptr  -> GLRaw.glUniformMatrix4fv loc 1 0 ptr)
 
 setUniformVar (Uniform (TextureTy unit) loc) (TextureVal tex) = do
   GL.activeTexture GL.$= (GL.TextureUnit unit)

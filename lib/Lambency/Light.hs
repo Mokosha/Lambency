@@ -1,4 +1,4 @@
-module Graphics.Rendering.Lambency.Light (
+module Lambency.Light (
   createSpotlight,
   createNoLight,
   setAmbient,
@@ -7,11 +7,11 @@ module Graphics.Rendering.Lambency.Light (
 
 --------------------------------------------------------------------------------
 
-import Graphics.Rendering.Lambency.Camera
-import Graphics.Rendering.Lambency.Renderable
-import Graphics.Rendering.Lambency.Shader
-import Graphics.Rendering.Lambency.Texture
-import Graphics.Rendering.Lambency.Types
+import Lambency.Camera
+import Lambency.Renderable
+import Lambency.Shader
+import Lambency.Texture
+import Lambency.Types
 
 import Linear.Matrix
 import Linear.Metric

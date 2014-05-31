@@ -1,7 +1,7 @@
-module Graphics.Rendering.Lambency.Loaders (
+module Lambency.Loaders (
   loadOBJ
 ) where
 
 --------------------------------------------------------------------------------
-import Graphics.Rendering.Lambency.Loaders.OBJLoader
+import Lambency.Loaders.OBJLoader
 --------------------------------------------------------------------------------

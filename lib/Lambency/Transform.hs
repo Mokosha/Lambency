@@ -1,4 +1,4 @@
-module Graphics.Rendering.Lambency.Transform (
+module Lambency.Transform (
   Transform, Invertible(..), Transformable3D(..),
   fromForwardUp, fromCoordinateBasis, identity,
   right, up, forward, localRight, localUp, localForward,

@@ -1,4 +1,4 @@
-module Graphics.Rendering.Lambency.Mesh (
+module Lambency.Mesh (
   Mesh(..),
   triangle,
   cube,
@@ -8,8 +8,8 @@ module Graphics.Rendering.Lambency.Mesh (
 
 --------------------------------------------------------------------------------
 
-import Graphics.Rendering.Lambency.Renderable
-import Graphics.Rendering.Lambency.Vertex
+import Lambency.Renderable
+import Lambency.Vertex
 import Control.Applicative
 
 import Data.Int

@@ -20,29 +20,28 @@ data-files:          simple.vert
                      spotlight.frag
                      minimal.vert
                      minimal.frag
-data-dir:            lib/Graphics/Rendering/Lambency/Shaders
+data-dir:            lib/Lambency/Shaders
 
 library
   hs-source-dirs:      lib
-  exposed-modules:     Graphics.UI.Lambency
-                       Graphics.Rendering.Lambency
-  other-modules:       Graphics.Rendering.Lambency.Bounds
-                       Graphics.Rendering.Lambency.Camera
-                       Graphics.Rendering.Lambency.Light
-                       Graphics.Rendering.Lambency.Loaders
-                       Graphics.Rendering.Lambency.Loaders.OBJLoader
-                       Graphics.Rendering.Lambency.Material
-                       Graphics.Rendering.Lambency.Mesh
-                       Graphics.Rendering.Lambency.GameObject
-                       Graphics.Rendering.Lambency.Renderable
-                       Graphics.Rendering.Lambency.Shader
-                       Graphics.Rendering.Lambency.Texture
-                       Graphics.Rendering.Lambency.Transform
-                       Graphics.Rendering.Lambency.Types
-                       Graphics.Rendering.Lambency.Vertex
-                       Graphics.Rendering.Lambency.Utils
-                       Graphics.UI.Lambency.Input
-                       Graphics.UI.Lambency.Sound
+  exposed-modules:     Lambency
+  other-modules:       Lambency.Bounds
+                       Lambency.Camera
+                       Lambency.Light
+                       Lambency.Loaders
+                       Lambency.Loaders.OBJLoader
+                       Lambency.Material
+                       Lambency.Mesh
+                       Lambency.GameObject
+                       Lambency.Renderable
+                       Lambency.Shader
+                       Lambency.Texture
+                       Lambency.Transform
+                       Lambency.Types
+                       Lambency.Vertex
+                       Lambency.Utils
+                       Lambency.Input
+                       Lambency.Sound
                        Paths_lambency
   ghc-options:         -Wall -O3
   build-depends:       base > 4.5,

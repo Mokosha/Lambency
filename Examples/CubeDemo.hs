@@ -2,8 +2,7 @@ module Main (main) where
 
 --------------------------------------------------------------------------------
 
-import qualified Graphics.UI.Lambency as L
-import qualified Graphics.Rendering.Lambency as LR
+import qualified Lambency as L
 
 import System.FilePath
 import Paths_lambency_examples
@@ -15,72 +14,72 @@ import qualified Linear.Quaternion as Quat
 import qualified Control.Wire as W
 ---------------------------------------------------------------------------------
 
-initialCam :: LR.Camera
-initialCam = LR.mkPerspCamera
+initialCam :: L.Camera
+initialCam = L.mkPerspCamera
              -- Pos           Dir              Up
-             ((-15) *^ LR.localForward) (LR.localForward) (LR.localUp)
+             ((-15) *^ L.localForward) (L.localForward) (L.localUp)
              (pi / 4) (4.0 / 3.0)
              -- near far
              0.1 1000.0
 
-demoCam :: LR.GameWire () LR.Camera
-demoCam = LR.mkDebugCam initialCam
+demoCam :: L.GameWire () L.Camera
+demoCam = L.mkDebugCam initialCam
 
-mkPlane :: IO (LR.Transform, LR.RenderObject)
+mkPlane :: IO (L.Transform, L.RenderObject)
 mkPlane = do
-  tex <- LR.createSolidTexture (128, 128, 128, 255)
-  ro <- LR.createRenderObject LR.plane (LR.createTexturedMaterial tex)
+  tex <- L.createSolidTexture (128, 128, 128, 255)
+  ro <- L.createRenderObject L.plane (L.createTexturedMaterial tex)
   return (xform, ro)
-  where xform = LR.uniformScale 10 $
-                LR.translate (V3 0 (-2) 0) $
-                LR.identity
+  where xform = L.uniformScale 10 $
+                L.translate (V3 0 (-2) 0) $
+                L.identity
 
-mkBunny:: IO (LR.Transform, LR.RenderObject)
+mkBunny:: IO (L.Transform, L.RenderObject)
 mkBunny = do
-  tex <- LR.createSolidTexture (67, 128, 67, 255)
-  mesh <- getDataFileName ("bunnyN" <.> "obj") >>= LR.loadOBJ
-  ro <- LR.createRenderObject mesh (LR.createTexturedMaterial tex)
+  tex <- L.createSolidTexture (67, 128, 67, 255)
+  mesh <- getDataFileName ("bunnyN" <.> "obj") >>= L.loadOBJ
+  ro <- L.createRenderObject mesh (L.createTexturedMaterial tex)
   return (xform, ro)
-  where xform = LR.rotate (Quat.axisAngle (V3 0 1 0) pi) $
-                LR.translate (V3 (-4) (-4.8) (-5)) $
-                LR.identity
+  where xform = L.rotate (Quat.axisAngle (V3 0 1 0) pi) $
+                L.translate (V3 (-4) (-4.8) (-5)) $
+                L.identity
 
-cubeWire :: IO (LR.GameWire () ())
+cubeWire :: IO (L.GameWire () ())
 cubeWire = do
   sound <- getDataFileName ("stereol" <.> "wav") >>= L.loadSound
-  (Just tex) <- getDataFileName ("crate" <.> "png") >>= LR.loadTextureFromPNG
-  mesh <- getDataFileName ("cube" <.> "obj") >>= LR.loadOBJ
-  ro <- LR.createRenderObject mesh (LR.createTexturedMaterial tex)
-  return $ playSound sound 3.0 W.>>> (LR.mkObject ro (rotate initial))
+  (Just tex) <- getDataFileName ("crate" <.> "png") >>= L.loadTextureFromPNG
+  mesh <- getDataFileName ("cube" <.> "obj") >>= L.loadOBJ
+  ro <- L.createRenderObject mesh (L.createTexturedMaterial tex)
+  return $ playSound sound 3.0 W.>>> (L.mkObject ro (rotate initial))
   where
-    playSound :: L.Sound -> Float -> LR.GameWire a a
-    playSound sound p = LR.pulseSound sound W.>>> (W.for p) W.-->
+    playSound :: L.Sound -> Float -> L.GameWire a a
+    playSound sound p = L.pulseSound sound W.>>> (W.for p) W.-->
                         playSound sound p
 
-    rotate :: LR.Transform -> LR.GameWire a LR.Transform
+    rotate :: L.Transform -> L.GameWire a L.Transform
     rotate xform =
       W.mkPure (\t _ -> let
-                   rotation = Quat.axisAngle LR.localUp $ 3.0 * (W.dtime t)
-                   newxform = LR.rotateWorld rotation xform
+                   rotation = Quat.axisAngle L.localUp $ 3.0 * (W.dtime t)
+                   newxform = L.rotateWorld rotation xform
                    in (Right newxform, rotate newxform))
 
-    initial :: LR.Transform
-    initial = LR.rotate (Quat.axisAngle (V3 1 0 1) 0.6) $
-              LR.uniformScale 2.0 $
-              LR.identity
+    initial :: L.Transform
+    initial = L.rotate (Quat.axisAngle (V3 1 0 1) 0.6) $
+              L.uniformScale 2.0 $
+              L.identity
 
-initGame :: IO (LR.Game ())
+initGame :: IO (L.Game ())
 initGame = do
   plane <- mkPlane
   bunny <- mkBunny
   cube <- cubeWire
   let lightPos = 10 *^ (V3 (-1) 1 0)
-  spotlight <- LR.createSpotlight lightPos (negate lightPos) 0
-  return $ LR.Game { LR.staticLights = [spotlight],
-                     LR.staticGeometry = [plane, bunny],
-                     LR.mainCamera = demoCam,
-                     LR.dynamicLights = [],
-                     LR.gameLogic = cube }
+  spotlight <- L.createSpotlight lightPos (negate lightPos) 0
+  return $ L.Game { L.staticLights = [spotlight],
+                     L.staticGeometry = [plane, bunny],
+                     L.mainCamera = demoCam,
+                     L.dynamicLights = [],
+                     L.gameLogic = cube }
 
 main :: IO ()
 main = do

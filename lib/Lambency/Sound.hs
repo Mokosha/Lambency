@@ -1,4 +1,4 @@
-module Graphics.UI.Lambency.Sound (
+module Lambency.Sound (
   Sound, SoundCommand(..),
   initSound,
   freeSound,

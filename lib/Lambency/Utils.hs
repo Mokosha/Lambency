@@ -1,4 +1,4 @@
-module Graphics.Rendering.Lambency.Utils (
+module Lambency.Utils (
   compareZero,
   compareClose,
   destructMat4,

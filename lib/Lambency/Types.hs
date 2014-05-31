@@ -1,4 +1,4 @@
-module Graphics.Rendering.Lambency.Types (
+module Lambency.Types (
   Vec2f, Vec3f, Vec4f, Quatf, Mat2f, Mat3f, Mat4f,
   Camera(..), CameraType(..), CameraViewDistance(..),
   LightType(..), Light(..), Shadow(..),
@@ -17,10 +17,10 @@ module Graphics.Rendering.Lambency.Types (
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
 
-import Graphics.UI.Lambency.Input
-import Graphics.UI.Lambency.Sound
+import Lambency.Input
+import Lambency.Sound
 
-import qualified Graphics.Rendering.Lambency.Transform as XForm
+import qualified Lambency.Transform as XForm
 
 import Data.Time.Clock
 
