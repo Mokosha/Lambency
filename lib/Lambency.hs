@@ -19,10 +19,10 @@ module Lambency (
   Game(..), GameWire, GameState, GameMonad,
   module Lambency.Utils,
 
-  Input(..), isKeyPressed, isButtonPressed, resetCursorPos,
-  makeWindow,
-  destroyWindow,
-  run,
+  Input(..), withPressedKey, isKeyPressed, debounceKey,
+  isButtonPressed,
+  resetCursorPos,
+  makeWindow, destroyWindow, run,
   module Lambency.Sound
 ) where
 
