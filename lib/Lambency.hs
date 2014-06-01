@@ -167,13 +167,13 @@ run win initialGameObject initialGame = do
          material = Map.union sm (material ro),
          render = (render ro)}
 
-    step :: a -> Game a -> TimeStep -> GameMonad (a, Camera, [Light], Game a)
+    step :: a -> Game a -> TimeStep -> GameMonad (Either () a, Camera, [Light], Game a)
     step go game t = do
       (Right cam, nCamWire) <- W.stepWire (mainCamera game) t (Right ())
-      (Right gameObj, gameWire) <- W.stepWire (gameLogic game) t (Right go)
+      (result, gameWire) <- W.stepWire (gameLogic game) t (Right go)
       lightObjs <- mapM (\w -> W.stepWire w t $ Right ()) (dynamicLights game)
       let (lights, lwires) = collect lightObjs
-      return (gameObj, cam, lights ++ (staticLights game), newGame nCamWire lwires gameWire)
+      return (result, cam, lights ++ (staticLights game), newGame nCamWire lwires gameWire)
         where
           collect :: [(Either e b, GameWire a b)] -> ([b], [GameWire a b])
           collect [] = ([], [])
@@ -275,20 +275,23 @@ run win initialGameObject initialGame = do
       -- Reset the input
       setInput ictl newIpt
 
-      -- Check for exit
-      q <- GLFW.windowShouldClose win
-      unless q $ run' ictl go nextsession (curTime, accum) nextGame
+      case go of
+        Right gobj -> do
+          -- Check for exit
+          q <- GLFW.windowShouldClose win
+          unless q $ run' ictl gobj nextsession (curTime, accum) nextGame
+        Left _ -> return ()
      where
        buildRO :: (Transform, RenderObject) -> OutputAction
        buildRO = uncurry Render3DAction
 
        stepGame :: a -> TimeStepper -> StateStepper a ->
-                   IO (a, TimeStepper, StateStepper a)
+                   IO (Either () a, TimeStepper, StateStepper a)
        stepGame go tstep@(sess, accum) sstep@(g, ipt)
-         | accum < physicsDeltaUTC = return (go, tstep, sstep)
+         | accum < physicsDeltaUTC = return (Right go, tstep, sstep)
          | otherwise = do
            (ts, nextSess) <- W.stepSession sess
-           let ((obj, cam, lights, nextGame), newIpt, actions) =
+           let ((result, cam, lights, nextGame), newIpt, actions) =
                  runRWS (step go g ts) () ipt
            if (accum - physicsDeltaUTC) < physicsDeltaUTC then
              -- Anything happen? Do rendering first, then rest of the actions
@@ -300,6 +303,8 @@ run win initialGameObject initialGame = do
              _ <- printLogs actions
              return ()
 
-           stepGame obj
-             (nextSess, (accum - physicsDeltaUTC)) -- TimeStepper
-             (nextGame, newIpt)                    -- StateStepper
+           case result of
+             Right obj -> stepGame obj
+                          (nextSess, (accum - physicsDeltaUTC)) -- TimeStepper
+                          (nextGame, newIpt)                    -- StateStepper
+             Left _ -> return (result, tstep, sstep)
