@@ -53,10 +53,12 @@ import qualified Control.Wire as W
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import Data.Time
+import Data.List (sortBy)
 
 import GHC.Float
 
 import Linear.Matrix
+import Linear.V4
 
 --------------------------------------------------------------------------------
 
@@ -220,12 +222,20 @@ run win initialGameObject initialGame = do
     renderObjects :: [Light] -> Camera -> [OutputAction] -> IO ([OutputAction])
                   -- This is the best line in my code
     renderObjects lights camera action = do
-      let ros = do
-            act <- action
-            (xf, ro) <- case act of
-              Render3DAction xf' ro' -> [(xf', ro')]
-              _ -> []
-            return $ place xf camera ro
+      let
+        -- !FIXME! We don't need to sort opaque objects...
+        distanceFromCamera :: RenderObject -> Float
+        distanceFromCamera ro =
+          let (Matrix4Val (V4 _ _ (V4 _ _ _ z) _)) = getMaterialVar (material ro) "mvpMatrix" in z
+
+        ros = reverse $
+              sortBy (\ro1 ro2 -> compare (distanceFromCamera ro1) (distanceFromCamera ro2)) $
+              do
+                act <- action
+                (xf, ro) <- case act of
+                  Render3DAction xf' ro' -> [(xf', ro')]
+                  _ -> []
+                return $ place xf camera ro
 
       if length ros > 0 then
         do
