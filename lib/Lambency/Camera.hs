@@ -21,6 +21,7 @@ module Lambency.Camera (
   mkFixedCam,
   mkViewerCam,
   mkDebugCam,
+  mk2DCam,
 ) where
 --------------------------------------------------------------------------------
 import qualified Graphics.UI.GLFW as GLFW
@@ -36,6 +37,7 @@ import Linear.Matrix
 import Linear.Metric
 import qualified Linear.Quaternion as Quat
 import Linear.Vector
+import Linear.V2
 import Linear.V3
 import Linear.V4
 --------------------------------------------------------------------------------
@@ -256,3 +258,23 @@ mkDebugCam (Camera xform camTy camSz) = let
      let newcam = updCam (W.dtime t) ipt
      put $ resetCursorPos ipt
      return (Right newcam, mkDebugCam newcam)
+
+mk2DCam :: Int -> Int -> GameWire Vec2f Camera
+mk2DCam sx sy = let
+  toHalfF :: Integral a => a -> Float
+  toHalfF x = 0.5 * (fromIntegral x)
+
+  hx :: Float
+  hx = toHalfF sx
+
+  hy :: Float
+  hy = toHalfF sy
+
+  screenCenter :: V3 Float
+  screenCenter = V3 hx hy 1
+
+  trPos :: Vec2f -> Vec3f
+  trPos (V2 x y) = (V3 x y 0) ^+^ screenCenter
+ in
+   W.mkSF_ $ \vec -> mkOrthoCamera
+   (trPos vec) (negate XForm.localForward) XForm.localUp (-hx) (hx) (hy) (-hy) 0.01 50.0
