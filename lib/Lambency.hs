@@ -16,6 +16,7 @@ module Lambency (
   Material,
   RenderObject,
   OutputAction(..),
+  TimeStep,
   Game(..), GameWire, GameState, GameMonad,
   module Lambency.Utils,
 
