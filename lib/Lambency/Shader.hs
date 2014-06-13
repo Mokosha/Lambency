@@ -6,6 +6,7 @@ module Lambency.Shader (
   setUniformVar,
   createMinimalShader,
   createSimpleShader,
+  createTransparentShader,
   createSpotlightShader,
   destroyShader,
   beforeRender, afterRender
@@ -140,6 +141,19 @@ createSimpleShader = do
   vars <- extractVars $ map (uncurry (lookupShaderVar prg))
     [(FloatListTy, "position"),
      (FloatListTy, "texCoord"),
+     (TextureTy 0, "diffuseTex"),
+     (Matrix4Ty, "mvpMatrix")]
+  return $ Shader prg vars
+
+createTransparentShader :: IO (Shader)
+createTransparentShader = do
+  vs <- getShaderPath "simple" GL.VertexShader
+  fs <- getShaderPath "simple-trans" GL.FragmentShader
+  (Just prg) <- loadProgram [vs, fs]
+  vars <- extractVars $ map (uncurry (lookupShaderVar prg))
+    [(FloatListTy, "position"),
+     (FloatListTy, "texCoord"),
+     (FloatTy, "alpha"),
      (TextureTy 0, "diffuseTex"),
      (Matrix4Ty, "mvpMatrix")]
   return $ Shader prg vars

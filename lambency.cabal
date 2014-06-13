@@ -16,6 +16,7 @@ build-type:          Simple
 cabal-version:       >=1.8
 data-files:          simple.vert
                      simple.frag
+                     simple-trans.frag
                      standard.vert
                      spotlight.frag
                      minimal.vert
