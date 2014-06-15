@@ -44,7 +44,7 @@ setAmbient color (Light shdr shdrMap shadow) =
 createNoLight :: IO (Light)
 createNoLight = do
   shdr <- createTransparentShader
-  return $ Light shdr (Map.singleton "alpha" $ FloatVal 0.5) Nothing
+  return $ Light shdr (Map.singleton "alpha" $ FloatVal 1.0) Nothing
 
 renderLight :: Light -> [RenderObject] -> IO ()
 renderLight (Light shdr shdrmap msm) ros = do
