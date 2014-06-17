@@ -70,5 +70,5 @@ renderLight (Light shdr shdrmap msm) ros = do
       afterRender shadowShdr
       clearRenderTexture
   beforeRender shdr
-  mapM_ (\ro -> (render ro) shdr (Map.union shdrmap (material ro))) ros
+  mapM_ (\ro -> (render ro) shdr (Map.union (material ro) shdrmap)) ros
   afterRender shdr
