@@ -97,7 +97,6 @@ makeWindow width height title = do
       -- Initial defaults
       GL.blend GL.$= GL.Enabled
       GL.blendFunc GL.$= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
-      GL.depthFunc GL.$= Just GL.Lequal
       GL.cullFace GL.$= Just GL.Back
       initLambency
       initSound
@@ -239,17 +238,20 @@ run win initialGameObject initialGame = do
       render' ros
         | length ros == 0 = return ()
         | otherwise = do
-          -- !FIXME! This should be moved to the camera...
-          GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
-          clearBuffers
-
           mapM_ (flip renderLight ros) lights
-
-          GL.flush
-          GLFW.swapBuffers win
       in do
+        -- !FIXME! This should be moved to the camera...
+        GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
+        clearBuffers
+
+        GL.depthFunc GL.$= Just GL.Lequal
         render' opaque
+        GL.depthFunc GL.$= Nothing
         render' (reverse trans)
+
+        GL.flush
+        GLFW.swapBuffers win
+
         return $ filter (\act -> case act of
                           Render3DAction _ _ -> False
                           _ -> True) action
