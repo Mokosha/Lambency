@@ -14,7 +14,7 @@ module Lambency (
   Camera, CameraType, CameraViewDistance,
   LightType, Light,
   Material,
-  RenderObject,
+  RenderFlag(..), RenderObject,
   OutputAction(..),
   TimeStep,
   Game(..), GameWire, GameState, GameMonad,
@@ -54,7 +54,7 @@ import qualified Control.Wire as W
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 import Data.Time
-import Data.List (sortBy)
+import Data.List (sortBy, partition)
 
 import GHC.Float
 
@@ -164,9 +164,7 @@ run win initialGameObject initialGame = do
         ("mvpMatrix", Matrix4Val $ model !*! (getViewProjMatrix cam)),
         ("m2wMatrix", Matrix4Val $ model)]
       in
-       RenderObject {
-         material = Map.union sm (material ro),
-         render = (render ro)}
+       ro { material = Map.union sm (material ro) }
 
     step :: a -> Game a -> TimeStep -> GameMonad (Either () a, Camera, [Light], Game a)
     step go game t = do
@@ -222,24 +220,24 @@ run win initialGameObject initialGame = do
 
     renderObjects :: [Light] -> Camera -> [OutputAction] -> IO ([OutputAction])
                   -- This is the best line in my code
-    renderObjects lights camera action = do
-      let
-        -- !FIXME! We don't need to sort opaque objects...
-        distanceFromCamera :: RenderObject -> Float
-        distanceFromCamera ro =
-          let (Matrix4Val (V4 _ _ (V4 _ _ _ z) _)) = getMaterialVar (material ro) "mvpMatrix" in z
+    renderObjects lights camera action = let
+      -- !FIXME! We don't need to sort opaque objects...
+      camDist :: RenderObject -> Float
+      camDist ro =
+        let (Matrix4Val (V4 _ _ (V4 _ _ _ z) _)) = getMaterialVar (material ro) "mvpMatrix" in z
 
-        ros = reverse $
-              sortBy (\ro1 ro2 -> compare (distanceFromCamera ro1) (distanceFromCamera ro2)) $
-              do
-                act <- action
-                (xf, ro) <- case act of
-                  Render3DAction xf' ro' -> [(xf', ro')]
-                  _ -> []
-                return $ place xf camera ro
+      (trans, opaque) = partition (\ro -> Transparent `elem` (flags ro)) $
+                        sortBy (\ro1 ro2 -> compare (camDist ro1) (camDist ro2)) $
+                        do
+                          act <- action
+                          (xf, ro) <- case act of
+                            Render3DAction xf' ro' -> [(xf', ro')]
+                            _ -> []
+                          return $ place xf camera ro
 
-      if length ros > 0 then
-        do
+      render' ros
+        | length ros == 0 = return ()
+        | otherwise = do
           -- !FIXME! This should be moved to the camera...
           GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
           clearBuffers
@@ -248,9 +246,10 @@ run win initialGameObject initialGame = do
 
           GL.flush
           GLFW.swapBuffers win
-        else return ()
-
-      return $ filter (\act -> case act of
+      in do
+        render' opaque
+        render' (reverse trans)
+        return $ filter (\act -> case act of
                           Render3DAction _ _ -> False
                           _ -> True) action
 

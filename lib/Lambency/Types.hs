@@ -5,7 +5,7 @@ module Lambency.Types (
   Shader(..), ShaderVarTy(..), ShaderValue(..), ShaderVar(..), ShaderMap,
   Texture(..), TextureFormat(..), FBOHandle, TextureHandle,
   Material,
-  RenderObject(..),
+  RenderFlag(..), RenderObject(..),
   OutputAction(..),
   TimeStep,
   GameWire, GameMonad, GameState, GameSession, GameTime,
@@ -155,9 +155,13 @@ type Material = ShaderMap
 
 -- Renderable Objects
 
+data RenderFlag = Transparent
+                deriving (Show, Read, Ord, Eq)
+
 data RenderObject = RenderObject {
   material :: Material,
-  render :: Shader -> ShaderMap -> IO ()
+  render :: Shader -> ShaderMap -> IO (),
+  flags :: [RenderFlag]
 }
 
 type RenderInstance = (XForm.Transform, RenderObject)

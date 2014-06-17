@@ -41,7 +41,8 @@ createBasicRO :: [Vertex] -> [Int16] -> Material -> IO (RenderObject)
 createBasicRO [] _ _ = do
   return $ RenderObject {
     material = Map.empty,
-    render = \_ _ -> return ()
+    render = \_ _ -> return (),
+    flags = []
   }
 
 createBasicRO (v:vs) idxs mat =
@@ -92,7 +93,8 @@ createBasicRO (v:vs) idxs mat =
     ibo <- setupBuffer GL.ElementArrayBuffer idxs
     return $ RenderObject {
       material = mat,
-      render = createRenderFunc vbo ibo $ fromIntegral (length idxs)
+      render = createRenderFunc vbo ibo $ fromIntegral (length idxs),
+      flags = []
     }
 
 class Renderable a where
