@@ -189,30 +189,19 @@ run win initialGameObject initialGame = do
             dynamicLights = lights,
             gameLogic = logic}
 
-    performAction :: (OutputAction -> IO(Maybe OutputAction)) ->
-                     [OutputAction] -> IO ([OutputAction])
-    performAction _ [] = return []
-    performAction fn (act : acts) = do
-      res <- fn act
-      case res of
-        Nothing -> performAction fn acts
-        Just a -> do
-          ress <- performAction fn acts
-          return $ a : ress
-
     playSounds :: [OutputAction] -> IO ([OutputAction])
-    playSounds = performAction $
-                 (\act -> case act of
-                     SoundAction sound cmd -> do
-                       handleCommand sound cmd
-                       return Nothing
-                     _ -> do
-                       return (Just act))
+    playSounds [] = return []
+    playSounds (SoundAction sound cmd : rest) = do
+      handleCommand sound cmd
+      return rest
+    playSounds (act : acts) = do
+      rest <- playSounds acts
+      return (act : rest)
 
     printLogs :: [OutputAction] -> IO ([OutputAction])
     printLogs [] = return []
     printLogs (LogAction s : rest) = do
-      print s
+      putStrLn s
       printLogs rest
     printLogs (act : acts) = do
       rest <- printLogs acts
