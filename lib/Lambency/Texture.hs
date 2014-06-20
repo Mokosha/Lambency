@@ -19,7 +19,7 @@ import qualified Codec.Picture as JP
 
 import Control.Monad (unless)
 
-import System.Directory
+-- import System.Directory
 import Foreign.Ptr
 import Data.Array.Storable
 import Data.Array.Unboxed
@@ -52,8 +52,9 @@ bindRenderTexture (RenderTexture _ h) = do
 clearRenderTexture :: IO ()
 clearRenderTexture = do
   let depthfile = "depth.png"
-  exists <- doesFileExist depthfile
-  unless exists $ do
+--  exists <- doesFileExist depthfile
+--  unless exists $ do
+  unless True $ do
     GL.flush
     arr <- newArray_ ((0, 0), (fromIntegral $ kShadowMapSize - 1, fromIntegral $ kShadowMapSize - 1))
     withStorableArray arr (\ptr -> do
