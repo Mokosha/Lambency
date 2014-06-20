@@ -221,7 +221,6 @@ run win initialGameObject initialGame = do
     renderObjects :: [Light] -> Camera -> [OutputAction] -> IO ([OutputAction])
                   -- This is the best line in my code
     renderObjects lights camera action = let
-      -- !FIXME! We don't need to sort opaque objects...
       camDist :: RenderObject -> Float
       camDist ro =
         let (Matrix4Val (V4 _ _ (V4 _ _ _ z) _)) = getMaterialVar (material ro) "mvpMatrix" in z
