@@ -287,24 +287,56 @@ run win initialGameObject initialGame = do
        buildRO :: (Transform, RenderObject) -> OutputAction
        buildRO = uncurry Render3DAction
 
+       -- When we handle actions, only really print logs and play any sounds
+       -- that may need to start or stop.
+       handleActions :: [OutputAction] -> IO ()
+       handleActions actions =
+         foldM_ (\acts f -> f acts) actions [
+           printLogs,
+           playSounds
+         ]
+
+       -- When we handle actions with rendering, we render all of the actions
+       -- and then handle actions like usual...
+       handleActionsWithRender :: [Light] -> Camera -> [OutputAction] -> IO ()
+       handleActionsWithRender ls c acts = renderObjects ls c acts >>= handleActions
+
        stepGame :: a -> TimeStepper -> StateStepper a ->
                    IO (Either () a, TimeStepper, StateStepper a)
        stepGame go tstep@(sess, accum) sstep@(g, ipt)
          | accum < physicsDeltaUTC = return (Right go, tstep, sstep)
          | otherwise = do
-           (ts, nextSess) <- W.stepSession sess
-           let ((result, cam, lights, nextGame), newIpt, actions) =
-                 runRWS (step go g ts) () ipt
-           if (accum - physicsDeltaUTC) < physicsDeltaUTC then
-             -- Anything happen? Do rendering first, then rest of the actions
-             foldM_ (\acts f -> f acts) actions [
-               (renderObjects lights cam) . ((map buildRO $ staticGeometry g) ++),
-               printLogs,
-               playSounds]
-             else do
-             _ <- printLogs actions
-             return ()
 
+           -- Retreive the next time step from our game session
+           (ts, nextSess) <- W.stepSession sess
+
+           let
+             -- This is the meat of the step routine. This calls runRWS on the
+             -- main game wire, and uses the results to figure out what needs
+             -- to be done.
+             ((result, cam, lights, nextGame), newIpt, actions) =
+                 runRWS (step go g ts) () ipt
+
+             -- We need to render if we're going to fall below the physics threshold
+             -- on the next frame. This simulates a while loop. If we don't fall
+             -- through this threshold, we will perform another physics step before
+             -- we finally decide to render.
+             needsRender = ((accum - physicsDeltaUTC) < physicsDeltaUTC)
+
+             -- If we do render, we need to build the renderObjects and their
+             -- corresponding renderActions from the static geometry. These won't
+             -- get built or evaluated unless we actually render though.
+             sgRAs = (map buildRO $ staticGeometry g)
+
+             performActions :: IO ()
+             performActions
+               | needsRender = handleActionsWithRender lights cam (actions ++ sgRAs)
+               | otherwise = handleActions actions
+
+           -- Actually do the associated actions
+           performActions
+
+           -- If our main wire inhibited, return immediately.
            case result of
              Right obj -> stepGame obj
                           (nextSess, (accum - physicsDeltaUTC)) -- TimeStepper
