@@ -77,7 +77,8 @@ data Camera = Camera XForm.Transform CameraType CameraViewDistance deriving(Show
 
 -- Shaders
 
-data ShaderVarTy = Matrix3Ty
+data ShaderVarTy = Matrix2Ty
+                 | Matrix3Ty
                  | Matrix4Ty
                  | Matrix3ListTy
                  | Matrix4ListTy
@@ -98,7 +99,8 @@ data ShaderVar = Uniform ShaderVarTy GL.UniformLocation
 
 type ShaderVarMap = Map.Map String ShaderVar
 
-data ShaderValue = Matrix3Val (Mat3f)
+data ShaderValue = Matrix2Val (Mat2f)
+                 | Matrix3Val (Mat3f)
                  | Matrix4Val (Mat4f)
                  | Matrix3ListVal [Mat3f]
                  | Matrix4ListVal [Mat4f]

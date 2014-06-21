@@ -55,6 +55,10 @@ setUniformVar (Uniform Matrix4Ty (GL.UniformLocation loc)) (Matrix4Val mat) = do
   with mat $ \ptr ->
     GLRaw.glUniformMatrix4fv loc 1 0 (castPtr (ptr :: Ptr (M44 Float)))
 
+setUniformVar (Uniform Matrix2Ty (GL.UniformLocation loc)) (Matrix2Val mat) = do
+  with mat $ \ptr ->
+    GLRaw.glUniformMatrix2fv loc 1 0 (castPtr (ptr :: Ptr (M22 Float)))
+
 setUniformVar (Uniform (TextureTy unit) loc) (TextureVal tex) = do
   GL.activeTexture GL.$= (GL.TextureUnit unit)
   GL.textureBinding GL.Texture2D GL.$= Just (getHandle tex)
