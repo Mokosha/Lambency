@@ -42,9 +42,13 @@ setAmbient color (Light shdr shdrMap shadow) =
   Light shdr (Map.insert "ambient" (Vector3Val color) shdrMap) shadow
 
 createNoLight :: IO (Light)
-createNoLight = do
-  shdr <- createTransparentShader
-  return $ Light shdr (Map.singleton "alpha" $ FloatVal 1.0) Nothing
+createNoLight = let
+  shdrMap = Map.fromList [
+    ("alpha", FloatVal 1.0),
+    ("texCoordMatrix", Matrix2Val eye2)]
+  in do
+    shdr <- createTransparentShader
+    return $ Light shdr shdrMap Nothing
 
 renderLight :: Light -> [RenderObject] -> IO ()
 renderLight (Light shdr shdrmap msm) ros = do
