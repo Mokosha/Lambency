@@ -89,19 +89,30 @@ makeWindow width height title = do
     GLFW.setErrorCallback $ Just errorCallback
     putStr $ "Creating window of size (" ++ (show width) ++ ", " ++ (show height) ++ ")..."
     GLFW.windowHint $ GLFW.WindowHint'Samples 4
-    m <- GLFW.createWindow width height title Nothing Nothing
-    if m == (Nothing) then ioError (userError "Failed!") else do
-      putStrLn "Done."
-      GLFW.makeContextCurrent m
+    jm <- GLFW.createWindow width height title Nothing Nothing
+    m <- case jm of
+      Nothing -> ioError (userError "Failed!")
+      Just m' -> return m'
+    putStrLn "Done."
 
-      -- Initial defaults
-      GL.blend GL.$= GL.Enabled
-      GL.blendFunc GL.$= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
-      GL.cullFace GL.$= Just GL.Back
-      initLambency
-      initSound
-      GL.dither GL.$= GL.Disabled
-      return m
+    GLFW.makeContextCurrent (Just m)
+
+    -- Implement the viewport size to be the framebuffer size
+    -- in order to properly deal with retina displays...
+    -- !FIXME! The user should have some say over this
+    (szx, szy) <- GLFW.getFramebufferSize m
+    GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral szx) (fromIntegral szy))
+
+    -- Initial defaults
+    GL.blend GL.$= GL.Enabled
+    GL.blendFunc GL.$= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
+    GL.cullFace GL.$= Just GL.Back
+    initLambency
+    initSound
+    GL.dither GL.$= GL.Disabled
+
+    -- !FIXME! Why is this Maybe?
+    return (Just m)
 
 destroyWindow :: Maybe GLFW.Window -> IO ()
 destroyWindow m = do

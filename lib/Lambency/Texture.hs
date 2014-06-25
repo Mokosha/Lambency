@@ -12,6 +12,7 @@ module Lambency.Texture (
 
 --------------------------------------------------------------------------------
 import qualified Graphics.Rendering.OpenGL as GL
+import qualified Graphics.UI.GLFW as GLFW
 
 import Lambency.Types
 
@@ -81,7 +82,9 @@ clearRenderTexture = do
 
     JP.writePng depthfile $ JP.pixelMap modulate img
   GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject
-  GL.viewport GL.$= (GL.Position 0 0, GL.Size 640 480)
+  (Just m) <- GLFW.getCurrentContext
+  (szx, szy) <- GLFW.getFramebufferSize m
+  GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral szx) (fromIntegral szy))
 
 destroyTexture :: Texture -> IO ()
 destroyTexture (Texture h _) = GL.deleteObjectName h
