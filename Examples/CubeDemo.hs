@@ -37,7 +37,7 @@ mkPlane = do
 mkBunny:: IO (L.Transform, L.RenderObject)
 mkBunny = do
   tex <- L.createSolidTexture (67, 128, 67, 255)
-  mesh <- getDataFileName ("bunnyN" <.> "obj") >>= L.loadOBJ
+  mesh <- getDataFileName ("bunnyN" <.> "obj") >>= L.loadOTV3
   ro <- L.createRenderObject mesh (L.createTexturedMaterial tex)
   return (xform, ro)
   where xform = L.rotate (Quat.axisAngle (V3 0 1 0) pi) $
@@ -48,7 +48,7 @@ cubeWire :: IO (L.GameWire () ())
 cubeWire = do
   sound <- getDataFileName ("stereol" <.> "wav") >>= L.loadSound
   (Just tex) <- getDataFileName ("crate" <.> "png") >>= L.loadTextureFromPNG
-  mesh <- getDataFileName ("cube" <.> "obj") >>= L.loadOBJ
+  mesh <- getDataFileName ("cube" <.> "obj") >>= L.loadOTV3
   ro <- L.createRenderObject mesh (L.createTexturedMaterial tex)
   return $ playSound sound 3.0 W.>>> (L.mkObject ro (rotate initial))
   where

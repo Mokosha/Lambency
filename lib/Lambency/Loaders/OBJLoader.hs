@@ -1,5 +1,8 @@
 module Lambency.Loaders.OBJLoader (
-  loadOBJ
+  loadV3,
+  loadOV3,
+  loadTV3,
+  loadOTV3,
 ) where
 
 --------------------------------------------------------------------------------
@@ -21,6 +24,7 @@ import Text.Parsec
 import Text.Parsec.Text (Parser)
 
 import Linear.Metric
+import Linear.Vector
 import Linear.V2
 import Linear.V3
 --------------------------------------------------------------------------------
@@ -70,7 +74,7 @@ triangulate fs = let
   in
    concat . concat $ map (flip tglte []) fs
 
-simpleObj2Mesh :: OBJVertexList -> OBJFaceList -> Mesh
+simpleObj2Mesh :: OBJVertexList -> OBJFaceList -> Mesh Vertex3
 simpleObj2Mesh verts faces = Mesh {
   vertices = map mkVertex3 verts,
   indices = map (\(x, _, _) -> fromIntegral x) $ triangulate faces
@@ -105,65 +109,84 @@ mkVec3fLookup vecs = let
        let idx = if (i < 0) then (l + i + 1) else i
         in V3 (arr ! (3*idx - 2)) (arr ! (3*idx - 1)) (arr ! (3 * idx))
 
-genMesh :: OBJIndexList -> (OBJIndex -> Vertex) -> Mesh
+genIdxMap' :: Vertex a => (OBJIndex -> a) -> OBJIndexList -> Map.Map OBJIndex (Int, a) -> Int ->
+             Map.Map OBJIndex (Int, a)
+genIdxMap' _ [] m _ = m
+genIdxMap' f (idx : rest) m nVerts =
+  case Map.lookup idx m of
+    Just _ -> genIdxMap' f rest m nVerts
+    Nothing -> genIdxMap' f rest (Map.insert idx (nVerts, f idx) m) (nVerts + 1)
+
+genIdxMap :: Vertex a => (OBJIndex -> a) -> OBJIndexList -> Map.Map OBJIndex (Int, a)
+genIdxMap f idxs = genIdxMap' f idxs Map.empty 0
+
+genMesh :: Vertex a => OBJIndexList -> (OBJIndex -> a) -> Mesh a
 genMesh idxs f = let
-  genIdxMap :: OBJIndexList -> Map.Map OBJIndex (Int, Vertex) -> Int -> Map.Map OBJIndex (Int, Vertex)
-  genIdxMap (idx : rest) m nVerts =
-    case Map.lookup idx m of
-      Just _ -> genIdxMap rest m nVerts
-      Nothing -> genIdxMap rest (Map.insert idx (nVerts, f idx) m) (nVerts + 1)
-  genIdxMap [] m _ = m
-
-  idxMap :: Map.Map OBJIndex (Int, Vertex)
-  idxMap = genIdxMap idxs Map.empty 0
-
+  idxMap = genIdxMap f idxs
   in Mesh {
     vertices = map snd $ sortBy (comparing fst) $ Map.elems idxMap,
     indices = map (fromIntegral . fst . (idxMap Map.!)) idxs
   }
 
-normalObj2Mesh :: OBJVertexList -> OBJNormalList -> OBJFaceList -> Mesh
+normalObj2Mesh :: OBJVertexList -> OBJNormalList -> OBJFaceList -> Mesh OVertex3
 normalObj2Mesh verts normals faces = let
   -- ns = mkVec3fLookup $ map fromNormal normals
   ns = mkVec3fLookup normals
   vs = mkVec3fLookup verts
 
-  idx2Vertex :: OBJIndex -> Vertex
+  idx2Vertex :: OBJIndex -> OVertex3
   idx2Vertex (x, _, Just n) = mkNormVertex3 (vs x) (ns n)
   idx2Vertex i = error $ "Ill formatted index: " ++ (show i)
 
   in genMesh (triangulate faces) idx2Vertex
 
-texturedObj2Mesh :: OBJVertexList -> OBJTexCoordList -> OBJFaceList -> Mesh
+texturedObj2Mesh :: OBJVertexList -> OBJTexCoordList -> OBJFaceList -> Mesh TVertex3
 texturedObj2Mesh verts texcoords faces = let
   tcs = mkVec2fLookup texcoords
   vs = mkVec3fLookup verts
 
-  idx2Vertex :: OBJIndex -> Vertex
+  idx2Vertex :: OBJIndex -> TVertex3
   idx2Vertex (x, Just tc, _) = mkTexVertex3 (vs x) (tcs tc)
   idx2Vertex i = error $ "Ill formatted index: " ++ (show i)
 
   in genMesh (triangulate faces) idx2Vertex
 
-normTexturedObj2Mesh :: OBJVertexList -> OBJTexCoordList -> OBJNormalList -> OBJFaceList -> Mesh
+normTexturedObj2Mesh :: OBJVertexList -> OBJTexCoordList -> OBJNormalList -> OBJFaceList ->
+                        Mesh OTVertex3
 normTexturedObj2Mesh verts texcoords normals faces = let
   -- ns = mkVec3fLookup $ map fromNormal normals
   ns = mkVec3fLookup normals
   tcs = mkVec2fLookup texcoords
   vs = mkVec3fLookup verts
 
-  idx2Vertex :: OBJIndex -> Vertex
+  idx2Vertex :: OBJIndex -> OTVertex3
   idx2Vertex (x, Just tc, Just n) = mkNormTexVertex3 (vs x) (ns n) (tcs tc)
   idx2Vertex i = error $ "Ill formatted index: " ++ (show i)
 
   in genMesh (triangulate faces) idx2Vertex
 
-obj2Mesh :: OBJGeometry -> Mesh
-obj2Mesh (OBJGeometry {objVerts=vs, objTexCoords=tcs, objNormals=ns, objFaces=fs})
-  | emptyTexCoords tcs && (emptyNormals ns) = simpleObj2Mesh vs fs
-  | emptyTexCoords tcs = normalObj2Mesh vs ns fs
-  | emptyNormals ns = texturedObj2Mesh vs tcs fs
-  | otherwise = normTexturedObj2Mesh vs tcs ns fs
+obj2V3Mesh :: OBJGeometry -> Mesh Vertex3
+obj2V3Mesh (OBJGeometry {objVerts=vs, objTexCoords=_, objNormals=_, objFaces=fs}) =
+  simpleObj2Mesh vs fs
+
+obj2OV3Mesh :: OBJGeometry -> Mesh OVertex3
+obj2OV3Mesh (OBJGeometry {objVerts=vs, objTexCoords=_, objNormals=ns, objFaces = fs})
+  | emptyNormals ns = normalObj2Mesh vs (repeat zero) fs
+  | otherwise = normalObj2Mesh vs ns fs
+
+obj2TV3Mesh :: OBJGeometry -> Mesh TVertex3
+obj2TV3Mesh (OBJGeometry {objVerts=vs, objTexCoords=uvs, objNormals=_, objFaces = fs})
+  | emptyTexCoords uvs = texturedObj2Mesh vs (repeat zero) fs
+  | otherwise = texturedObj2Mesh vs uvs fs
+
+obj2OTV3Mesh :: OBJGeometry -> Mesh OTVertex3
+obj2OTV3Mesh (OBJGeometry {objVerts=vs, objTexCoords=uvs, objNormals=ns, objFaces = fs})
+  | (emptyNormals ns) && (emptyTexCoords uvs) =
+    normTexturedObj2Mesh vs (repeat zero) (repeat zero) fs
+  -- !FIXME! Do we want to generate normals here maybe?
+  | emptyNormals ns = normTexturedObj2Mesh vs uvs (repeat zero) fs
+  | emptyTexCoords uvs = normTexturedObj2Mesh vs (repeat zero) ns fs
+  | otherwise = normTexturedObj2Mesh vs uvs ns fs
 
 data Value = Normal Vec3f
            | Position Vec3f
@@ -284,12 +307,24 @@ parseFile = let
     _ <- try (ignorableLines >> eof) >> return ()
     return $ constructGeometry (reverse vals) initialGeom
 
-loadOBJ :: FilePath -> IO (Mesh)
-loadOBJ filepath = let
+loadOBJ :: Vertex a => (OBJGeometry -> Mesh a) -> FilePath -> IO (Mesh a)
+loadOBJ gen filepath = let
   parseOBJ :: String -> OBJGeometry
   parseOBJ s =
     case parse parseFile filepath (pack s) of
       Left x -> error $ show x
       Right y -> y
   in
-   readFile filepath >>= return . obj2Mesh . parseOBJ
+   readFile filepath >>= return . gen . parseOBJ
+
+loadV3 :: FilePath -> IO (Mesh Vertex3)
+loadV3 = loadOBJ obj2V3Mesh
+
+loadOV3 :: FilePath -> IO (Mesh OVertex3)
+loadOV3 = loadOBJ obj2OV3Mesh
+
+loadTV3 :: FilePath -> IO (Mesh TVertex3)
+loadTV3 = loadOBJ obj2TV3Mesh
+
+loadOTV3 :: FilePath -> IO (Mesh OTVertex3)
+loadOTV3 = loadOBJ obj2OTV3Mesh

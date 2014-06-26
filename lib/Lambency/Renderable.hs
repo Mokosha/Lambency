@@ -17,7 +17,6 @@ import Data.Array.Storable
 import Data.Int
 import Foreign.Storable
 import Foreign.Ptr
-
 --------------------------------------------------------------------------------
 
 clearBuffers :: IO ()
@@ -35,7 +34,7 @@ setupBuffer tgt xs = do
   withStorableArray varr (\ptr -> GL.bufferData tgt GL.$= (ptrsize xs, ptr, GL.StaticDraw))
   return buf
 
-createBasicRO :: [Vertex] -> [Int16] -> Material -> IO (RenderObject)
+createBasicRO :: (Vertex a) => [a] -> [Int16] -> Material -> IO (RenderObject)
 
 -- If there's no vertices, then there's nothing to render...
 createBasicRO [] _ _ = do
@@ -45,11 +44,8 @@ createBasicRO [] _ _ = do
     flags = []
   }
 
-createBasicRO (v:vs) idxs mat =
+createBasicRO verts@(v:_) idxs mat =
   let
-    flts :: [Float]
-    flts = (v:vs) >>= toFloats
-
     bindShaderVertexAttributes :: Shader -> IO ()
     bindShaderVertexAttributes shdr = let
 
@@ -65,7 +61,7 @@ createBasicRO (v:vs) idxs mat =
              Attribute _ loc -> loc
       in do
         mapM_ (\(loc, desc) -> GL.vertexAttribPointer loc GL.$= (GL.ToFloat, desc)) $
-          zip (map lu $ getAttribNames v) (getDescriptors v)
+          zip (map lu $ getAttribNames v) (getOpenGLDescriptors v)
 
     -- Takes as input an array of vertices and indices and returns a function
     -- that renders the vertices for a given shader and shader variable mapping
@@ -89,7 +85,11 @@ createBasicRO (v:vs) idxs mat =
         GL.drawElements GL.Triangles nIndices GL.UnsignedShort nullPtr)
 
   in do
-    vbo <- setupBuffer GL.ArrayBuffer flts
+    -- !FIXME! There's a bug here...
+    -- Why doesn't this work:
+    -- vbo <- setupBuffer GL.ArrayBuffer verts
+    -- ??? It causes the newListArray call to fail for some inexplicable reason...
+    vbo <- setupBuffer GL.ArrayBuffer (verts >>= toFloats)
     ibo <- setupBuffer GL.ElementArrayBuffer idxs
     return $ RenderObject {
       material = mat,

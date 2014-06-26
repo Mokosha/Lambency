@@ -22,19 +22,20 @@ import Linear.V3
 type Vec2f = V2 Float
 type Vec3f = V3 Float
 
-data Mesh = Mesh { vertices :: [Vertex],
-                   indices :: [Int16] }
+data Mesh a = Mesh { vertices :: [a],
+                     indices :: [Int16] }
+              deriving (Show)
 
 mkV3 :: (Float, Float, Float) -> V3 Float
 mkV3 (a, b, c) = V3 a b c
 
-triangle :: Mesh
+triangle :: Mesh Vertex3
 triangle = Mesh {
   vertices = mkVertex3 . mkV3 <$> [ (-1, -1, 0), (1, -1, 0), (0, 1, 0)],
   indices = [0, 1, 2]
 }
 
-cube :: Mesh
+cube :: Mesh OTVertex3
 cube = Mesh {
   vertices = zipWith3 mkNormTexVertex3 (mkV3 <$> [
     -- Front face
@@ -86,7 +87,7 @@ cube = Mesh {
   indices = concat [[x, x+1, x+2, x, x+2, x+3] | x <- [0,4..20]]
 }
 
-plane :: Mesh
+plane :: Mesh OTVertex3
 plane = Mesh {
   vertices = zipWith3 mkNormTexVertex3
              [V3 x 0 z | z <- [(-1),(-0.9)..1], x <- [(-1),(-0.9)..1]]
@@ -99,7 +100,7 @@ plane = Mesh {
            idxOf (x+1) y, idxOf x (y+1), idxOf (x+1) (y+1)]
         idxOf x y = y * 21 + x
 
-quad :: Mesh
+quad :: Mesh TVertex3
 quad = Mesh {
   vertices = zipWith mkTexVertex3 (map texToVert texcoords) texcoords,
   indices = [0, 2, 1, 1, 2, 3]
@@ -112,5 +113,5 @@ quad = Mesh {
     texToVert (V2 x y) = V3 (x * 2 - 1) (y * 2 - 1) 0
 
 
-instance Renderable Mesh where
+instance Vertex a => Renderable (Mesh a) where
   createRenderObject m mat = createBasicRO (vertices m) (indices m) mat

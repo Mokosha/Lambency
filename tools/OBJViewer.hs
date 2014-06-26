@@ -29,7 +29,7 @@ cam = L.mkFixedCam initialCam
 mkOBJ :: FilePath -> IO (L.RenderObject)
 mkOBJ objfile = do
   tex <- L.createSolidTexture (67, 128, 67, 255)
-  mesh <- L.loadOBJ objfile
+  mesh <- L.loadOV3 objfile
   ro <- L.createRenderObject mesh (L.createTexturedMaterial tex)
   return ro
 
