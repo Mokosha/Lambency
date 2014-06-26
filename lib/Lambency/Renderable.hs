@@ -85,11 +85,7 @@ createBasicRO verts@(v:_) idxs mat =
         GL.drawElements GL.Triangles nIndices GL.UnsignedShort nullPtr)
 
   in do
-    -- !FIXME! There's a bug here...
-    -- Why doesn't this work:
-    -- vbo <- setupBuffer GL.ArrayBuffer verts
-    -- ??? It causes the newListArray call to fail for some inexplicable reason...
-    vbo <- setupBuffer GL.ArrayBuffer (verts >>= toFloats)
+    vbo <- setupBuffer GL.ArrayBuffer verts
     ibo <- setupBuffer GL.ElementArrayBuffer idxs
     return $ RenderObject {
       material = mat,
