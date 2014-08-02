@@ -7,7 +7,7 @@ module Lambency (
   module Lambency.Loaders,  
   module Lambency.Material,
   Mesh, triangle, cube, plane, quad,
-  module Lambency.Renderable,
+  module Lambency.Render,
   module Lambency.Shader,
   module Lambency.Texture,
   module Lambency.Transform,
@@ -42,7 +42,6 @@ import Lambency.Loaders
 import Lambency.Material
 import Lambency.Mesh
 import Lambency.Render
-import Lambency.Renderable
 import Lambency.Shader
 import Lambency.Sound
 import Lambency.Texture
@@ -207,7 +206,7 @@ run win initialGameObject initialGame = do
     renderObjects lights camera action = let
 
       split :: (a -> Maybe b) -> [a] -> ([a], [b])
-      split f [] = ([], [])
+      split _ [] = ([], [])
       split f (x : xs) = let
         (as, bs) = split f xs
         in

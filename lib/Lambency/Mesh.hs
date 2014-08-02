@@ -8,7 +8,7 @@ module Lambency.Mesh (
 
 --------------------------------------------------------------------------------
 
-import Lambency.Renderable
+import Lambency.Render
 import Lambency.Vertex
 import Control.Applicative
 
