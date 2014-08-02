@@ -26,6 +26,7 @@ data-dir:            lib/Lambency/Shaders
 library
   hs-source-dirs:      lib
   exposed-modules:     Lambency
+                       Lambency.Types
   other-modules:       Lambency.Bounds
                        Lambency.Camera
                        Lambency.Light
@@ -34,11 +35,11 @@ library
                        Lambency.Material
                        Lambency.Mesh
                        Lambency.GameObject
+                       Lambency.Render
                        Lambency.Renderable
                        Lambency.Shader
                        Lambency.Texture
                        Lambency.Transform
-                       Lambency.Types
                        Lambency.Vertex
                        Lambency.Utils
                        Lambency.Input

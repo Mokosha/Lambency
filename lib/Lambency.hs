@@ -41,6 +41,7 @@ import Lambency.Light
 import Lambency.Loaders
 import Lambency.Material
 import Lambency.Mesh
+import Lambency.Render
 import Lambency.Renderable
 import Lambency.Shader
 import Lambency.Sound
@@ -53,14 +54,9 @@ import Control.Monad.RWS.Strict
 import qualified Control.Wire as W
 
 import qualified Data.Set as Set
-import qualified Data.Map as Map
 import Data.Time
-import Data.List (sortBy, partition)
 
 import GHC.Float
-
-import Linear.Matrix
-import Linear.V4
 
 --------------------------------------------------------------------------------
 
@@ -165,18 +161,6 @@ run win initialGameObject initialGame = do
     initialGame
   where
 
-    place :: Transform -> Camera -> RenderObject -> RenderObject
-    place xf cam ro = let
-      model :: M44 Float
-      model = xform2Matrix xf
-
-      sm :: ShaderMap
-      sm = Map.fromList [
-        ("mvpMatrix", Matrix4Val $ model !*! (getViewProjMatrix cam)),
-        ("m2wMatrix", Matrix4Val $ model)]
-      in
-       ro { material = Map.union sm (material ro) }
-
     step :: a -> Game a -> TimeStep -> GameMonad (Either () a, Camera, [Light], Game a)
     step go game t = do
       (Right cam, nCamWire) <- W.stepWire (mainCamera game) t (Right ())
@@ -221,39 +205,26 @@ run win initialGameObject initialGame = do
     renderObjects :: [Light] -> Camera -> [OutputAction] -> IO ([OutputAction])
                   -- This is the best line in my code
     renderObjects lights camera action = let
-      camDist :: RenderObject -> Float
-      camDist ro =
-        let (Matrix4Val (V4 _ _ (V4 _ _ _ z) _)) = getMaterialVar (material ro) "mvpMatrix" in z
 
-      (trans, opaque) = partition (\ro -> Transparent `elem` (flags ro)) $
-                        sortBy (\ro1 ro2 -> compare (camDist ro1) (camDist ro2)) $
-                        do
-                          act <- action
-                          (xf, ro) <- case act of
-                            Render3DAction xf' ro' -> [(xf', ro')]
-                            _ -> []
-                          return $ place xf camera ro
+      split :: (a -> Maybe b) -> [a] -> ([a], [b])
+      split f [] = ([], [])
+      split f (x : xs) = let
+        (as, bs) = split f xs
+        in
+         case (f x) of
+           Nothing -> (x : as, bs)
+           Just y -> (as, y : bs)
 
-      render' ros
-        | length ros == 0 = return ()
-        | otherwise = do
-          mapM_ (flip renderLight ros) lights
+      (notRenderActions, ros) = split (\act -> case act of
+                                          Render3DAction xf obj -> Just (xf, obj)
+                                          _ -> Nothing) action
       in do
-        -- !FIXME! This should be moved to the camera...
-        GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
-        clearBuffers
-
-        GL.depthFunc GL.$= Just GL.Lequal
-        render' opaque
-        GL.depthFunc GL.$= Nothing
-        render' (reverse trans)
+        renderROs ros camera lights
 
         GL.flush
         GLFW.swapBuffers win
 
-        return $ filter (\act -> case act of
-                          Render3DAction _ _ -> False
-                          _ -> True) action
+        return notRenderActions
 
     run' :: InputControl ->
             a -> GameSession -> GameTime -> Game a ->

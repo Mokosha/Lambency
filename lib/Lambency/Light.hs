@@ -2,22 +2,21 @@ module Lambency.Light (
   createSpotlight,
   createNoLight,
   setAmbient,
-  renderLight
 ) where
 
 --------------------------------------------------------------------------------
 
 import Lambency.Camera
-import Lambency.Renderable
 import Lambency.Shader
 import Lambency.Texture
 import Lambency.Types
+
+import qualified Data.Map as Map
 
 import Linear.Matrix
 import Linear.Metric
 import Linear.V3
 
-import qualified Data.Map as Map
 --------------------------------------------------------------------------------
 
 createSpotlight :: Vec3f -> Vec3f -> Float -> IO (Light)
@@ -49,30 +48,3 @@ createNoLight = let
   in do
     shdr <- createTransparentShader
     return $ Light shdr shdrMap Nothing
-
-renderLight :: Light -> [RenderObject] -> IO ()
-renderLight (Light shdr shdrmap msm) ros = do
-  case msm of
-    Nothing -> return ()
-    Just (Shadow shadowShdr shadowMap) -> do
-      bindRenderTexture shadowMap
-      clearBuffers
-      beforeRender shadowShdr
-      -- Right now the MVP matrix of each object is for the main camera, so
-      -- we need to replace it with the combination from the model matrix
-      -- and the shadow VP...
-      mapM_
-        (\ro -> do
-            let
-              mat :: ShaderValue -> Mat4f
-              mat (Matrix4Val m) = m
-              mat _ = eye4
-              lightMVP = (mat $ material ro Map.! "m2wMatrix") !*!
-                         (mat $ shdrmap Map.! "shadowVP")
-              newmap = Map.insert "mvpMatrix" (Matrix4Val lightMVP) shdrmap
-            (render ro) shadowShdr (Map.union newmap (material ro))) ros
-      afterRender shadowShdr
-      clearRenderTexture
-  beforeRender shdr
-  mapM_ (\ro -> (render ro) shdr (Map.union (material ro) shdrmap)) ros
-  afterRender shdr
