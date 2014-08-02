@@ -36,7 +36,6 @@ library
                        Lambency.Mesh
                        Lambency.GameObject
                        Lambency.Render
-                       Lambency.Renderable
                        Lambency.Shader
                        Lambency.Texture
                        Lambency.Transform
