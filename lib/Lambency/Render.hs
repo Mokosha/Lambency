@@ -2,7 +2,9 @@ module Lambency.Render (
   Renderable(..),
   clearBuffers,
   createBasicRO,
+  xformObject,
   renderROs,
+  addRenderAction,
 ) where
 
 --------------------------------------------------------------------------------
@@ -14,6 +16,8 @@ import Lambency.Texture
 import Lambency.Transform
 import Lambency.Types
 import Lambency.Vertex
+
+import Control.Monad.Writer
 
 import Data.Array.IO
 import Data.Array.Storable
@@ -83,9 +87,9 @@ createBasicRO verts@(v:_) idxs mat =
 
         -- Set all uniforms for this shader
         let shdrVars = getShaderVars shdr
-        mapM_ (\k -> case Map.lookup k shdrVars of
+        mapM_ (\(k, sv) -> case Map.lookup k shdrVars of
           Nothing -> return ()
-          Just shdrVar -> setUniformVar shdrVar (shdrmap Map.! k)) (Map.keys shdrmap)
+          Just shdrVar -> setUniformVar shdrVar sv) (Map.toList shdrmap)
 
         -- Bind appropriate buffers
         GL.bindBuffer GL.ArrayBuffer GL.$= Just vbo
@@ -111,17 +115,17 @@ class Renderable a where
   defaultRenderObject :: a -> IO (RenderObject)
   defaultRenderObject m = createRenderObject m =<< createSimpleMaterial
 
-place :: Transform -> Camera -> RenderObject -> RenderObject
-place xf cam ro = let
-  model :: M44 Float
-  model = xform2Matrix xf
+updateMatrices :: String -> ShaderValue -> ShaderValue -> ShaderValue
+updateMatrices "mvpMatrix" (Matrix4Val m1) (Matrix4Val m2) = Matrix4Val $ m1 !*! m2
+updateMatrices "m2wMatrix" (Matrix4Val m1) (Matrix4Val m2) = Matrix4Val $ m1 !*! m2
+updateMatrices _ v1 _ = v1
 
+place :: Camera -> RenderObject -> RenderObject
+place cam ro = let
   sm :: ShaderMap
-  sm = Map.fromList [
-    ("mvpMatrix", Matrix4Val $ model !*! (getViewProjMatrix cam)),
-    ("m2wMatrix", Matrix4Val $ model)]
+  sm = Map.singleton "mvpMatrix" (Matrix4Val $ getViewProjMatrix cam)
   in
-   ro { material = Map.union sm (material ro) }
+   ro { material = Map.unionWithKey updateMatrices (material ro) sm }
 
 renderLight :: [RenderObject] -> Light -> IO ()
 renderLight ros (Light shdr shdrmap msm) = do
@@ -136,13 +140,8 @@ renderLight ros (Light shdr shdrmap msm) = do
       -- and the shadow VP...
       mapM_
         (\ro -> do
-            let
-              mat :: ShaderValue -> Mat4f
-              mat (Matrix4Val m) = m
-              mat _ = eye4
-              lightMVP = (mat $ material ro Map.! "m2wMatrix") !*!
-                         (mat $ shdrmap Map.! "shadowVP")
-              newmap = Map.insert "mvpMatrix" (Matrix4Val lightMVP) shdrmap
+            let lightMVP = shdrmap Map.! "shadowVP"
+                newmap = Map.insert "mvpMatrix" lightMVP shdrmap
             (render ro) shadowShdr (Map.union newmap (material ro))) ros
       afterRender shadowShdr
       clearRenderTexture
@@ -154,14 +153,38 @@ renderLights :: [RenderObject] -> [Light] -> IO ()
 renderLights [] _ = return ()
 renderLights ros lights = mapM_ (renderLight ros) lights
 
-renderROs :: [(Transform, RenderObject)] -> Camera -> [Light] -> IO ()
+appendXform :: Transform -> ShaderMap -> ShaderMap
+appendXform xform sm' = let
+  matrix :: M44 Float
+  matrix = xform2Matrix xform
+
+  sm :: ShaderMap
+  sm = Map.fromList [
+    ("mvpMatrix", Matrix4Val matrix),
+    ("m2wMatrix", Matrix4Val matrix)]
+  in
+   Map.unionWithKey updateMatrices sm sm'
+
+xformObject :: Transform -> RenderObject -> RenderObject
+xformObject xform ro = ro {
+  render = \shr sm -> do
+     let newmap = appendXform xform sm
+     (render ro) shr newmap
+  }
+
+renderROs :: [RenderObject] -> Camera -> [Light] -> IO ()
 renderROs ros cam lights = let
   camDist :: RenderObject -> Float
-  camDist ro = let (Matrix4Val (V4 _ _ (V4 _ _ _ z) _)) = getMaterialVar (material ro) "mvpMatrix" in z
+  camDist ro = z
+    where 
+      (Matrix4Val (V4 _ _ (V4 _ _ _ z) _)) =
+        case Map.lookup "mvpMatrix" (material ro)
+        of Nothing -> Matrix4Val eye4
+           Just x -> x
 
   (trans, opaque) = partition (\ro -> Transparent `elem` (flags ro)) $
                     sortBy (\ro1 ro2 -> compare (camDist ro1) (camDist ro2)) $
-                    map (\(xf, ro) -> place xf cam ro) ros
+                    map (place cam) ros
   in do
     -- !FIXME! This should be moved to the camera...
     GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
@@ -171,3 +194,6 @@ renderROs ros cam lights = let
     renderLights opaque lights
     GL.depthFunc GL.$= Nothing
     renderLights (reverse trans) lights
+
+addRenderAction :: Transform -> RenderObject -> GameMonad ()
+addRenderAction xf ro = censor (Render3DAction (xformObject xf ro) :) $ return ()

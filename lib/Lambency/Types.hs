@@ -177,7 +177,7 @@ type RenderInstance = (XForm.Transform, RenderObject)
 -- we may also want to output sound or a debug string as well.
 data OutputAction = LogAction String
                   | SoundAction Sound SoundCommand
-                  | Render3DAction XForm.Transform RenderObject
+                  | Render3DAction RenderObject
 
 --------------------------------------------------------------------------------
 

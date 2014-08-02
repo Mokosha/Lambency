@@ -9,6 +9,7 @@ module Lambency.GameObject (
 import qualified Graphics.UI.GLFW as GLFW
 
 import Lambency.Input
+import Lambency.Render
 import Lambency.Sound
 import Lambency.Transform
 import Lambency.Types
@@ -27,8 +28,8 @@ mkObject ro xfw = mkGen $ \dt val -> do
   (xform, nextWire) <- stepWire xfw dt (Right val)
   case xform of
     Right xf -> do
-      censor (Render3DAction xf ro :) $
-        return (Right val, mkObject ro nextWire)
+      addRenderAction xf ro
+      return (Right val, mkObject ro nextWire)
     Left i -> do
       return $ (Left i, mkObject ro nextWire)
 

@@ -215,7 +215,7 @@ run win initialGameObject initialGame = do
            Just y -> (as, y : bs)
 
       (notRenderActions, ros) = split (\act -> case act of
-                                          Render3DAction xf obj -> Just (xf, obj)
+                                          Render3DAction obj -> Just obj
                                           _ -> Nothing) action
       in do
         renderROs ros camera lights
@@ -255,7 +255,7 @@ run win initialGameObject initialGame = do
         Left _ -> return ()
      where
        buildRO :: (Transform, RenderObject) -> OutputAction
-       buildRO = uncurry Render3DAction
+       buildRO = Render3DAction . (uncurry xformObject)
 
        -- When we handle actions, only really print logs and play any sounds
        -- that may need to start or stop.
