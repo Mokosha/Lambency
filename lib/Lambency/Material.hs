@@ -1,6 +1,5 @@
 module Lambency.Material (
   getShaderMap,
-  getMaterialVar,
   createSimpleMaterial,
   createTexturedMaterial,
   switchTexture
@@ -15,9 +14,6 @@ import qualified Data.Map as Map
 
 getShaderMap :: Material -> ShaderMap
 getShaderMap = id
-
-getMaterialVar :: Material -> String -> ShaderValue
-getMaterialVar m = (Map.!) m
 
 createSimpleMaterial :: IO(Material)
 createSimpleMaterial =
