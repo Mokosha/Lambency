@@ -54,9 +54,9 @@ keyPressed :: GLFW.Key -> GameWire a b -> GameWire a b
 keyPressed key wire =
   wire >>>
   (mkGen_ $ \val -> do
-      ipt <- get
+      gs <- get
       return $
-        if (isKeyPressed key ipt) then
+        if (isKeyPressed key (input gs)) then
           Right val
         else
           Left ()

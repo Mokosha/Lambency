@@ -209,13 +209,14 @@ mkViewerCam cam@(Camera xform camTy camSz) = let
             Nothing -> XForm.identity
   in
    W.mkGenN $ \_ -> do
-     ipt <- get
-     let newcam =
+     gamestate <- get
+     let ipt = input gamestate
+         newcam =
            if isButtonPressed GLFW.MouseButton'1 ipt then
              Camera (finalXForm ipt) camTy camSz
            else
              cam
-     put $ resetCursorPos ipt
+     put $ gamestate { input = resetCursorPos ipt }
      return (Right newcam, mkViewerCam newcam)
 
 mkDebugCam :: Camera -> GameWire a Camera
@@ -254,9 +255,10 @@ mkDebugCam (Camera xform camTy camSz) = let
           ]
   in
    W.mkGen $ \t _ -> do
-     ipt <- get
-     let newcam = updCam (W.dtime t) ipt
-     put $ resetCursorPos ipt
+     gamestate <- get
+     let ipt = input gamestate
+         newcam = updCam (W.dtime t) ipt
+     put $ gamestate { input = resetCursorPos ipt }
      return (Right newcam, mkDebugCam newcam)
 
 mk2DCam :: Int -> Int -> GameWire Vec2f Camera

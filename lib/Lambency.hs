@@ -18,7 +18,7 @@ module Lambency (
   RenderFlag(..), RenderObject(..),
   OutputAction(..),
   TimeStep,
-  Game(..), GameWire, GameState, GameMonad,
+  Game(..), GameWire, GameState(..), GameMonad,
   module Lambency.Utils,
 
   Input(..), withPressedKey, isKeyPressed, debounceKey,
@@ -145,7 +145,7 @@ physicsDeltaUTC = let
    diffUTCTime dayEnd dayStart
 
 type TimeStepper = (GameSession, NominalDiffTime)
-type StateStepper a = (Game a, Input)
+type StateStepper a = (Game a, GameState)
 
 run :: GLFW.Window -> a -> Game a -> IO ()
 run win initialGameObject initialGame = do
@@ -201,51 +201,29 @@ run win initialGameObject initialGame = do
       rest <- printLogs acts
       return (act : rest)
 
-    renderObjects :: [Light] -> Camera -> [OutputAction] -> IO ([OutputAction])
-                  -- This is the best line in my code
-    renderObjects lights camera action = let
-
-      split :: (a -> Maybe b) -> [a] -> ([a], [b])
-      split _ [] = ([], [])
-      split f (x : xs) = let
-        (as, bs) = split f xs
-        in
-         case (f x) of
-           Nothing -> (x : as, bs)
-           Just y -> (as, y : bs)
-
-      (notRenderActions, ros) = split (\act -> case act of
-                                          Render3DAction obj -> Just obj
-                                          _ -> Nothing) action
-      in do
-        renderROs ros camera lights
-
-        GL.flush
-        GLFW.swapBuffers win
-
-        return notRenderActions
-
-    run' :: InputControl ->
-            a -> GameSession -> GameTime -> Game a ->
-            IO ()
+    run' :: InputControl -> a -> GameSession -> GameTime -> Game a -> IO ()
     run' ictl gameObject session (lastFrameTime, accumulator) game = do
 
       -- Poll events...
       GLFW.pollEvents
 
-      input <- getInput ictl
-      if Set.member GLFW.Key'Q (keysPressed input)
+      ipt <- getInput ictl
+      if Set.member GLFW.Key'Q (keysPressed ipt)
         then GLFW.setWindowShouldClose win True
         else return ()
 
       -- Step
       curTime <- getCurrentTime
       let newAccum = accumulator + (diffUTCTime curTime lastFrameTime)
-      (go, (nextsession, accum), (nextGame, newIpt)) <-
-        stepGame gameObject (session, newAccum) (game, input)
+          gs = GameState {
+            input = ipt,
+            renderAction = RenderObjects []
+            }
+      (go, (nextsession, accum), (nextGame, newGS)) <-
+        stepGame gameObject (session, newAccum) (game, gs)
 
       -- Reset the input
-      setInput ictl newIpt
+      setInput ictl (input newGS)
 
       case go of
         Right gobj -> do
@@ -254,9 +232,6 @@ run win initialGameObject initialGame = do
           unless q $ run' ictl gobj nextsession (curTime, accum) nextGame
         Left _ -> return ()
      where
-       buildRO :: (Transform, RenderObject) -> OutputAction
-       buildRO = Render3DAction . (uncurry xformObject)
-
        -- When we handle actions, only really print logs and play any sounds
        -- that may need to start or stop.
        handleActions :: [OutputAction] -> IO ()
@@ -265,15 +240,15 @@ run win initialGameObject initialGame = do
            printLogs,
            playSounds
          ]
-
-       -- When we handle actions with rendering, we render all of the actions
-       -- and then handle actions like usual...
-       handleActionsWithRender :: [Light] -> Camera -> [OutputAction] -> IO ()
-       handleActionsWithRender ls c acts = renderObjects ls c acts >>= handleActions
+  
+       -- This is the best line in my code
+       renderObjects :: [Light] -> Camera -> RenderAction -> IO ()
+       renderObjects lights camera (RenderObjects ros) = do
+         renderROs ros camera lights
 
        stepGame :: a -> TimeStepper -> StateStepper a ->
                    IO (Either () a, TimeStepper, StateStepper a)
-       stepGame go tstep@(sess, accum) sstep@(g, ipt)
+       stepGame go tstep@(sess, accum) sstep@(g, gs)
          | accum < physicsDeltaUTC = return (Right go, tstep, sstep)
          | otherwise = do
 
@@ -284,8 +259,8 @@ run win initialGameObject initialGame = do
              -- This is the meat of the step routine. This calls runRWS on the
              -- main game wire, and uses the results to figure out what needs
              -- to be done.
-             ((result, cam, lights, nextGame), newIpt, actions) =
-                 runRWS (step go g ts) () ipt
+             ((result, cam, lights, nextGame), newGS, actions) =
+                 runRWS (step go g ts) () gs
 
              -- We need to render if we're going to fall below the physics threshold
              -- on the next frame. This simulates a while loop. If we don't fall
@@ -296,19 +271,25 @@ run win initialGameObject initialGame = do
              -- If we do render, we need to build the renderObjects and their
              -- corresponding renderActions from the static geometry. These won't
              -- get built or evaluated unless we actually render though.
-             sgRAs = (map buildRO $ staticGeometry g)
+             sgRAs = map (uncurry xformObject) (staticGeometry g)
 
-             performActions :: IO ()
-             performActions
-               | needsRender = handleActionsWithRender lights cam (actions ++ sgRAs)
-               | otherwise = handleActions actions
+           if needsRender then do
+             -- !FIXME! This should be moved to the camera...
+             GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
+             clearBuffers
+
+             renderObjects lights cam (RenderObjects sgRAs)
+             renderObjects lights cam (renderAction newGS)
+             GL.flush
+             GLFW.swapBuffers win
+             else return ()
 
            -- Actually do the associated actions
-           performActions
+           handleActions actions
 
            -- If our main wire inhibited, return immediately.
            case result of
              Right obj -> stepGame obj
                           (nextSess, (accum - physicsDeltaUTC)) -- TimeStepper
-                          (nextGame, newIpt)                    -- StateStepper
+                          (nextGame, newGS { renderAction = RenderObjects [] }) -- StateStepper
              Left _ -> return (result, tstep, sstep)

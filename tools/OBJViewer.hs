@@ -38,10 +38,11 @@ controlWire ro = L.mkObject ro (xForm L.identity)
   where
     xForm :: L.Transform -> L.GameWire a L.Transform
     xForm xf = W.mkGenN $ \_ -> do
-      ipt <- get
-      let rotate = L.isButtonPressed GLFW.MouseButton'1 ipt
+      gamestate <- get
+      let ipt = L.input gamestate
+          rotate = L.isButtonPressed GLFW.MouseButton'1 ipt
           newxf = if rotate then rotation ipt else xf
-      put $ L.resetCursorPos ipt
+      put $ gamestate { L.input = L.resetCursorPos ipt }
       return (Right newxf, xForm newxf)
       where
         rotation :: L.Input -> L.Transform

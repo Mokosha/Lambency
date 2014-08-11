@@ -5,10 +5,10 @@ module Lambency.Types (
   Shader(..), ShaderVarTy(..), ShaderValue(..), ShaderVar(..), ShaderMap,
   Texture(..), TextureFormat(..), FBOHandle, TextureHandle,
   Material,
-  RenderFlag(..), RenderObject(..),
+  RenderFlag(..), RenderObject(..), RenderAction(..),
   OutputAction(..),
   TimeStep,
-  GameWire, GameMonad, GameState, GameSession, GameTime,
+  GameWire, GameMonad, GameState(..), GameSession, GameTime,
   Game(..)
 ) where
 
@@ -168,6 +168,9 @@ data RenderObject = RenderObject {
 
 type RenderInstance = (XForm.Transform, RenderObject)
 
+data RenderAction = RenderObjects [RenderObject]
+                  | RenderClipped RenderAction RenderAction
+
 --------------------------------------------------------------------------------
 
 -- Output functions
@@ -177,14 +180,18 @@ type RenderInstance = (XForm.Transform, RenderObject)
 -- we may also want to output sound or a debug string as well.
 data OutputAction = LogAction String
                   | SoundAction Sound SoundCommand
-                  | Render3DAction RenderObject
 
 --------------------------------------------------------------------------------
 
--- !FIXME! Game state should be a list of configuration parameters like screen
+-- !FIXME! Game config should be a list of configuration parameters like screen
 -- size so that we can do raycasting from mouse coordinates and maybe some
 -- other things...
-type GameState = ()
+type GameConfig = ()
+
+data GameState = GameState {
+  input :: Input,
+  renderAction :: RenderAction
+}
 
 -- Game
 data Game a = Game {
@@ -200,7 +207,7 @@ data Game a = Game {
 -- Game State
 
 type TimeStep = W.Timed Float ()
-type GameMonad = RWS GameState [OutputAction] Input
+type GameMonad = RWS GameConfig [OutputAction] GameState
 type GameWire a b = W.Wire TimeStep () GameMonad a b
 type GameSession = W.Session IO TimeStep
 

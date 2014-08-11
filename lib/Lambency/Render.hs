@@ -17,7 +17,7 @@ import Lambency.Transform
 import Lambency.Types
 import Lambency.Vertex
 
-import Control.Monad.Writer
+import Control.Monad.State.Class
 
 import Data.Array.IO
 import Data.Array.Storable
@@ -173,6 +173,7 @@ xformObject xform ro = ro {
   }
 
 renderROs :: [RenderObject] -> Camera -> [Light] -> IO ()
+renderROs [] _ _ = return ()
 renderROs ros cam lights = let
   camDist :: RenderObject -> Float
   camDist ro = z
@@ -186,14 +187,15 @@ renderROs ros cam lights = let
                     sortBy (\ro1 ro2 -> compare (camDist ro1) (camDist ro2)) $
                     map (place cam) ros
   in do
-    -- !FIXME! This should be moved to the camera...
-    GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
-    clearBuffers
-
     GL.depthFunc GL.$= Just GL.Lequal
     renderLights opaque lights
     GL.depthFunc GL.$= Nothing
     renderLights (reverse trans) lights
 
 addRenderAction :: Transform -> RenderObject -> GameMonad ()
-addRenderAction xf ro = censor (Render3DAction (xformObject xf ro) :) $ return ()
+addRenderAction xf ro =
+  modify (\gs -> gs { renderAction = appendObj (xformObject xf ro) $ renderAction gs })
+  where
+    appendObj :: RenderObject -> RenderAction -> RenderAction
+    appendObj obj (RenderObjects objs) = RenderObjects (obj : objs)
+    appendObj obj (RenderClipped clip act) = RenderClipped clip (appendObj obj act)
