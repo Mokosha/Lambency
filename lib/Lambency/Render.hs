@@ -39,7 +39,7 @@ import Linear.V4
 --------------------------------------------------------------------------------
 
 clearBuffers :: IO ()
-clearBuffers = GL.clear [GL.ColorBuffer, GL.DepthBuffer]
+clearBuffers = GL.clear [GL.ColorBuffer, GL.DepthBuffer, GL.StencilBuffer]
 
 ptrsize :: (Storable a) => [a] -> GL.GLsizeiptr
 ptrsize [] = toEnum 0
@@ -200,7 +200,7 @@ performRenderAction lights camera (RenderObjects ros) = renderROs ros camera lig
 performRenderAction lights camera (RenderClipped clip action) = do
   -- Disable stencil test, and drawing into the color and depth buffers
   -- Enable writing to stencil buffer, and always write to it.
-  GL.stencilTest GL.$= GL.Disabled
+  GL.stencilTest GL.$= GL.Enabled
   GL.depthMask GL.$= GL.Disabled
   GL.colorMask GL.$= (GL.Color4 GL.Disabled GL.Disabled GL.Disabled GL.Disabled)
   GL.stencilFunc GL.$= (GL.Never, 1, complement 0)
@@ -213,7 +213,6 @@ performRenderAction lights camera (RenderClipped clip action) = do
 
   -- Enable drawing to the color and depth buffers, and disable drawing
   -- to the stencil buffer
-  GL.stencilTest GL.$= GL.Enabled
   GL.depthMask GL.$= GL.Enabled
   GL.colorMask GL.$= (GL.Color4 GL.Enabled GL.Enabled GL.Enabled GL.Enabled)
   GL.stencilMask GL.$= 0
