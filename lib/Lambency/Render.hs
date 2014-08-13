@@ -3,8 +3,10 @@ module Lambency.Render (
   clearBuffers,
   createBasicRO,
   xformObject,
-  renderROs,
+  performRenderAction,
   addRenderAction,
+  addClipRenderAction,
+  resetClip,
 ) where
 
 --------------------------------------------------------------------------------
@@ -21,6 +23,7 @@ import Control.Monad.State.Class
 
 import Data.Array.IO
 import Data.Array.Storable
+import Data.Bits (complement)
 import Data.Int
 import Data.List (partition, sortBy)
 import qualified Data.Map as Map
@@ -192,10 +195,65 @@ renderROs ros cam lights = let
     GL.depthFunc GL.$= Nothing
     renderLights (reverse trans) lights
 
+performRenderAction :: [Light] -> Camera -> RenderAction -> IO ()
+performRenderAction lights camera (RenderObjects ros) = renderROs ros camera lights
+performRenderAction lights camera (RenderClipped clip action) = do
+  -- Disable stencil test, and drawing into the color and depth buffers
+  -- Enable writing to stencil buffer, and always write to it.
+  GL.stencilTest GL.$= GL.Disabled
+  GL.depthMask GL.$= GL.Disabled
+  GL.colorMask GL.$= (GL.Color4 GL.Disabled GL.Disabled GL.Disabled GL.Disabled)
+  GL.stencilFunc GL.$= (GL.Never, 1, complement 0)
+  GL.stencilOp GL.$= (GL.OpReplace, GL.OpKeep, GL.OpKeep)
+
+  -- Draw our clip
+  GL.stencilMask GL.$= (complement 0)
+  GL.clear [GL.StencilBuffer]
+  performRenderAction lights camera clip
+
+  -- Enable drawing to the color and depth buffers, and disable drawing
+  -- to the stencil buffer
+  GL.stencilTest GL.$= GL.Enabled
+  GL.depthMask GL.$= GL.Enabled
+  GL.colorMask GL.$= (GL.Color4 GL.Enabled GL.Enabled GL.Enabled GL.Enabled)
+  GL.stencilMask GL.$= 0
+
+  -- There is a one in the stencil buffer where there was clipped geometry.
+  -- To only render where we have clipped stuff, we should set the stencil func
+  -- to test for equality
+  GL.stencilFunc GL.$= (GL.Equal, 1, complement 0)
+
+  -- Draw our clipped stuff
+  performRenderAction lights camera action -- !
+
+  -- Finally, disable the stencil test
+  GL.stencilTest GL.$= GL.Disabled
+
+performRenderAction lights camera (RenderCons act1 act2) = do
+  performRenderAction lights camera act1
+  performRenderAction lights camera act2
+
+appendObj :: RenderObject -> RenderAction -> RenderAction
+appendObj obj (RenderObjects objs) = RenderObjects (obj : objs)
+appendObj obj (RenderClipped clip act) = RenderClipped clip (appendObj obj act)
+appendObj obj (RenderCons act1 act2) = RenderCons act1 (appendObj obj act2)
+
+addClipRenderAction :: Transform -> RenderObject -> GameMonad ()
+addClipRenderAction xf ro =
+  modify (\gs -> gs { renderAction = appendClip (xformObject xf ro) $ renderAction gs })
+  where
+    appendClip :: RenderObject -> RenderAction -> RenderAction
+    appendClip obj (RenderClipped clip act) = RenderClipped (appendObj obj clip) act
+    appendClip obj act = RenderCons act (RenderClipped (RenderObjects [obj]) (RenderObjects []))
+
+resetClip :: GameMonad ()
+resetClip = modify (\gs -> gs { renderAction =
+                                   case (renderAction gs) of
+                                        x@(RenderClipped _ _) ->
+                                          RenderCons x (RenderObjects [])
+                                        x -> x
+                              })
+
 addRenderAction :: Transform -> RenderObject -> GameMonad ()
 addRenderAction xf ro =
   modify (\gs -> gs { renderAction = appendObj (xformObject xf ro) $ renderAction gs })
-  where
-    appendObj :: RenderObject -> RenderAction -> RenderAction
-    appendObj obj (RenderObjects objs) = RenderObjects (obj : objs)
-    appendObj obj (RenderClipped clip act) = RenderClipped clip (appendObj obj act)

@@ -241,11 +241,6 @@ run win initialGameObject initialGame = do
            playSounds
          ]
   
-       -- This is the best line in my code
-       renderObjects :: [Light] -> Camera -> RenderAction -> IO ()
-       renderObjects lights camera (RenderObjects ros) = do
-         renderROs ros camera lights
-
        stepGame :: a -> TimeStepper -> StateStepper a ->
                    IO (Either () a, TimeStepper, StateStepper a)
        stepGame go tstep@(sess, accum) sstep@(g, gs)
@@ -278,8 +273,8 @@ run win initialGameObject initialGame = do
              GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
              clearBuffers
 
-             renderObjects lights cam (RenderObjects sgRAs)
-             renderObjects lights cam (renderAction newGS)
+             performRenderAction lights cam (RenderObjects sgRAs)
+             performRenderAction lights cam (renderAction newGS)
              GL.flush
              GLFW.swapBuffers win
              else return ()
