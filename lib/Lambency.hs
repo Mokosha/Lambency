@@ -273,8 +273,8 @@ run win initialGameObject initialGame = do
              GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
              clearBuffers
 
-             performRenderAction lights cam (RenderObjects sgRAs)
-             performRenderAction lights cam (renderAction newGS)
+             performRenderAction lights cam $
+               RenderCons (RenderObjects sgRAs) (renderAction newGS)
              GL.flush
              GLFW.swapBuffers win
              else return ()

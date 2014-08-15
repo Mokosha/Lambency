@@ -35,6 +35,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 
 import Linear.Matrix
 import Linear.V4
+import Linear.V3
 
 --------------------------------------------------------------------------------
 
@@ -130,31 +131,11 @@ place cam ro = let
   in
    ro { material = Map.unionWithKey updateMatrices (material ro) sm }
 
-renderLight :: [RenderObject] -> Light -> IO ()
-renderLight ros (Light shdr shdrmap msm) = do
-  case msm of
-    Nothing -> return ()
-    Just (Shadow shadowShdr shadowMap) -> do
-      bindRenderTexture shadowMap
-      clearBuffers
-      beforeRender shadowShdr
-      -- Right now the MVP matrix of each object is for the main camera, so
-      -- we need to replace it with the combination from the model matrix
-      -- and the shadow VP...
-      mapM_
-        (\ro -> do
-            let lightMVP = shdrmap Map.! "shadowVP"
-                newmap = Map.insert "mvpMatrix" lightMVP shdrmap
-            (render ro) shadowShdr (Map.union newmap (material ro))) ros
-      afterRender shadowShdr
-      clearRenderTexture
+renderROs :: [RenderObject] -> Shader -> ShaderMap -> IO ()
+renderROs ros shdr shdrmap = do
   beforeRender shdr
   mapM_ (\ro -> (render ro) shdr (Map.union (material ro) shdrmap)) ros
   afterRender shdr
-
-renderLights :: [RenderObject] -> [Light] -> IO ()
-renderLights [] _ = return ()
-renderLights ros lights = mapM_ (renderLight ros) lights
 
 appendXform :: Transform -> ShaderMap -> ShaderMap
 appendXform xform sm' = let
@@ -175,9 +156,9 @@ xformObject xform ro = ro {
      (render ro) shr newmap
   }
 
-renderROs :: [RenderObject] -> Camera -> [Light] -> IO ()
-renderROs [] _ _ = return ()
-renderROs ros cam lights = let
+divideAndRenderROs :: [RenderObject] -> Camera -> Light -> IO ()
+divideAndRenderROs [] _ _ = return ()
+divideAndRenderROs ros cam (Light shdr shdrmap _) = let
   camDist :: RenderObject -> Float
   camDist ro = z
     where 
@@ -191,13 +172,27 @@ renderROs ros cam lights = let
                     map (place cam) ros
   in do
     GL.depthFunc GL.$= Just GL.Lequal
-    renderLights opaque lights
+    renderROs opaque shdr shdrmap
     GL.depthFunc GL.$= Nothing
-    renderLights (reverse trans) lights
+    renderROs (reverse trans) shdr shdrmap
 
-performRenderAction :: [Light] -> Camera -> RenderAction -> IO ()
-performRenderAction lights camera (RenderObjects ros) = renderROs ros camera lights
-performRenderAction lights camera (RenderClipped clip action) = do
+renderLight :: RenderAction -> Camera -> Light -> IO ()
+renderLight act cam (Light shdr shdrmap (Just (Shadow shadowShdr shadowMap))) = do
+  bindRenderTexture shadowMap
+  clearBuffers
+  -- Right now the MVP matrix of each object is for the main camera, so
+  -- we need to replace it with the combination from the model matrix
+  -- and the shadow VP...
+  let (Vector3Val pos) = shdrmap Map.! "lightPos"
+      (Vector3Val dir) = shdrmap Map.! "lightDir"
+      lightCam = mkPerspCamera pos dir (V3 0 1 0) (pi / 4) 1 0.1 500.0
+      shadowVP = Matrix4Val $ getViewProjMatrix lightCam
+      shadowShdrMap = Map.insert "shadowVP" shadowVP shdrmap
+  renderLight act lightCam (Light shadowShdr shdrmap Nothing)
+  clearRenderTexture
+  renderLight act cam (Light shdr shadowShdrMap Nothing)
+
+renderLight (RenderClipped clip action) camera light = do
   -- Disable stencil test, and drawing into the color and depth buffers
   -- Enable writing to stencil buffer, and always write to it.
   GL.stencilTest GL.$= GL.Enabled
@@ -209,7 +204,7 @@ performRenderAction lights camera (RenderClipped clip action) = do
   -- Draw our clip
   GL.stencilMask GL.$= (complement 0)
   GL.clear [GL.StencilBuffer]
-  performRenderAction lights camera clip
+  renderLight clip camera light
 
   -- Enable drawing to the color and depth buffers, and disable drawing
   -- to the stencil buffer
@@ -223,14 +218,18 @@ performRenderAction lights camera (RenderClipped clip action) = do
   GL.stencilFunc GL.$= (GL.Equal, 1, complement 0)
 
   -- Draw our clipped stuff
-  performRenderAction lights camera action -- !
+  renderLight action camera light  -- !
 
   -- Finally, disable the stencil test
   GL.stencilTest GL.$= GL.Disabled
 
-performRenderAction lights camera (RenderCons act1 act2) = do
-  performRenderAction lights camera act1
-  performRenderAction lights camera act2
+renderLight (RenderObjects ros) camera light = divideAndRenderROs ros camera light
+renderLight (RenderCons act1 act2) camera light = do
+  renderLight act1 camera light
+  renderLight act2 camera light
+
+performRenderAction :: [Light] -> Camera -> RenderAction -> IO ()
+performRenderAction lights camera action = mapM_ (\l -> renderLight action camera l) lights
 
 appendObj :: RenderObject -> RenderAction -> RenderAction
 appendObj obj (RenderObjects objs) = RenderObjects (obj : objs)

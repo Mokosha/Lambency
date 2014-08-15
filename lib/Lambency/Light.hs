@@ -6,7 +6,6 @@ module Lambency.Light (
 
 --------------------------------------------------------------------------------
 
-import Lambency.Camera
 import Lambency.Shader
 import Lambency.Texture
 import Lambency.Types
@@ -26,9 +25,7 @@ createSpotlight pos dirvec ang = do
   minShdr <- createMinimalShader
   -- !FIXME! The camera fovy should depend on the cosoffset
   let dir = signorm dirvec
-      lightCam = mkPerspCamera pos dir (V3 0 1 0) (pi / 4) 1 0.1 500.0
       shdrMap = Map.fromList [
-        ("shadowVP", Matrix4Val $ getViewProjMatrix lightCam),
         ("shadowMap", TextureVal depthTex),
         ("lightDir", Vector3Val dir),
         ("lightPos", Vector3Val pos),
