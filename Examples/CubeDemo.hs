@@ -82,10 +82,4 @@ initGame = do
                      L.gameLogic = cube }
 
 main :: IO ()
-main = do
-  m <- L.makeWindow 640 480 "Cube Demo"
-  game <- initGame
-  case m of
-    (Just win) -> L.run win () game
-    Nothing -> return ()
-  L.destroyWindow m
+main = initGame >>= (L.runWindow 640 480 "Cube Demo" ())

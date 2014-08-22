@@ -24,7 +24,7 @@ module Lambency (
   Input(..), withPressedKey, isKeyPressed, debounceKey,
   isButtonPressed,
   resetCursorPos,
-  makeWindow, destroyWindow, run,
+  makeWindow, destroyWindow, run, runWindow,
   module Lambency.Sound
 ) where
 
@@ -289,3 +289,9 @@ run win initialGameObject initialGame = do
                           (nextSess, (accum - physicsDeltaUTC)) -- TimeStepper
                           (nextGame, newGS { renderAction = RenderObjects [] }) -- StateStepper
              Left _ -> return (result, tstep, sstep)
+
+runWindow :: Int -> Int -> String -> a -> Game a -> IO ()
+runWindow width height title initialGameObject initialGame = do
+  Just win <- makeWindow width height title
+  run win initialGameObject initialGame
+  destroyWindow (Just win)

@@ -1,18 +1,22 @@
 module Main (main) where
 
 --------------------------------------------------------------------------------
+import Control.Applicative
+import Control.Monad.RWS.Strict
+import qualified Control.Wire as W
+
+import Data.List (intercalate)
+
 import qualified Graphics.UI.GLFW as GLFW
 
 import qualified Lambency as L
-
-import System.Environment
 
 import qualified Linear.Quaternion as Quat
 import Linear.Vector
 import Linear.V3
 
-import Control.Monad.RWS.Strict
-import qualified Control.Wire as W
+import System.Directory (doesFileExist)
+import System.Environment
 ---------------------------------------------------------------------------------
 
 initialCam :: L.Camera
@@ -28,6 +32,8 @@ cam = L.mkFixedCam initialCam
 
 mkOBJ :: FilePath -> IO (L.RenderObject)
 mkOBJ objfile = do
+  exists <- doesFileExist objfile
+  if not exists then error ("OBJ file " ++ objfile ++ " not found") else return ()
   tex <- L.createSolidTexture (67, 128, 67, 255)
   mesh <- L.loadOV3 objfile
   ro <- L.createRenderObject mesh (L.createTexturedMaterial tex)
@@ -64,17 +70,14 @@ initGame objfile = do
                      L.dynamicLights = [],
                      L.gameLogic = controlWire obj }
 
+handleArgs :: [FilePath] -> Either String FilePath
+handleArgs [] = Left "Usage: lobjview OBJFILE"
+handleArgs (x : []) = Right x
+handleArgs (_ : xs) = Left $ "Unrecognized arguments: " ++ (intercalate " " xs)
+
 main :: IO ()
 main = do
-  args <- getArgs
-  let
-    objfile :: FilePath
-    objfile = case args of
-        (x : []) -> x
-        _ -> error "Usage: lobjview OBJFILE"
-  m <- L.makeWindow 640 480 "OBJ Viewer"
-  game <- initGame objfile
-  case m of
-    (Just win) -> L.run win () game
-    Nothing -> return ()
-  L.destroyWindow m
+  objfile <- pure handleArgs <*> getArgs
+  case objfile of
+    Right file -> initGame file >>= (L.runWindow 640 480 "OBJ Viewer" ())
+    Left err -> putStrLn err

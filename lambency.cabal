@@ -73,4 +73,5 @@ executable lobjview
                   lambency,
                   linear,
                   netwire >= 5.0.0,
-                  mtl >= 2.1.2
+                  mtl >= 2.1.2,
+                  directory
