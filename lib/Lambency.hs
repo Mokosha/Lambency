@@ -79,35 +79,36 @@ makeWindow :: Int -> Int -> String -> IO (Maybe GLFW.Window)
 makeWindow width height title = do
   putStr "Initializing GLFW..."
   r <- GLFW.init
-  if not r then ioError (userError "Failed!") else do
-    putStrLn "Done"
-    GLFW.setErrorCallback $ Just errorCallback
-    putStr $ "Creating window of size (" ++ (show width) ++ ", " ++ (show height) ++ ")..."
-    GLFW.windowHint $ GLFW.WindowHint'Samples 4
-    jm <- GLFW.createWindow width height title Nothing Nothing
-    m <- case jm of
-      Nothing -> ioError (userError "Failed!")
-      Just m' -> return m'
-    putStrLn "Done."
+  if not r then ioError (userError "Failed!") else return ()
+  putStrLn "Done"
 
-    GLFW.makeContextCurrent (Just m)
+  GLFW.setErrorCallback $ Just errorCallback
+  putStr $ "Creating window of size (" ++ (show width) ++ ", " ++ (show height) ++ ")..."
+  GLFW.windowHint $ GLFW.WindowHint'Samples 4
+  jm <- GLFW.createWindow width height title Nothing Nothing
+  m <- case jm of
+    Nothing -> ioError (userError "Failed!")
+    Just m' -> return m'
+  putStrLn "Done."
 
-    -- Implement the viewport size to be the framebuffer size
-    -- in order to properly deal with retina displays...
-    -- !FIXME! The user should have some say over this
-    (szx, szy) <- GLFW.getFramebufferSize m
-    GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral szx) (fromIntegral szy))
+  GLFW.makeContextCurrent (Just m)
 
-    -- Initial defaults
-    GL.blend GL.$= GL.Enabled
-    GL.blendFunc GL.$= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
-    GL.cullFace GL.$= Just GL.Back
-    initLambency
-    initSound
-    GL.dither GL.$= GL.Disabled
+  -- Implement the viewport size to be the framebuffer size
+  -- in order to properly deal with retina displays...
+  -- !FIXME! The user should have some say over this
+  (szx, szy) <- GLFW.getFramebufferSize m
+  GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral szx) (fromIntegral szy))
 
-    -- !FIXME! Why is this Maybe?
-    return (Just m)
+  -- Initial defaults
+  GL.blend GL.$= GL.Enabled
+  GL.blendFunc GL.$= (GL.SrcAlpha, GL.OneMinusSrcAlpha)
+  GL.cullFace GL.$= Just GL.Back
+  initLambency
+  initSound
+  GL.dither GL.$= GL.Disabled
+
+  -- !FIXME! Why is this Maybe?
+  return (Just m)
 
 destroyWindow :: Maybe GLFW.Window -> IO ()
 destroyWindow m = do
