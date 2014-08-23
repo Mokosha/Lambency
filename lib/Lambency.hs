@@ -49,6 +49,7 @@ import Lambency.Transform
 import Lambency.Types
 import Lambency.Utils
 
+import Control.Applicative
 import Control.Monad.RWS.Strict
 import qualified Control.Wire as W
 
@@ -186,21 +187,13 @@ run win initialGameObject initialGame = do
 
     playSounds :: [OutputAction] -> IO ([OutputAction])
     playSounds [] = return []
-    playSounds (SoundAction sound cmd : rest) = do
-      handleCommand sound cmd
-      return rest
-    playSounds (act : acts) = do
-      rest <- playSounds acts
-      return (act : rest)
+    playSounds (SoundAction sound cmd : rest) = handleCommand sound cmd >> return rest
+    playSounds (act : acts) = pure (act :) <*> playSounds acts
 
     printLogs :: [OutputAction] -> IO ([OutputAction])
     printLogs [] = return []
-    printLogs (LogAction s : rest) = do
-      putStrLn s
-      printLogs rest
-    printLogs (act : acts) = do
-      rest <- printLogs acts
-      return (act : rest)
+    printLogs (LogAction s : rest) = putStrLn s >> printLogs rest
+    printLogs (act : acts) = pure (act :) <*> printLogs acts
 
     run' :: InputControl -> a -> GameSession -> GameTime -> Game a -> IO ()
     run' ictl gameObject session (lastFrameTime, accumulator) game = do
