@@ -1,7 +1,7 @@
 module Main (main) where
 
 --------------------------------------------------------------------------------
-
+import qualified Graphics.UI.GLFW as GLFW
 import qualified Lambency as L
 
 import System.FilePath
@@ -79,7 +79,7 @@ initGame = do
                      L.staticGeometry = [plane, bunny],
                      L.mainCamera = demoCam,
                      L.dynamicLights = [],
-                     L.gameLogic = cube }
+                     L.gameLogic = cube W.>>> (L.quitWire GLFW.Key'Q) }
 
 main :: IO ()
 main = initGame >>= (L.runWindow 640 480 "Cube Demo" ())

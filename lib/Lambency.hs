@@ -25,6 +25,7 @@ module Lambency (
   isButtonPressed,
   resetCursorPos,
   makeWindow, destroyWindow, run, runWindow,
+  quitWire,
   module Lambency.Sound
 ) where
 
@@ -53,7 +54,6 @@ import Control.Applicative
 import Control.Monad.RWS.Strict
 import qualified Control.Wire as W
 
-import qualified Data.Set as Set
 import Data.Time
 
 import GHC.Float
@@ -202,9 +202,6 @@ run win initialGameObject initialGame = do
       GLFW.pollEvents
 
       ipt <- getInput ictl
-      if Set.member GLFW.Key'Q (keysPressed ipt)
-        then GLFW.setWindowShouldClose win True
-        else return ()
 
       -- Step
       curTime <- getCurrentTime
@@ -220,10 +217,7 @@ run win initialGameObject initialGame = do
       setInput ictl (input newGS)
 
       case go of
-        Right gobj -> do
-          -- Check for exit
-          q <- GLFW.windowShouldClose win
-          unless q $ run' ictl gobj nextsession (curTime, accum) nextGame
+        Right gobj -> run' ictl gobj nextsession (curTime, accum) nextGame
         Left _ -> return ()
      where
        -- When we handle actions, only really print logs and play any sounds
@@ -288,3 +282,10 @@ runWindow width height title initialGameObject initialGame = do
   Just win <- makeWindow width height title
   run win initialGameObject initialGame
   destroyWindow (Just win)
+
+quitWire :: GLFW.Key -> GameWire a a
+quitWire key = W.mkGen_ $ \x -> do
+  gs <- get
+  if (isKeyPressed key $ input gs)
+    then return $ Left ()
+    else return $ Right x

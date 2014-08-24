@@ -68,7 +68,7 @@ initGame objfile = do
                      L.staticGeometry = [],
                      L.mainCamera = cam,
                      L.dynamicLights = [],
-                     L.gameLogic = controlWire obj }
+                     L.gameLogic = controlWire obj W.>>> (L.quitWire GLFW.Key'Q) }
 
 handleArgs :: [FilePath] -> Either String FilePath
 handleArgs [] = Left "Usage: lobjview OBJFILE"
