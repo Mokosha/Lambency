@@ -21,9 +21,6 @@ module Lambency (
   Game(..), GameWire, GameState(..), GameMonad,
   module Lambency.Utils,
 
-  Input(..), withPressedKey, isKeyPressed, debounceKey,
-  isButtonPressed,
-  resetCursorPos,
   makeWindow, destroyWindow, run, runWindow,
   quitWire,
   module Lambency.Sound
@@ -37,7 +34,6 @@ import qualified Graphics.Rendering.OpenGL as GL
 import Lambency.Bounds
 import Lambency.Camera
 import Lambency.GameObject
-import Lambency.Input
 import Lambency.Light
 import Lambency.Loaders
 import Lambency.Material
@@ -52,12 +48,15 @@ import Lambency.Utils
 
 import Control.Applicative
 import Control.Monad.RWS.Strict
+import Control.Monad.State
 import qualified Control.Wire as W
 
 import Data.Time
 
 import GHC.Float
 
+import FRP.Netwire.Input
+import FRP.Netwire.Input.GLFW
 --------------------------------------------------------------------------------
 
 initLambency :: IO ()
@@ -147,7 +146,7 @@ physicsDeltaUTC = let
    diffUTCTime dayEnd dayStart
 
 type TimeStepper = (GameSession, NominalDiffTime)
-type StateStepper a = (Game a, GameState)
+type StateStepper a = (Game a, RenderAction)
 
 run :: GLFW.Window -> a -> Game a -> IO ()
 run win initialGameObject initialGame = do
@@ -155,6 +154,10 @@ run win initialGameObject initialGame = do
   ictl <- mkInputControl win
   let session = W.countSession (double2Float physicsDeltaTime) W.<*> W.pure ()
   curTime <- getCurrentTime
+
+  -- Stick in an initial poll events call...
+  GLFW.pollEvents
+
   run' ictl
     initialGameObject
     session
@@ -195,26 +198,14 @@ run win initialGameObject initialGame = do
     printLogs (LogAction s : rest) = putStrLn s >> printLogs rest
     printLogs (act : acts) = pure (act :) <*> printLogs acts
 
-    run' :: InputControl -> a -> GameSession -> GameTime -> Game a -> IO ()
+    run' :: GLFWInputControl -> a -> GameSession -> GameTime -> Game a -> IO ()
     run' ictl gameObject session (lastFrameTime, accumulator) game = do
-
-      -- Poll events...
-      GLFW.pollEvents
-
-      ipt <- getInput ictl
 
       -- Step
       curTime <- getCurrentTime
       let newAccum = accumulator + (diffUTCTime curTime lastFrameTime)
-          gs = GameState {
-            input = ipt,
-            renderAction = RenderObjects []
-            }
-      (go, (nextsession, accum), (nextGame, newGS)) <-
-        stepGame gameObject (session, newAccum) (game, gs)
-
-      -- Reset the input
-      setInput ictl (input newGS)
+      (go, (nextsession, accum), (nextGame, _)) <-
+        stepGame gameObject (session, newAccum) (game, RenderObjects [])
 
       case go of
         Right gobj -> run' ictl gobj nextsession (curTime, accum) nextGame
@@ -235,15 +226,28 @@ run win initialGameObject initialGame = do
          | accum < physicsDeltaUTC = return (Right go, tstep, sstep)
          | otherwise = do
 
+           ipt <- getInput ictl
+
            -- Retreive the next time step from our game session
            (ts, nextSess) <- W.stepSession sess
 
            let
+             -- The game step is the complete GameMonad computation that
+             -- produces four values: Either inhibition or a new game value
+             -- A new camera, a list of dynamic lights, and the next simulation
+             -- wire
+             gameStep = step go g ts
+
+             -- In order to get at the underlying RWS monad, let's create an
+             -- RWS program that works with the passed in input.
+             -- rwsPrg :: RWS () [OutputAction] RenderAction
+             --           ((Either () a, Camera, [Light], Game a), GLFWInputState)
+             rwsPrg = runStateT gameStep ipt
+
              -- This is the meat of the step routine. This calls runRWS on the
              -- main game wire, and uses the results to figure out what needs
              -- to be done.
-             ((result, cam, lights, nextGame), newGS, actions) =
-                 runRWS (step go g ts) () gs
+             (((result, cam, lights, nextGame), newIpt), newGS, actions) = runRWS rwsPrg () gs
 
              -- We need to render if we're going to fall below the physics threshold
              -- on the next frame. This simulates a while loop. If we don't fall
@@ -261,8 +265,7 @@ run win initialGameObject initialGame = do
              GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
              clearBuffers
 
-             performRenderAction lights cam $
-               RenderCons (RenderObjects sgRAs) (renderAction newGS)
+             performRenderAction lights cam $ RenderCons (RenderObjects sgRAs) newGS
              GL.flush
              GLFW.swapBuffers win
              else return ()
@@ -270,11 +273,14 @@ run win initialGameObject initialGame = do
            -- Actually do the associated actions
            handleActions actions
 
+           -- Poll the input
+           pollGLFW newIpt ictl
+
            -- If our main wire inhibited, return immediately.
            case result of
              Right obj -> stepGame obj
                           (nextSess, (accum - physicsDeltaUTC)) -- TimeStepper
-                          (nextGame, newGS { renderAction = RenderObjects [] }) -- StateStepper
+                          (nextGame, RenderObjects []) -- StateStepper
              Left _ -> return (result, tstep, sstep)
 
 runWindow :: Int -> Int -> String -> a -> Game a -> IO ()
@@ -283,9 +289,9 @@ runWindow width height title initialGameObject initialGame = do
   run win initialGameObject initialGame
   destroyWindow (Just win)
 
+-- Wire that behaves like the identity wire until the given key
+-- is pressed, then inhibits forever.
 quitWire :: GLFW.Key -> GameWire a a
-quitWire key = W.mkGen_ $ \x -> do
-  gs <- get
-  if (isKeyPressed key $ input gs)
-    then return $ Left ()
-    else return $ Right x
+quitWire key =
+  (W.mkId W.&&& ((keyPressed key W.>>> W.pure W.mkEmpty W.>>> W.now) W.<|> W.never)) W.>>>
+  (W.rSwitch W.mkId)

@@ -55,6 +55,7 @@ library
                        stm >= 2.4,
                        mtl >= 2.1.2,
                        netwire >= 5.0.0,
+                       netwire-input, netwire-input-glfw,
                        OpenAL, HCodecs,
                        time,
                        containers,
@@ -73,5 +74,6 @@ executable lobjview
                   lambency,
                   linear,
                   netwire >= 5.0.0,
+                  netwire-input,
                   mtl >= 2.1.2,
                   directory

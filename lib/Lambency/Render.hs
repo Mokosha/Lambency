@@ -20,6 +20,7 @@ import Lambency.Types
 import Lambency.Vertex
 
 import Control.Monad.State.Class
+import Control.Monad.Trans
 
 import Data.Array.IO
 import Data.Array.Storable
@@ -237,21 +238,19 @@ appendObj obj (RenderClipped clip act) = RenderClipped clip (appendObj obj act)
 appendObj obj (RenderCons act1 act2) = RenderCons act1 (appendObj obj act2)
 
 addClipRenderAction :: Transform -> RenderObject -> GameMonad ()
-addClipRenderAction xf ro =
-  modify (\gs -> gs { renderAction = appendClip (xformObject xf ro) $ renderAction gs })
+addClipRenderAction xf ro = lift $
+  modify $ appendClip (xformObject xf ro)
   where
     appendClip :: RenderObject -> RenderAction -> RenderAction
     appendClip obj (RenderClipped clip act) = RenderClipped (appendObj obj clip) act
     appendClip obj act = RenderCons act (RenderClipped (RenderObjects [obj]) (RenderObjects []))
 
 resetClip :: GameMonad ()
-resetClip = modify (\gs -> gs { renderAction =
-                                   case (renderAction gs) of
-                                        x@(RenderClipped _ _) ->
-                                          RenderCons x (RenderObjects [])
-                                        x -> x
-                              })
+resetClip = lift $ modify resetFn
+  where
+    resetFn x@(RenderClipped _ _) = RenderCons x (RenderObjects [])
+    resetFn x = x
 
 addRenderAction :: Transform -> RenderObject -> GameMonad ()
-addRenderAction xf ro =
-  modify (\gs -> gs { renderAction = appendObj (xformObject xf ro) $ renderAction gs })
+addRenderAction xf ro = lift $
+  modify $ appendObj (xformObject xf ro)

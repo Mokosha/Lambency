@@ -2,12 +2,13 @@ module Main (main) where
 
 --------------------------------------------------------------------------------
 import Control.Applicative
-import Control.Monad.RWS.Strict
 import qualified Control.Wire as W
 
 import Data.List (intercalate)
 
 import qualified Graphics.UI.GLFW as GLFW
+
+import FRP.Netwire.Input
 
 import qualified Lambency as L
 
@@ -42,22 +43,31 @@ mkOBJ objfile = do
 controlWire :: L.RenderObject -> L.GameWire a a
 controlWire ro = L.mkObject ro (xForm L.identity)
   where
+    feedback :: L.GameWire (a, b) (b, b)
+    feedback = W.arr $ \(_, x) -> (x, x)
+
+    inputWire :: L.GameWire a (Float, Float)
+    inputWire = (mousePressed GLFW.MouseButton'1 W.>>> mouseMickies) W.<|> (pure (0, 0))
+
+    rotationFn :: (Float, Float) -> Quat.Quaternion Float
+    rotationFn (0, 0) = Quat.axisAngle L.localRight 0
+    rotationFn (mx, my) =
+      foldl1 (*) [
+        Quat.axisAngle L.localUp (-asin mx),
+        Quat.axisAngle L.localRight $ asin my]
+
+    rotation :: L.GameWire (Float, Float) (Quat.Quaternion Float)
+    rotation = W.arr rotationFn
+
+    handleQuat :: L.GameWire (Quat.Quaternion Float, L.Transform) L.Transform
+    handleQuat = W.arr $ uncurry L.rotateWorld
+
     xForm :: L.Transform -> L.GameWire a L.Transform
-    xForm xf = W.mkGenN $ \_ -> do
-      gamestate <- get
-      let ipt = L.input gamestate
-          rotate = L.isButtonPressed GLFW.MouseButton'1 ipt
-          newxf = if rotate then rotation ipt else xf
-      put $ gamestate { L.input = L.resetCursorPos ipt }
-      return (Right newxf, xForm newxf)
+    xForm initialXF =
+      W.loop $ (W.second $ (inputWire W.>>> rotation) W.&&& W.mkId W.>>>
+                handleQuat W.>>>
+                (W.delay initialXF)) W.>>> feedback
       where
-        rotation :: L.Input -> L.Transform
-        rotation ipt = case (L.cursor ipt) of
-          Just (mx, my) -> flip L.rotateWorld xf $
-                           foldl1 (*) [
-                             Quat.axisAngle L.localUp (-asin mx),
-                             Quat.axisAngle L.localRight $ asin my]
-          Nothing -> xf
 
 initGame :: FilePath -> IO (L.Game ())
 initGame objfile = do

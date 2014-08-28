@@ -29,6 +29,8 @@ import qualified Data.Map as Map
 import qualified Control.Wire as W
 import Control.Monad.RWS.Strict
 
+import FRP.Netwire.Input.GLFW
+
 import Linear.Matrix
 import Linear.V2
 import Linear.V3
@@ -208,7 +210,7 @@ data Game a = Game {
 -- Game State
 
 type TimeStep = W.Timed Float ()
-type GameMonad = RWS GameConfig [OutputAction] GameState
+type GameMonad = GLFWInputT (RWS GameConfig [OutputAction] RenderAction)
 type GameWire a b = W.Wire TimeStep () GameMonad a b
 type GameSession = W.Session IO TimeStep
 

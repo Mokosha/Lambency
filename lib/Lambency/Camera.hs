@@ -26,12 +26,12 @@ module Lambency.Camera (
 --------------------------------------------------------------------------------
 import qualified Graphics.UI.GLFW as GLFW
 
-import Lambency.Input
 import Lambency.Types
 import qualified Lambency.Transform as XForm
 
 import qualified Control.Wire as W
-import Control.Monad.RWS.Strict
+
+import FRP.Netwire.Input
 
 import Linear.Matrix
 import Linear.Metric
@@ -194,72 +194,63 @@ mkFixedCam cam = W.mkConst $ Right cam
 
 mkViewerCam :: Camera -> GameWire a Camera
 mkViewerCam cam@(Camera xform camTy camSz) = let
-  finalXForm :: Input -> XForm.Transform
-  finalXForm ipt = mkXForm newPos (signorm $ negate newPos) (XForm.up xform)
+  finalXForm :: (Float, Float) -> XForm.Transform
+  finalXForm (0, 0) = XForm.identity
+  finalXForm (mx, my) = mkXForm newPos (signorm $ negate newPos) (XForm.up xform)
     where
       newPos :: Vec3f
       newPos = XForm.transformPoint rotation $ getCamPos cam
         where
           rotation :: XForm.Transform
-          rotation = case (cursor ipt) of
-            Just (mx, my) -> flip XForm.rotateWorld XForm.identity $
-                             foldl1 (*) [
-                               Quat.axisAngle (XForm.up xform) (-asin mx),
-                               Quat.axisAngle (XForm.right xform) (-asin my)]
-            Nothing -> XForm.identity
+          rotation = flip XForm.rotateWorld XForm.identity $
+                     foldl1 (*) [
+                       Quat.axisAngle (XForm.up xform) (-asin mx),
+                       Quat.axisAngle (XForm.right xform) (-asin my)]
   in
-   W.mkGenN $ \_ -> do
-     gamestate <- get
-     let ipt = input gamestate
-         newcam =
-           if isButtonPressed GLFW.MouseButton'1 ipt then
-             Camera (finalXForm ipt) camTy camSz
-           else
-             cam
-     put $ gamestate { input = resetCursorPos ipt }
-     return (Right newcam, mkViewerCam newcam)
+   ((mouseMickies W.>>> (mousePressed GLFW.MouseButton'1)) W.<|> (W.pure (0, 0))) W.>>>
+   (W.mkGenN $ \pos -> do
+       let newcam = Camera (finalXForm pos) camTy camSz
+       return (Right newcam, mkViewerCam newcam))
 
 mkDebugCam :: Camera -> GameWire a Camera
-mkDebugCam (Camera xform camTy camSz) = let
-  updCam :: Float -> Input -> Camera
-  updCam dt ipt = Camera finalXForm camTy camSz
+mkDebugCam initCam = W.loop ((W.second (W.delay initCam W.>>> updCam)) W.>>> feedback)
+  where
+  feedback :: GameWire (a, b) (b, b)
+  feedback = W.mkPure_ $ \(_, x) -> Right (x, x)
+
+  tr :: GLFW.Key -> Float -> (XForm.Transform -> Vec3f) ->
+        GameWire XForm.Transform XForm.Transform
+  tr key sc dir = (keyPressed key W.>>> trans) W.<|> W.mkId
     where
-      finalXForm = let
-        newXForm = movement xform
-        in mkXForm
-           (XForm.position newXForm)
-           (negate $ XForm.forward newXForm)
-           (V3 0 1 0)
+      trans :: GameWire XForm.Transform XForm.Transform
+      trans = W.mkSF $ \ts xf ->
+        (XForm.translate (3.0 * (W.dtime ts) * sc *^ (dir xf)) xf, trans)
 
-      movement :: XForm.Transform -> XForm.Transform
-      movement = let
-        tr :: GLFW.Key -> Float -> (XForm.Transform -> Vec3f) ->
-              (XForm.Transform -> XForm.Transform)
-        tr k sc dir =
-          withPressedKey ipt k
-          (\x -> XForm.translate (3.0 * dt * sc *^ (dir x)) x)
+  updCam :: GameWire Camera Camera
+  updCam = (W.mkId W.&&& (W.arr getCamXForm W.>>> xfWire)) W.>>> (W.mkSF_ $ uncurry stepCam)
+    where
 
-        (mx, my) = case (cursor ipt) of
-          Just x -> x
-          Nothing -> (0, 0)
+      xfWire :: GameWire XForm.Transform XForm.Transform
+      xfWire =
+        (tr GLFW.Key'W (-1.0) XForm.forward) W.>>>
+        (tr GLFW.Key'S (1.0) XForm.forward) W.>>>
+        (tr GLFW.Key'A (-1.0) XForm.right) W.>>>
+        (tr GLFW.Key'D (1.0) XForm.right) W.>>>
+        (W.mkId W.&&& mouseMickies) W.>>>
+        (W.mkSF_ $ \(xf, (mx, my)) ->
+          XForm.rotate
+          (foldl1 (*) [
+              Quat.axisAngle (XForm.up xf) (-asin mx),
+              Quat.axisAngle (XForm.right xf) (-asin my)])
+          xf)
 
-       in
-        foldl1 (.) [
-          tr GLFW.Key'W (-1.0) XForm.forward,
-          tr GLFW.Key'S (1.0) XForm.forward,
-          tr GLFW.Key'A (-1.0) XForm.right,
-          tr GLFW.Key'D (1.0) XForm.right,
-          XForm.rotate $ foldl1 (*) [
-            Quat.axisAngle (XForm.up xform) (-asin mx),
-            Quat.axisAngle (XForm.right xform) (-asin my)]
-          ]
-  in
-   W.mkGen $ \t _ -> do
-     gamestate <- get
-     let ipt = input gamestate
-         newcam = updCam (W.dtime t) ipt
-     put $ gamestate { input = resetCursorPos ipt }
-     return (Right newcam, mkDebugCam newcam)
+      stepCam :: Camera -> XForm.Transform -> Camera
+      stepCam cam newXForm = setCamXForm cam finalXForm
+        where
+          finalXForm = mkXForm
+                       (XForm.position newXForm)
+                       (negate $ XForm.forward newXForm)
+                       (V3 0 1 0)
 
 mk2DCam :: Int -> Int -> GameWire Vec2f Camera
 mk2DCam sx sy = let

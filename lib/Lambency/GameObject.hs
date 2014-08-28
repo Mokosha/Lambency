@@ -1,14 +1,10 @@
 module Lambency.GameObject (
   mkObject,
   withVelocity,
-  pulseSound,
-  keyPressed
+  pulseSound
 ) where
 
 --------------------------------------------------------------------------------
-import qualified Graphics.UI.GLFW as GLFW
-
-import Lambency.Input
 import Lambency.Render
 import Lambency.Sound
 import Lambency.Transform
@@ -16,11 +12,9 @@ import Lambency.Types
 
 import Control.Arrow
 import Control.Wire
-import Control.Monad.State.Class
 import Control.Monad.Writer
 
 import Linear.Vector
-
 --------------------------------------------------------------------------------
 
 mkObject :: RenderObject -> GameWire a Transform -> GameWire a a
@@ -47,17 +41,3 @@ pulseSound :: Sound -> GameWire a a
 pulseSound sound = mkGenN $ \val ->
   censor (SoundAction sound StartSound :) $
   return (Right val, Control.Wire.id)
-
--- This wire produces the given value when the key is pressed otherwise
--- it inhibits
-keyPressed :: GLFW.Key -> GameWire a b -> GameWire a b
-keyPressed key wire =
-  wire >>>
-  (mkGen_ $ \val -> do
-      gs <- get
-      return $
-        if (isKeyPressed key (input gs)) then
-          Right val
-        else
-          Left ()
-  )
