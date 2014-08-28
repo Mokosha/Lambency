@@ -17,7 +17,6 @@ module Lambency.Types (
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
 
-import Lambency.Input
 import Lambency.Sound
 
 import qualified Lambency.Transform as XForm
@@ -192,7 +191,6 @@ data OutputAction = LogAction String
 type GameConfig = ()
 
 data GameState = GameState {
-  input :: Input,
   renderAction :: RenderAction
 }
 

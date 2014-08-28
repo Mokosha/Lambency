@@ -41,7 +41,6 @@ library
                        Lambency.Transform
                        Lambency.Vertex
                        Lambency.Utils
-                       Lambency.Input
                        Lambency.Sound
                        Paths_lambency
   ghc-options:         -Wall -O3
