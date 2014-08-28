@@ -14,4 +14,6 @@ before_install:
   - unzip /tmp/netwire-input-glfw.zip
 
 install:
-  - cabal install --only-dependencies netwire-input-master/ netwire-input-glfw-master/
+  - cabal install netwire-input-master/
+  - cabal install netwire-input-glfw-master/
+  - cabal install --only-dependencies
