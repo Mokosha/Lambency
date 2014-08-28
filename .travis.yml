@@ -8,6 +8,10 @@ script:
 before_install:
   - sudo apt-get update -qq
   - sudo apt-get install -qq libxxf86vm-dev libopenal-dev
+  - wget https://github.com/Mokosha/netwire-input/archive/master.zip -O /tmp/netwire-input.zip
+  - unzip /tmp/netwire-input.zip
+  - wget https://github.com/Mokosha/netwire-input-glfw/archive/master.zip -O /tmp/netwire-input-glfw.zip
+  - unzip /tmp/netwire-input-glfw.zip
 
 install:
-  - cabal install --only-dependencies
+  - cabal install --only-dependencies netwire-input-master/ netwire-input-glfw-master/
