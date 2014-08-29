@@ -220,11 +220,10 @@ mkDebugCam initCam = W.loop ((W.second (W.delay initCam W.>>> updCam)) W.>>> fee
 
   tr :: GLFW.Key -> Float -> (XForm.Transform -> Vec3f) ->
         GameWire XForm.Transform XForm.Transform
-  tr key sc dir = (keyPressed key W.>>> trans) W.<|> W.mkId
+  tr key sc dir = (trans W.>>> (keyPressed key)) W.<|> W.mkId
     where
       trans :: GameWire XForm.Transform XForm.Transform
-      trans = W.mkSF $ \ts xf ->
-        (XForm.translate (3.0 * (W.dtime ts) * sc *^ (dir xf)) xf, trans)
+      trans = W.mkSF $ \ts xf -> (XForm.translate (3.0 * (W.dtime ts) * sc *^ (dir xf)) xf, trans)
 
   updCam :: GameWire Camera Camera
   updCam = (W.mkId W.&&& (W.arr getCamXForm W.>>> xfWire)) W.>>> (W.mkSF_ $ uncurry stepCam)

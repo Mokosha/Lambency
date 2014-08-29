@@ -69,8 +69,8 @@ controlWire ro = L.mkObject ro (xForm L.identity)
                 (W.delay initialXF)) W.>>> feedback
       where
 
-initGame :: FilePath -> IO (L.Game ())
-initGame objfile = do
+loadGame :: FilePath -> IO (L.Game ())
+loadGame objfile = do
   obj <- mkOBJ objfile
   let lightPos = 10 *^ (V3 0 1 (-1))
   spotlight <- L.createSpotlight lightPos (negate lightPos) 0
@@ -89,5 +89,5 @@ main :: IO ()
 main = do
   objfile <- pure handleArgs <*> getArgs
   case objfile of
-    Right file -> initGame file >>= (L.runWindow 640 480 "OBJ Viewer" ())
+    Right file -> L.runWindow 640 480 "OBJ Viewer" () (loadGame file)
     Left err -> putStrLn err

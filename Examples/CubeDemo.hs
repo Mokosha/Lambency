@@ -68,8 +68,8 @@ cubeWire = do
               L.uniformScale 2.0 $
               L.identity
 
-initGame :: IO (L.Game ())
-initGame = do
+loadGame :: IO (L.Game ())
+loadGame = do
   plane <- mkPlane
   bunny <- mkBunny
   cube <- cubeWire
@@ -82,4 +82,4 @@ initGame = do
                      L.gameLogic = cube W.>>> (L.quitWire GLFW.Key'Q) }
 
 main :: IO ()
-main = initGame >>= (L.runWindow 640 480 "Cube Demo" ())
+main = L.runWindow 640 480 "Cube Demo" () loadGame

@@ -283,10 +283,10 @@ run win initialGameObject initialGame = do
                           (nextGame, RenderObjects []) -- StateStepper
              Left _ -> return (result, tstep, sstep)
 
-runWindow :: Int -> Int -> String -> a -> Game a -> IO ()
-runWindow width height title initialGameObject initialGame = do
+runWindow :: Int -> Int -> String -> a -> IO (Game a) -> IO ()
+runWindow width height title initialGameObject loadGamePrg = do
   Just win <- makeWindow width height title
-  run win initialGameObject initialGame
+  loadGamePrg >>= run win initialGameObject
   destroyWindow (Just win)
 
 -- Wire that behaves like the identity wire until the given key
