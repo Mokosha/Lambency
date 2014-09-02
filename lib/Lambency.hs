@@ -165,7 +165,7 @@ run win initialGameObject initialGame = do
     initialGame
   where
 
-    step :: a -> Game a -> TimeStep -> GameMonad (Either () a, Camera, [Light], Game a)
+    step :: a -> Game a -> TimeStep -> GameMonad (Either String a, Camera, [Light], Game a)
     step go game t = do
       (Right cam, nCamWire) <- W.stepWire (mainCamera game) t (Right ())
       (result, gameWire) <- W.stepWire (gameLogic game) t (Right go)
@@ -221,7 +221,7 @@ run win initialGameObject initialGame = do
          ]
   
        stepGame :: a -> TimeStepper -> StateStepper a ->
-                   IO (Either () a, TimeStepper, StateStepper a)
+                   IO (Either String a, TimeStepper, StateStepper a)
        stepGame go tstep@(sess, accum) sstep@(g, gs)
          | accum < physicsDeltaUTC = return (Right go, tstep, sstep)
          | otherwise = do

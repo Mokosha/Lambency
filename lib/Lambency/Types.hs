@@ -209,7 +209,7 @@ data Game a = Game {
 
 type TimeStep = W.Timed Float ()
 type GameMonad = GLFWInputT (RWS GameConfig [OutputAction] RenderAction)
-type GameWire a b = W.Wire TimeStep () GameMonad a b
+type GameWire a b = W.Wire TimeStep String GameMonad a b
 type GameSession = W.Session IO TimeStep
 
 -- The game timer has two parts. The first is the time after the last rendering
