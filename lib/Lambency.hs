@@ -274,7 +274,7 @@ run win initialGameObject initialGame = do
            handleActions actions
 
            -- Poll the input
-           pollGLFW newIpt ictl
+           _ <- pollGLFW newIpt ictl
 
            -- If our main wire inhibited, return immediately.
            case result of
