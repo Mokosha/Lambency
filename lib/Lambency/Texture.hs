@@ -1,5 +1,5 @@
 module Lambency.Texture (
-  getHandle,
+  getGLTexObj,
   isRenderTexture,
   createFramebufferObject,
   createSolidTexture,
@@ -27,14 +27,16 @@ import Data.Array.Unboxed
 import Data.Word
 import qualified Data.Vector.Storable as Vector
 import qualified Data.ByteString as BS
+
+import Linear.V2
 --------------------------------------------------------------------------------
 
 kShadowMapSize :: GL.GLsizei
 kShadowMapSize = 1024
 
-getHandle :: Texture -> TextureHandle
-getHandle (Texture h _) = h
-getHandle (RenderTexture h _) = h
+getGLTexObj :: Texture -> GL.TextureObject
+getGLTexObj (Texture (TexHandle h _) _) = h
+getGLTexObj (RenderTexture (TexHandle h _) _) = h
 
 fmt2glpfmt :: TextureFormat -> GL.PixelFormat
 fmt2glpfmt RGBA8 = GL.RGBA
@@ -87,15 +89,15 @@ clearRenderTexture = do
   GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral szx) (fromIntegral szy))
 
 destroyTexture :: Texture -> IO ()
-destroyTexture (Texture h _) = GL.deleteObjectName h
-destroyTexture (RenderTexture h fboh) = do
+destroyTexture (Texture (TexHandle h _) _) = GL.deleteObjectName h
+destroyTexture (RenderTexture (TexHandle h _) fboh) = do
   GL.deleteObjectName h
   GL.deleteObjectName fboh
 
-createFramebufferObject :: TextureFormat -> IO (Texture)
-createFramebufferObject fmt = do
+createFramebufferObject :: Int -> Int -> TextureFormat -> IO (Texture)
+createFramebufferObject w h fmt = do
   handle <- GL.genObjectName
-  return $ Texture handle fmt
+  return $ Texture (TexHandle handle $ TexSize (V2 w h)) fmt
 
 initializeTexture :: Ptr a -> (Word32, Word32) -> TextureFormat -> IO(Texture)
 initializeTexture ptr (w, h) fmt = do
@@ -112,7 +114,7 @@ initializeTexture ptr (w, h) fmt = do
   GL.textureWrapMode GL.Texture2D GL.T GL.$= (GL.Repeated, GL.Repeat)
 
   putStrLn $ "Loaded " ++ (show fmt) ++ "texture with dimensions " ++ (show (w, h))
-  return $ Texture handle fmt
+  return $ Texture (TexHandle handle $ TexSize $ fmap fromEnum (V2 w h)) fmt
 
 loadTextureFromPNG :: FilePath -> IO(Maybe Texture)
 loadTextureFromPNG filename = do
@@ -163,7 +165,7 @@ createDepthTexture = do
   GL.cullFace GL.$= Just GL.Back
   GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject
 
-  return $ RenderTexture handle rbHandle
+  return $ RenderTexture (TexHandle handle $ TexSize $ fmap fromEnum (V2 kShadowMapSize kShadowMapSize)) rbHandle
 
 createSolidTexture :: (Word8, Word8, Word8, Word8) -> IO(Texture)
 createSolidTexture (r, g, b, a) = do

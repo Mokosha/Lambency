@@ -61,7 +61,7 @@ setUniformVar (Uniform Matrix2Ty (GL.UniformLocation loc)) (Matrix2Val mat) = do
 
 setUniformVar (Uniform (TextureTy unit) loc) (TextureVal tex) = do
   GL.activeTexture GL.$= (GL.TextureUnit unit)
-  GL.textureBinding GL.Texture2D GL.$= Just (getHandle tex)
+  GL.textureBinding GL.Texture2D GL.$= Just (getGLTexObj tex)
   GL.uniform loc GL.$= (GL.TextureUnit unit)
 
 setUniformVar (Uniform FloatTy loc) (FloatVal f) = do

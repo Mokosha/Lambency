@@ -3,7 +3,7 @@ module Lambency.Types (
   Camera(..), CameraType(..), CameraViewDistance(..),
   LightType(..), Light(..), Shadow(..),
   Shader(..), ShaderVarTy(..), ShaderValue(..), ShaderVar(..), ShaderMap,
-  Texture(..), TextureFormat(..), FBOHandle, TextureHandle,
+  Texture(..), TextureSize(..), TextureFormat(..), FBOHandle, TextureHandle(..),
   Material,
   RenderFlag(..), RenderObject(..), RenderAction(..),
   OutputAction(..),
@@ -40,6 +40,7 @@ import qualified Linear.Quaternion as Quat
 
 -- Vector Types
 
+type Vec2i = V2 Int
 type Vec2f = V2 Float
 type Vec3f = V3 Float
 type Vec4f = V4 Float
@@ -124,8 +125,12 @@ data Shader = Shader GL.Program ShaderVarMap deriving(Show, Eq)
 
 -- Textures
 
+newtype TextureSize = TexSize { getTextureSize :: Vec2i }
+                      deriving(Show, Eq)
+
 type FBOHandle = GL.FramebufferObject
-type TextureHandle = GL.TextureObject
+data TextureHandle = TexHandle GL.TextureObject TextureSize
+                     deriving(Show, Eq)
 data TextureFormat = RGBA8 | RGB8
                      deriving(Show, Eq)
 
