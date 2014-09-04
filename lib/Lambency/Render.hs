@@ -5,6 +5,7 @@ module Lambency.Render (
   xformObject,
   performRenderAction,
   addRenderAction,
+  addRenderUIAction,
   addClipRenderAction,
   resetClip,
 ) where
@@ -33,10 +34,9 @@ import Foreign.Storable
 import Foreign.Ptr
 
 import qualified Graphics.Rendering.OpenGL as GL
+import qualified Graphics.UI.GLFW as GLFW
 
-import Linear.Matrix
-import Linear.V4
-import Linear.V3
+import Linear
 
 --------------------------------------------------------------------------------
 
@@ -228,6 +228,16 @@ renderLight (RenderObjects ros) camera light = divideAndRenderROs ros camera lig
 renderLight (RenderCons act1 act2) camera light = do
   renderLight act1 camera light
   renderLight act2 camera light
+renderLight (RenderUI act) _ light = do
+  -- !FIXME! This should be stored in the camera...? Why
+  -- are we querying IO here? =(
+  (Just win) <- GLFW.getCurrentContext
+  (szx, szy) <- GLFW.getWindowSize win
+  -- Setup ortho camera and nolight for ui crap
+  let hx = 0.5 * (fromIntegral szx)
+      hy = 0.5 * (fromIntegral szy)
+      cam = mkOrthoCamera zero (negate localForward) localUp (-hx) (hx) (hy) (-hy) 0.01 50.0
+  renderLight act cam (setAmbient (V3 1 1 1) light)
 
 performRenderAction :: [Light] -> Camera -> RenderAction -> IO ()
 performRenderAction lights camera action = mapM_ (\l -> renderLight action camera l) lights
@@ -236,6 +246,13 @@ appendObj :: RenderObject -> RenderAction -> RenderAction
 appendObj obj (RenderObjects objs) = RenderObjects (obj : objs)
 appendObj obj (RenderClipped clip act) = RenderClipped clip (appendObj obj act)
 appendObj obj (RenderCons act1 act2) = RenderCons act1 (appendObj obj act2)
+appendObj obj (RenderUI act) = RenderCons (RenderUI act) (RenderObjects [obj])
+
+appendUI :: RenderObject -> RenderAction -> RenderAction
+appendUI obj (RenderObjects objs) = RenderCons (RenderObjects objs) (RenderUI (RenderObjects [obj]))
+appendUI obj (RenderClipped clip act) = RenderClipped clip (appendUI obj act)
+appendUI obj (RenderUI act) = RenderUI (appendObj obj act)
+appendUI obj (RenderCons act1 act2) = RenderCons act1 (appendUI obj act2)
 
 addClipRenderAction :: Transform -> RenderObject -> GameMonad ()
 addClipRenderAction xf ro = lift $
@@ -243,14 +260,24 @@ addClipRenderAction xf ro = lift $
   where
     appendClip :: RenderObject -> RenderAction -> RenderAction
     appendClip obj (RenderClipped clip act) = RenderClipped (appendObj obj clip) act
+    appendClip obj (RenderCons act1 act2) = RenderCons act1 (appendClip obj act2)
+    appendClip obj (RenderUI act) = RenderUI (appendClip obj act)
     appendClip obj act = RenderCons act (RenderClipped (RenderObjects [obj]) (RenderObjects []))
 
 resetClip :: GameMonad ()
 resetClip = lift $ modify resetFn
   where
     resetFn x@(RenderClipped _ _) = RenderCons x (RenderObjects [])
+    resetFn (RenderCons act1 act2) = RenderCons act1 (resetFn act2)
+    resetFn (RenderUI act) = RenderUI $ resetFn act
     resetFn x = x
 
 addRenderAction :: Transform -> RenderObject -> GameMonad ()
 addRenderAction xf ro = lift $
   modify $ appendObj (xformObject xf ro)
+
+addRenderUIAction :: V2 Float -> RenderObject -> GameMonad ()
+addRenderUIAction (V2 x y) ro = lift $
+  modify $ appendUI (xformObject xf ro)
+  where
+    xf = translate (V3 x y 0) identity
