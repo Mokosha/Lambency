@@ -41,7 +41,7 @@ createNoLight :: IO (Light)
 createNoLight = let
   shdrMap = Map.fromList [
     ("alpha", FloatVal 1.0),
-    ("texCoordMatrix", Matrix2Val eye2)]
+    ("texCoordMatrix", Matrix3Val eye3)]
   in do
     shdr <- createTransparentShader
     return $ Light shdr shdrMap Nothing
