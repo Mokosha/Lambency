@@ -4,7 +4,7 @@ module Lambency.Texture (
   createFramebufferObject,
   createSolidTexture,
   createDepthTexture,
-  loadTextureFromPNG,
+  loadTexture,
   destroyTexture,
   bindRenderTexture,
   clearRenderTexture,
@@ -29,6 +29,8 @@ import qualified Data.Vector.Storable as Vector
 import qualified Data.ByteString as BS
 
 import Linear.V2
+
+import System.FilePath (takeExtension)
 --------------------------------------------------------------------------------
 
 kShadowMapSize :: GL.GLsizei
@@ -171,3 +173,23 @@ createSolidTexture :: (Word8, Word8, Word8, Word8) -> IO(Texture)
 createSolidTexture (r, g, b, a) = do
   carr <- newListArray (0 :: Integer, 3) [r, g, b, a]
   withStorableArray carr (\ptr -> initializeTexture ptr (1, 1) RGBA8)
+
+data ImageType =
+  ImageType'PNG
+  deriving (Show, Eq, Ord, Enum)
+
+determineImageType :: FilePath -> IO (Maybe ImageType)
+determineImageType filename = do
+  -- !FIXME! might do better to introspect on the bytes and figure out
+  -- what kind of image it is... does JuicyPixels do this?
+  return $ fromExtension $ takeExtension filename
+  where
+    fromExtension ".png" = Just ImageType'PNG
+    fromExtension _ = Nothing
+
+loadTextureWithType :: FilePath -> Maybe ImageType -> IO (Maybe Texture)
+loadTextureWithType _ Nothing = return Nothing
+loadTextureWithType filename (Just ImageType'PNG) = loadTextureFromPNG filename
+
+loadTexture :: FilePath -> IO (Maybe Texture)
+loadTexture filename = determineImageType filename >>= (loadTextureWithType filename)

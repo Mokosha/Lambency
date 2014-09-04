@@ -47,7 +47,7 @@ mkBunny = do
 cubeWire :: IO (L.GameWire () ())
 cubeWire = do
   sound <- getDataFileName ("stereol" <.> "wav") >>= L.loadSound
-  (Just tex) <- getDataFileName ("crate" <.> "png") >>= L.loadTextureFromPNG
+  (Just tex) <- getDataFileName ("crate" <.> "png") >>= L.loadTexture
   mesh <- getDataFileName ("cube" <.> "obj") >>= L.loadOTV3
   ro <- L.createRenderObject mesh (L.createTexturedMaterial tex)
   return $ playSound sound 3.0 W.>>> (L.mkObject ro (rotate initial))
