@@ -37,6 +37,7 @@ library
                        Lambency.GameObject
                        Lambency.Render
                        Lambency.Shader
+                       Lambency.Sprite
                        Lambency.Texture
                        Lambency.Transform
                        Lambency.Vertex
@@ -60,7 +61,7 @@ library
                        containers,
                        bytestring,
                        array, vector,
-                       filepath,
+                       filepath, comonad,
                        -- Eventually replace these...
                        directory
 
