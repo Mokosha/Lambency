@@ -13,6 +13,7 @@ module Lambency.Render (
 --------------------------------------------------------------------------------
 
 import Lambency.Camera
+import Lambency.Light
 import Lambency.Material
 import Lambency.Shader
 import Lambency.Texture
