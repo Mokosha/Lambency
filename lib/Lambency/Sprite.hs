@@ -1,17 +1,22 @@
 module Lambency.Sprite (
-  Sprite,
+  SpriteFrame(..),
+  Sprite(..),
   loadStaticSprite,
   loadAnimatedSprite,
+  loadFixedSizeAnimatedSprite,
 
   renderSprite,
   renderUISprite,
 
-  mkAnimatedWire,
+  SpriteAnimationType(..),
+  animatedWire,
 ) where
 
 --------------------------------------------------------------------------------
 import Control.Comonad
 import Control.Wire hiding ((.))
+
+import qualified Data.Map as Map
 
 import Lambency.Material
 import Lambency.Mesh
@@ -19,70 +24,62 @@ import Lambency.Render
 import Lambency.Texture
 import Lambency.Transform
 import Lambency.Types
+import Lambency.Utils
 
 import Linear
 --------------------------------------------------------------------------------
 
-data CyclicList a = CyclicList [a] a [a]
-
-instance Functor CyclicList where
-  fmap f (CyclicList p c n) = CyclicList (fmap f p) (f c) (fmap f n)
-
-advance :: CyclicList a -> CyclicList a
-advance (CyclicList p c []) = let (r:rs) = reverse (c:p) in CyclicList [] r rs
-advance (CyclicList p c (n:ns)) = CyclicList (c:p) n ns
-
-retreat :: CyclicList a -> CyclicList a
-retreat (CyclicList [] c n) = let
-  rev = reverse (c : n)
-  in CyclicList (init rev) (last rev) []
-retreat (CyclicList (p:ps) c n) = CyclicList ps p (c:n)
-
-cyclicLength :: CyclicList a -> Int
-cyclicLength (CyclicList x _ z) = length x + length z + 1
-
-cyclicFromList :: [a] -> CyclicList a
-cyclicFromList [] = error "Cannot create empty cyclic list"
-cyclicFromList (x:xs) = CyclicList [] x xs
-
-cycles :: CyclicList a -> [CyclicList a]
-cycles cl = let
-  helper 0 _ = []
-  helper n cl' = cl' : (helper (n-1) $ advance cl')
-  in helper (cyclicLength cl) cl
-
-instance Comonad CyclicList where
-  extract (CyclicList _ x _) = x
-  duplicate = cyclicFromList . cycles
-
-data Sprite = Sprite {
-  frames :: CyclicList (V2 Int),
+data SpriteFrame = SpriteFrame {
+  offset :: V2 Float,
   size :: V2 Int,
-  spriteRenderObject :: RenderObject
+  frameRO :: RenderObject
 }
 
-nextFrame :: Sprite -> Sprite
-nextFrame s = s { frames = advance (frames s) }
+newtype Sprite = Sprite { getFrames :: CyclicList SpriteFrame }
+
+curFrameOffset :: Sprite -> V2 Float
+curFrameOffset = offset . extract . getFrames
+
+updateScale :: V2 Float -> V2 Float -> Material -> Material
+updateScale (V2 sx sy) (V2 tx ty) =
+  Map.insert "texCoordMatrix" (Matrix3Val $
+                               V3 (V3 sx 0 0) (V3 0 sy 0) (V3 tx ty 1))
+
+scaleToSize :: V2 Int -> Transform
+scaleToSize sz =
+  let (V2 sx sy) = fmap ((*0.5) . fromIntegral) sz
+  in nonuniformScale (V3 sx sy 1) identity
 
 initStaticSprite :: Texture -> IO (Sprite)
-initStaticSprite tex@(Texture (TexHandle _ texSize) _) = do
+initStaticSprite tex = do
   ro <- createRenderObject quad (createTexturedMaterial tex)
-  return $ Sprite {
-    frames = cyclicFromList [zero],
-    size = getTextureSize texSize,
-    spriteRenderObject = ro
+  return . Sprite . cycleSingleton $ SpriteFrame {
+    offset = zero,
+    size = textureSize tex,
+    frameRO = xformObject (scaleToSize $ textureSize tex) ro
   }
-initStaticSprite _ = error "Only loaded textures can be used to create sprites"
 
-initAnimatedSprite :: [V2 Int] -> Texture -> IO (Sprite)
-initAnimatedSprite offsets tex@(Texture (TexHandle _ texSize) _) = do
+initAnimatedSprite :: [V2 Int] -> [V2 Int] -> Texture -> IO (Sprite)
+initAnimatedSprite frameSzs offsets tex = do
   ro <- createRenderObject quad (createTexturedMaterial tex)
-  return $ Sprite {
-    frames = cyclicFromList offsets,
-    size = getTextureSize texSize,
-    spriteRenderObject = ro
-  }
-initAnimatedSprite _ _ = error "Only loaded textures can be used to create sprites"
+  return . Sprite . cyclicFromList $ map (genFrame ro) (zip frameSzs offsets)
+  where
+    genFrame :: RenderObject -> (V2 Int, V2 Int) -> SpriteFrame
+    genFrame ro (sz, off) =
+      let texOff = changeRange off
+      in SpriteFrame {
+        offset = texOff,
+        size = sz,
+        frameRO = xformObject (scaleToSize sz) $
+                  ro { material = updateScale (changeRange sz) texOff (material ro)}
+        }
+
+    changeRange :: V2 Int -> V2 Float
+    changeRange (V2 ox oy) =
+      let (V2 tx ty) = textureSize tex
+      in V2
+        (newRange (fromIntegral ox) (0, fromIntegral tx) (0, 1))
+        (newRange (fromIntegral oy) (0, fromIntegral ty) (0, 1))
 
 loadSpriteWith :: FilePath -> (Texture -> IO (Sprite)) -> IO (Maybe Sprite)
 loadSpriteWith f initFn = do
@@ -91,30 +88,64 @@ loadSpriteWith f initFn = do
     Nothing -> return Nothing
     (Just t@(Texture _ _)) -> initFn t >>= (return . Just)
     _ -> return Nothing
-  
 
 loadStaticSprite :: FilePath -> IO (Maybe Sprite)
 loadStaticSprite f = loadSpriteWith f initStaticSprite
 
-loadAnimatedSprite :: FilePath -> [V2 Int] -> IO (Maybe Sprite)
-loadAnimatedSprite f offsets = loadSpriteWith f $ initAnimatedSprite offsets
+loadAnimatedSprite :: FilePath -> [V2 Int] -> [V2 Int] -> IO (Maybe Sprite)
+loadAnimatedSprite f frameSzs offsets = loadSpriteWith f $ initAnimatedSprite frameSzs offsets
+
+loadFixedSizeAnimatedSprite :: FilePath -> V2 Int -> [V2 Int] -> IO (Maybe Sprite)
+loadFixedSizeAnimatedSprite f frameSz offsets = loadAnimatedSprite f (repeat frameSz) offsets
 
 renderUISprite :: V2 Float -> Sprite -> GameMonad ()
-renderUISprite pos s = do
-  addRenderUIAction pos (xformObject xf (spriteRenderObject s))
+renderUISprite pos s = addRenderUIAction pos (frameRO currentFrame)
   where
-    (V2 sx sy) = fmap ((*0.5) . fromIntegral) $ size s
-    xf = nonuniformScale (V3 sx sy 1) identity
+    currentFrame = extract $ getFrames s
 
 renderSprite :: V2 Float -> Sprite -> GameMonad ()
-renderSprite (V2 x y) s = do
-  addRenderAction xf (spriteRenderObject s)
+renderSprite (V2 x y) s = (addRenderAction xf) $ frameRO currentFrame
   where
-    (V2 sx sy) = fmap ((*0.5) . fromIntegral) $ size s
-    xf = translate (V3 x y 0) $
-         nonuniformScale (V3 sx sy 1) identity
+    currentFrame = extract . getFrames $ s
+    xf = translate (V3 x y 0) identity
 
-mkAnimatedWire :: FilePath -> [V2 Int] -> Float -> IO (GameWire (V2 Float) (V2 Float))
-mkAnimatedWire file offsets framerate = do
-  sprite <- loadAnimatedSprite file offsets
-  return mkId
+data SpriteAnimationType
+  = SpriteAnimationType'Forward
+  | SpriteAnimationType'Backward
+  | SpriteAnimationType'Loop
+  | SpriteAnimationType'LoopBack
+  | SpriteAnimationType'PingPong
+    deriving(Eq, Ord, Show, Enum)
+
+animatedWire :: Sprite -> SpriteAnimationType -> GameWire (V2 Float) (V2 Float)
+animatedWire sprite SpriteAnimationType'Forward = let
+  start = curFrameOffset sprite
+  in
+   loop $ second (delay sprite) >>> let
+     loopW :: GameWire (V2 Float, Sprite) (V2 Float, Sprite)
+     loopW = mkGenN $ \(p, s) -> do
+        renderSprite p s
+        let nextSprite = Sprite . advance . getFrames $ s
+            result = Right (p, nextSprite)
+        if (curFrameOffset nextSprite) == start
+          then return (result, mkEmpty)
+          else return (result, loopW)
+     in
+      loopW
+
+animatedWire (Sprite (CyclicList p c n)) SpriteAnimationType'Backward =
+   animatedWire (Sprite (CyclicList n c p)) SpriteAnimationType'Forward
+
+animatedWire s SpriteAnimationType'Loop =
+  let w = animatedWire s SpriteAnimationType'Forward
+  in w --> w
+
+animatedWire s SpriteAnimationType'LoopBack =
+  let w = animatedWire s SpriteAnimationType'Backward
+  in w --> w
+
+animatedWire s SpriteAnimationType'PingPong =
+  let f = animatedWire s SpriteAnimationType'Forward
+      b = animatedWire s SpriteAnimationType'Backward
+  in
+   f --> b --> (animatedWire s SpriteAnimationType'PingPong)
