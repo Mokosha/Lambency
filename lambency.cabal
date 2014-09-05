@@ -14,14 +14,15 @@ maintainer:          krajcevski@gmail.com
 category:            Graphics
 build-type:          Simple
 cabal-version:       >=1.8
-data-files:          simple.vert
-                     simple.frag
-                     simple-trans.frag
-                     standard.vert
-                     spotlight.frag
-                     minimal.vert
-                     minimal.frag
-data-dir:            lib/Lambency/Shaders
+data-files:          lib/Lambency/Shaders/simple.vert
+                     lib/Lambency/Shaders/simple.frag
+                     lib/Lambency/Shaders/simple-trans.frag
+                     lib/Lambency/Shaders/standard.vert
+                     lib/Lambency/Shaders/spotlight.frag
+                     lib/Lambency/Shaders/minimal.vert
+                     lib/Lambency/Shaders/minimal.frag
+                     assets/font.png
+data-dir:            .
 
 library
   hs-source-dirs:      lib
@@ -29,6 +30,7 @@ library
                        Lambency.Types
   other-modules:       Lambency.Bounds
                        Lambency.Camera
+                       Lambency.Font
                        Lambency.Light
                        Lambency.Loaders
                        Lambency.Loaders.OBJLoader

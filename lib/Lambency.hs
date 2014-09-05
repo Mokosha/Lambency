@@ -2,6 +2,7 @@ module Lambency (
   initLambency,
   module Lambency.Bounds,
   module Lambency.Camera,
+  module Lambency.Font,
   module Lambency.GameObject,
   module Lambency.Light,
   module Lambency.Loaders,  
@@ -33,6 +34,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 
 import Lambency.Bounds
 import Lambency.Camera
+import Lambency.Font
 import Lambency.GameObject
 import Lambency.Light
 import Lambency.Loaders

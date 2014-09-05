@@ -87,7 +87,9 @@ getShaderForExt ".vert" = Just GL.VertexShader
 getShaderForExt _ = Nothing
 
 getShaderPath :: String -> GL.ShaderType -> IO(FilePath)
-getShaderPath name ty = getDataFileName $ name <.> (getShaderExt ty)
+getShaderPath name ty =
+  getDataFileName $
+  "lib" </> "Lambency" </> "Shaders" </> name <.> (getShaderExt ty)
 
 loadProgram :: [FilePath] -> IO(Maybe GL.Program)
 loadProgram paths = do
