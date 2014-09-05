@@ -1,5 +1,6 @@
 module Lambency.Texture (
   getGLTexObj,
+  textureSize,
   isRenderTexture,
   createFramebufferObject,
   createSolidTexture,
@@ -53,6 +54,10 @@ bindRenderTexture (Texture _ _) = return ()
 bindRenderTexture (RenderTexture _ h) = do
   GL.bindFramebuffer GL.Framebuffer GL.$= h
   GL.viewport GL.$= (GL.Position 0 0, GL.Size kShadowMapSize kShadowMapSize)
+
+textureSize :: Texture -> V2 Int
+textureSize (Texture (TexHandle _ sz) _) = getTextureSize sz
+textureSize (RenderTexture (TexHandle _ sz) _) = getTextureSize sz
 
 clearRenderTexture :: IO ()
 clearRenderTexture = do
