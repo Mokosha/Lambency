@@ -8,6 +8,7 @@ import System.FilePath
 import Paths_lambency_examples
 
 import Linear.Vector
+import Linear.V2
 import Linear.V3
 import qualified Linear.Quaternion as Quat
 
@@ -68,18 +69,30 @@ cubeWire = do
               L.uniformScale 2.0 $
               L.identity
 
+frameWire :: L.Font -> L.GameWire a a
+frameWire font = countFrames 0
+  where
+    countFrames :: Int -> L.GameWire a a
+    countFrames x = W.mkGenN $ \v -> do
+      L.renderUIString font ("Frame: " ++ (show x)) (V2 10 10)
+      return (Right v, countFrames $ x + 1)
+
 loadGame :: IO (L.Game ())
 loadGame = do
+  sysFont <- L.loadSystemFont
   plane <- mkPlane
   bunny <- mkBunny
   cube <- cubeWire
   let lightPos = 10 *^ (V3 (-1) 1 0)
+      gameWire = cube W.>>>
+                 (frameWire sysFont) W.>>>
+                 (L.quitWire GLFW.Key'Q)
   spotlight <- L.createSpotlight lightPos (negate lightPos) 0
   return $ L.Game { L.staticLights = [spotlight],
-                     L.staticGeometry = [plane, bunny],
-                     L.mainCamera = demoCam,
-                     L.dynamicLights = [],
-                     L.gameLogic = cube W.>>> (L.quitWire GLFW.Key'Q) }
+                    L.staticGeometry = [plane, bunny],
+                    L.mainCamera = demoCam,
+                    L.dynamicLights = [],
+                    L.gameLogic = gameWire}
 
 main :: IO ()
 main = L.runWindow 640 480 "Cube Demo" () loadGame
