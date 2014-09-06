@@ -55,6 +55,10 @@ setUniformVar (Uniform Matrix4Ty (GL.UniformLocation loc)) (Matrix4Val mat) = do
   with mat $ \ptr ->
     GLRaw.glUniformMatrix4fv loc 1 0 (castPtr (ptr :: Ptr (M44 Float)))
 
+setUniformVar (Uniform Matrix3Ty (GL.UniformLocation loc)) (Matrix3Val mat) = do
+  with mat $ \ptr ->
+    GLRaw.glUniformMatrix3fv loc 1 0 (castPtr (ptr :: Ptr (M33 Float)))
+
 setUniformVar (Uniform Matrix2Ty (GL.UniformLocation loc)) (Matrix2Val mat) = do
   with mat $ \ptr ->
     GLRaw.glUniformMatrix2fv loc 1 0 (castPtr (ptr :: Ptr (M22 Float)))
@@ -74,7 +78,7 @@ setUniformVar (Uniform Vector3Ty loc) (Vector3Val (V3 x y z)) = do
     f = realToFrac
 
 setUniformVar (Attribute _ _) _ = return ()
-setUniformVar _ _ = ioError $ userError "Uniform not supported"
+setUniformVar (Uniform ty _) _ = ioError $ userError $ "Uniform not supported: " ++ (show ty)
 
 getShaderExt :: GL.ShaderType -> String
 getShaderExt GL.FragmentShader = ".frag"
