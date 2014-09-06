@@ -188,75 +188,86 @@ divideAndRenderROs ros cam (Light shdr shdrmap _) = let
   (trans, opaque) = partition (\ro -> Transparent `elem` (flags ro)) $
                     sortBy (\ro1 ro2 -> compare (camDist ro1) (camDist ro2)) $
                     map (place cam) ros
-  in do
-    GL.depthFunc GL.$= Just GL.Lequal
-    renderROs opaque shdr shdrmap
-    GL.depthFunc GL.$= Nothing
-    renderROs (reverse trans) shdr shdrmap
 
-renderLight :: RenderAction -> Camera -> Light -> IO ()
+  renderFn :: [RenderObject] -> (Maybe GL.ComparisonFunction) -> IO ()
+  renderFn [] _ = return ()
+  renderFn rs d = do
+    GL.depthFunc GL.$= d
+    renderROs rs shdr shdrmap
+
+  in do
+    renderFn opaque (Just GL.Lequal)
+    renderFn (reverse trans) Nothing
+
+renderLight :: RenderAction -> Camera -> Light -> RenderContext ()
 renderLight act cam (Light shdr shdrmap (Just (Shadow shadowShdr shadowMap))) = do
-  bindRenderTexture shadowMap
-  clearBuffers
-  -- Right now the MVP matrix of each object is for the main camera, so
-  -- we need to replace it with the combination from the model matrix
-  -- and the shadow VP...
-  let (Vector3Val pos) = shdrmap Map.! "lightPos"
-      (Vector3Val dir) = shdrmap Map.! "lightDir"
-      lightCam = mkPerspCamera pos dir (V3 0 1 0) (pi / 4) 1 0.1 500.0
-      shadowVP = Matrix4Val $ getViewProjMatrix lightCam
-      shadowShdrMap = Map.insert "shadowVP" shadowVP shdrmap
-  renderLight act lightCam (Light shadowShdr shdrmap Nothing)
-  clearRenderTexture
+  (lcam, shadowShdrMap) <- liftIO $ do
+    bindRenderTexture shadowMap
+    clearBuffers
+    -- Right now the MVP matrix of each object is for the main camera, so
+    -- we need to replace it with the combination from the model matrix
+    -- and the shadow VP...
+    let (Vector3Val pos) = shdrmap Map.! "lightPos"
+        (Vector3Val dir) = shdrmap Map.! "lightDir"
+        lightCam = mkPerspCamera pos dir (V3 0 1 0) (pi / 4) 1 0.1 500.0
+        shadowVP = Matrix4Val $ getViewProjMatrix lightCam
+    return (lightCam, Map.insert "shadowVP" shadowVP shdrmap)
+  renderLight act lcam (Light shadowShdr shdrmap Nothing)
+  liftIO clearRenderTexture
   renderLight act cam (Light shdr shadowShdrMap Nothing)
 
 renderLight (RenderClipped clip action) camera light = do
-  -- Disable stencil test, and drawing into the color and depth buffers
-  -- Enable writing to stencil buffer, and always write to it.
-  GL.stencilTest GL.$= GL.Enabled
-  GL.depthMask GL.$= GL.Disabled
-  GL.colorMask GL.$= (GL.Color4 GL.Disabled GL.Disabled GL.Disabled GL.Disabled)
-  GL.stencilFunc GL.$= (GL.Never, 1, complement 0)
-  GL.stencilOp GL.$= (GL.OpReplace, GL.OpKeep, GL.OpKeep)
+  liftIO $ do
+    -- Disable stencil test, and drawing into the color and depth buffers
+    -- Enable writing to stencil buffer, and always write to it.
+    GL.stencilTest GL.$= GL.Enabled
+    GL.depthMask GL.$= GL.Disabled
+    GL.colorMask GL.$= (GL.Color4 GL.Disabled GL.Disabled GL.Disabled GL.Disabled)
+    GL.stencilFunc GL.$= (GL.Never, 1, complement 0)
+    GL.stencilOp GL.$= (GL.OpReplace, GL.OpKeep, GL.OpKeep)
 
-  -- Draw our clip
-  GL.stencilMask GL.$= (complement 0)
-  GL.clear [GL.StencilBuffer]
+    -- Draw our clip
+    GL.stencilMask GL.$= (complement 0)
+    GL.clear [GL.StencilBuffer]
+
   renderLight clip camera light
 
   -- Enable drawing to the color and depth buffers, and disable drawing
   -- to the stencil buffer
-  GL.depthMask GL.$= GL.Enabled
-  GL.colorMask GL.$= (GL.Color4 GL.Enabled GL.Enabled GL.Enabled GL.Enabled)
-  GL.stencilMask GL.$= 0
+  liftIO $ do
+    GL.depthMask GL.$= GL.Enabled
+    GL.colorMask GL.$= (GL.Color4 GL.Enabled GL.Enabled GL.Enabled GL.Enabled)
+    GL.stencilMask GL.$= 0
 
-  -- There is a one in the stencil buffer where there was clipped geometry.
-  -- To only render where we have clipped stuff, we should set the stencil func
-  -- to test for equality
-  GL.stencilFunc GL.$= (GL.Equal, 1, complement 0)
+    -- There is a one in the stencil buffer where there was clipped geometry.
+    -- To only render where we have clipped stuff, we should set the stencil func
+    -- to test for equality
+    GL.stencilFunc GL.$= (GL.Equal, 1, complement 0)
 
   -- Draw our clipped stuff
   renderLight action camera light  -- !
 
   -- Finally, disable the stencil test
-  GL.stencilTest GL.$= GL.Disabled
+  liftIO $ GL.stencilTest GL.$= GL.Disabled
 
-renderLight (RenderObjects ros) camera light = divideAndRenderROs ros camera light
+renderLight (RenderObjects ros) camera light = liftIO $ divideAndRenderROs ros camera light
 renderLight (RenderCons act1 act2) camera light = do
   renderLight act1 camera light
   renderLight act2 camera light
-renderLight (RenderUI act) _ light = do
-  -- !FIXME! This should be stored in the camera...? Why
-  -- are we querying IO here? =(
-  (Just win) <- GLFW.getCurrentContext
-  (szx, szy) <- GLFW.getWindowSize win
-  -- Setup ortho camera and nolight for ui crap
-  let hx = 0.5 * (fromIntegral szx)
-      hy = 0.5 * (fromIntegral szy)
-      cam = mkOrthoCamera zero (negate localForward) localUp (-hx) (hx) (hy) (-hy) 0.01 50.0
-  renderLight act cam (setAmbient (V3 1 1 1) light)
+renderLight (RenderUI act) _ _ = do
+  config <- ask
+  cam <- liftIO $ do
+    -- !FIXME! This should be stored in the camera...? Why
+    -- are we querying IO here? =(
+    (Just win) <- GLFW.getCurrentContext
+    (szx, szy) <- GLFW.getWindowSize win
+    -- Setup ortho camera and nolight for ui crap
+    let hx = 0.5 * (fromIntegral szx)
+        hy = 0.5 * (fromIntegral szy)
+    return $ mkOrthoCamera zero (negate localForward) localUp (-hx) (hx) (hy) (-hy) 0.01 50.0
+  renderLight act cam (uiLight config)
 
-performRenderAction :: [Light] -> Camera -> RenderAction -> IO ()
+performRenderAction :: [Light] -> Camera -> RenderAction -> RenderContext ()
 performRenderAction lights camera action = mapM_ (\l -> renderLight action camera l) lights
 
 appendObj :: RenderObject -> RenderAction -> RenderAction
