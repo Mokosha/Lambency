@@ -13,6 +13,7 @@ import Linear.V3
 import qualified Linear.Quaternion as Quat
 
 import qualified Control.Wire as W
+import FRP.Netwire.Analyze
 ---------------------------------------------------------------------------------
 
 initialCam :: L.Camera
@@ -70,12 +71,12 @@ cubeWire = do
               L.identity
 
 frameWire :: L.Font -> L.GameWire a a
-frameWire font = countFrames 0
+frameWire font = (W.mkId W.&&& (avgFps 5)) W.>>> renderWire
   where
-    countFrames :: Int -> L.GameWire a a
-    countFrames x = W.mkGenN $ \v -> do
-      L.renderUIString font ("Frame: " ++ (show x)) (V2 10 10)
-      return (Right v, countFrames $ x + 1)
+    renderWire :: L.GameWire (a, Float) a
+    renderWire = W.mkGen_ $ \(v, fps) -> do
+      L.renderUIString font ("FPS: " ++ (show fps)) (V2 10 10)
+      return $ Right v
 
 loadGame :: IO (L.Game ())
 loadGame = do
