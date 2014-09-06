@@ -19,7 +19,7 @@ module Lambency (
   RenderFlag(..), RenderObject(..),
   OutputAction(..),
   TimeStep,
-  Game(..), GameWire, GameState(..), GameMonad,
+  Game(..), GameWire, GameMonad,
   module Lambency.Utils,
 
   makeWindow, destroyWindow, run, runWindow,
@@ -149,7 +149,7 @@ physicsDeltaUTC = let
    diffUTCTime dayEnd dayStart
 
 type TimeStepper = (GameSession, NominalDiffTime)
-type StateStepper a = (Game a, RenderAction)
+type StateStepper a = (Game a, GameState)
 
 run :: GLFW.Window -> a -> Game a -> IO ()
 run win initialGameObject initialGame = do
@@ -211,7 +211,7 @@ run win initialGameObject initialGame = do
       curTime <- getCurrentTime
       let newAccum = accumulator + (diffUTCTime curTime lastFrameTime)
       (go, (nextsession, accum), (nextGame, _)) <-
-        stepGame gameObject (session, newAccum) (game, RenderObjects [])
+        stepGame gameObject (session, newAccum) (game, emptyRenderActions)
 
       case go of
         Right gobj -> run' renderCfg ictl gobj nextsession (curTime, accum) nextGame
@@ -271,8 +271,12 @@ run win initialGameObject initialGame = do
              GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
              clearBuffers
 
-             let renderPrg =
-                   performRenderAction lights cam $ RenderCons (RenderObjects sgRAs) newGS
+             let initActions = RenderActions {
+                   renderScene = RenderCons (RenderObjects sgRAs) (renderScene newGS),
+                   renderUI = renderUI newGS
+                 }
+                 renderPrg = performRenderActions lights cam initActions
+
              runReaderT renderPrg renderCfg
              GL.flush
              GLFW.swapBuffers win
@@ -288,7 +292,7 @@ run win initialGameObject initialGame = do
            case result of
              Right obj -> stepGame obj
                           (nextSess, (accum - physicsDeltaUTC)) -- TimeStepper
-                          (nextGame, RenderObjects []) -- StateStepper
+                          (nextGame, emptyRenderActions) -- StateStepper
              Left _ -> return (result, tstep, sstep)
 
 runWindow :: Int -> Int -> String -> a -> IO (Game a) -> IO ()

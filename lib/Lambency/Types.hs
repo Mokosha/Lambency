@@ -5,10 +5,10 @@ module Lambency.Types (
   Shader(..), ShaderVarTy(..), ShaderValue(..), ShaderVar(..), ShaderMap,
   Texture(..), TextureSize(..), TextureFormat(..), FBOHandle, TextureHandle(..),
   Material,
-  RenderFlag(..), RenderObject(..), RenderAction(..),
+  RenderFlag(..), RenderObject(..), RenderAction(..), RenderActions(..),
   OutputAction(..),
   TimeStep,
-  GameWire, GameMonad, GameState(..), GameSession, GameTime,
+  GameWire, GameMonad, GameState, GameSession, GameTime,
   Game(..)
 ) where
 
@@ -175,9 +175,13 @@ data RenderObject = RenderObject {
 type RenderInstance = (XForm.Transform, RenderObject)
 
 data RenderAction = RenderObjects [RenderObject]
-                  | RenderUI RenderAction
                   | RenderClipped RenderAction RenderAction
                   | RenderCons RenderAction RenderAction
+
+data RenderActions = RenderActions {
+  renderScene :: RenderAction,
+  renderUI :: RenderAction
+}
 
 --------------------------------------------------------------------------------
 
@@ -195,10 +199,7 @@ data OutputAction = LogAction String
 -- size so that we can do raycasting from mouse coordinates and maybe some
 -- other things...
 type GameConfig = ()
-
-data GameState = GameState {
-  renderAction :: RenderAction
-}
+type GameState = RenderActions
 
 -- Game
 data Game a = Game {
@@ -214,7 +215,7 @@ data Game a = Game {
 -- Game State
 
 type TimeStep = W.Timed Float ()
-type GameMonad = GLFWInputT (RWS GameConfig [OutputAction] RenderAction)
+type GameMonad = GLFWInputT (RWS GameConfig [OutputAction] GameState)
 type GameWire a b = W.Wire TimeStep String GameMonad a b
 type GameSession = W.Session IO TimeStep
 
