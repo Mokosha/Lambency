@@ -1,5 +1,8 @@
 module Lambency.Render (
   Renderable(..),
+  RenderConfig,
+  mkRenderConfig,
+  RenderContext,
   clearBuffers,
   createBasicRO,
   xformObject,
@@ -21,8 +24,8 @@ import Lambency.Transform
 import Lambency.Types
 import Lambency.Vertex
 
+import Control.Monad.Reader
 import Control.Monad.State.Class
-import Control.Monad.Trans
 
 import Data.Array.IO
 import Data.Array.Storable
@@ -40,6 +43,19 @@ import qualified Graphics.UI.GLFW as GLFW
 import Linear
 
 --------------------------------------------------------------------------------
+
+data RenderConfig = RenderConfig {
+  uiLight :: Light
+}
+
+mkRenderConfig :: IO (RenderConfig)
+mkRenderConfig = do
+  ui <- createNoLight
+  return $ RenderConfig {
+    uiLight = ui
+  }
+
+type RenderContext = ReaderT RenderConfig IO
 
 clearBuffers :: IO ()
 clearBuffers = GL.clear [GL.ColorBuffer, GL.DepthBuffer, GL.StencilBuffer]

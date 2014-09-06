@@ -50,6 +50,7 @@ import Lambency.Utils
 
 import Control.Applicative
 import Control.Monad.RWS.Strict
+import Control.Monad.Reader
 import Control.Monad.State
 import qualified Control.Wire as W
 
@@ -157,10 +158,13 @@ run win initialGameObject initialGame = do
   let session = W.countSession (double2Float physicsDeltaTime) W.<*> W.pure ()
   curTime <- getCurrentTime
 
+  -- Create our rendering config
+  renderCfg <- mkRenderConfig
+
   -- Stick in an initial poll events call...
   GLFW.pollEvents
 
-  run' ictl
+  run' renderCfg ictl
     initialGameObject
     session
     (curTime, diffUTCTime curTime curTime)
@@ -200,8 +204,8 @@ run win initialGameObject initialGame = do
     printLogs (LogAction s : rest) = putStrLn s >> printLogs rest
     printLogs (act : acts) = pure (act :) <*> printLogs acts
 
-    run' :: GLFWInputControl -> a -> GameSession -> GameTime -> Game a -> IO ()
-    run' ictl gameObject session (lastFrameTime, accumulator) game = do
+    run' :: RenderConfig -> GLFWInputControl -> a -> GameSession -> GameTime -> Game a -> IO ()
+    run' renderCfg ictl gameObject session (lastFrameTime, accumulator) game = do
 
       -- Step
       curTime <- getCurrentTime
@@ -210,7 +214,7 @@ run win initialGameObject initialGame = do
         stepGame gameObject (session, newAccum) (game, RenderObjects [])
 
       case go of
-        Right gobj -> run' ictl gobj nextsession (curTime, accum) nextGame
+        Right gobj -> run' renderCfg ictl gobj nextsession (curTime, accum) nextGame
         Left _ -> return ()
      where
        -- When we handle actions, only really print logs and play any sounds
