@@ -151,6 +151,147 @@ physicsDeltaUTC = let
 type TimeStepper = (GameSession, NominalDiffTime)
 type StateStepper a = (Game a, GameState)
 
+type GameLoopM a =
+  RWST
+  (RenderConfig, GLFWInputControl, GLFW.Window) -- Reader
+  (NominalDiffTime, NominalDiffTime)        -- Writer (physics frame time, render frame time)
+  (a, Game a, GameSession, NominalDiffTime) -- State  (gameObject, logic, session and time)
+  IO
+
+playSounds :: [OutputAction] -> IO ([OutputAction])
+playSounds [] = return []
+playSounds (SoundAction sound cmd : rest) = handleCommand sound cmd >> return rest
+playSounds (act : acts) = pure (act :) <*> playSounds acts
+
+printLogs :: [OutputAction] -> IO ([OutputAction])
+printLogs [] = return []
+printLogs (LogAction s : rest) = putStrLn s >> printLogs rest
+printLogs (act : acts) = pure (act :) <*> printLogs acts
+
+-- When we handle actions, only really print logs and play any sounds
+-- that may need to start or stop.
+handleActions :: [OutputAction] -> IO ()
+handleActions actions =
+  foldM_ (\acts f -> f acts) actions [
+    printLogs,
+    playSounds
+  ]
+
+runLoop :: UTCTime -> GameLoopM a ()
+runLoop lastFrameTime = do
+  (_, _, _, accumulator) <- get
+  -- Step
+  curTime <- lift getCurrentTime
+  let newAccum = accumulator + (diffUTCTime curTime lastFrameTime)
+  modify $ \(o, l, s, _) -> (o, l, s, newAccum)
+  (go, (nextsession, accum), (nextGame, _)) <- stepGame emptyRenderActions
+
+  case go of
+    Right gobj -> do
+      put (gobj, nextGame, nextsession, accum)
+      runLoop curTime
+    Left _ -> return ()
+
+step :: a -> Game a -> TimeStep -> GameMonad (Either String a, Camera, [Light], Game a)
+step go game t = do
+  (Right cam, nCamWire) <- W.stepWire (mainCamera game) t (Right ())
+  (result, gameWire) <- W.stepWire (gameLogic game) t (Right go)
+  lightObjs <- mapM (\w -> W.stepWire w t $ Right ()) (dynamicLights game)
+  let (lights, lwires) = collect lightObjs
+  return (result, cam, lights ++ (staticLights game), newGame nCamWire lwires gameWire)
+    where
+      collect :: [(Either e b, GameWire a b)] -> ([b], [GameWire a b])
+      collect [] = ([], [])
+      collect ((Left _, _) : rest) = collect rest
+      collect ((Right obj, wire) : rest) = let
+        (objs, wires) = collect rest
+        in
+         (obj : objs, wire : wires)
+
+      newGame cam lights logic = Game {
+        staticLights = (staticLights game),
+        staticGeometry = (staticGeometry game),
+        mainCamera = cam,
+        dynamicLights = lights,
+        gameLogic = logic}
+
+stepGame :: GameState -> GameLoopM a (Either String a, TimeStepper, StateStepper a)
+stepGame gs = do
+  (go, game, session, accum) <- get
+  if (accum < physicsDeltaUTC)
+    then return (Right go, (session, accum), (game, gs))
+    else runGame gs
+
+runGame :: GameState -> GameLoopM a (Either String a, TimeStepper, StateStepper a)
+runGame gs = do
+
+  (rcfg, ictl, win) <- ask
+  (go, g, sess, accum) <- get
+
+  ipt <- lift $ getInput ictl
+
+  -- Retreive the next time step from our game session
+  (ts, nextSess) <- lift $ W.stepSession sess
+
+  let
+    -- The game step is the complete GameMonad computation that
+    -- produces four values: Either inhibition or a new game value
+    -- A new camera, a list of dynamic lights, and the next simulation
+    -- wire
+    gameStep = step go g ts
+
+    -- In order to get at the underlying RWS monad, let's create an
+    -- RWS program that works with the passed in input.
+    -- rwsPrg :: RWS () [OutputAction] RenderAction
+    --           ((Either () a, Camera, [Light], Game a), GLFWInputState)
+    rwsPrg = runStateT gameStep ipt
+
+    -- This is the meat of the step routine. This calls runRWS on the
+    -- main game wire, and uses the results to figure out what needs
+    -- to be done.
+    (((result, cam, lights, nextGame), newIpt), newGS, actions) = runRWS rwsPrg () gs
+
+    -- We need to render if we're going to fall below the physics threshold
+    -- on the next frame. This simulates a while loop. If we don't fall
+    -- through this threshold, we will perform another physics step before
+    -- we finally decide to render.
+    needsRender = ((accum - physicsDeltaUTC) < physicsDeltaUTC)
+
+    -- If we do render, we need to build the renderObjects and their
+    -- corresponding renderActions from the static geometry. These won't
+    -- get built or evaluated unless we actually render though.
+    sgRAs = map (uncurry xformObject) (staticGeometry g)
+
+  if needsRender
+    then lift $ do
+      -- !FIXME! This should be moved to the camera...
+      GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
+      clearBuffers
+
+      let initActions = RenderActions {
+            renderScene = RenderCons (RenderObjects sgRAs) (renderScene newGS),
+            renderUI = renderUI newGS
+            }
+          renderPrg = performRenderActions lights cam initActions
+
+      runReaderT renderPrg rcfg
+      GL.flush
+      GLFW.swapBuffers win
+    else return ()
+
+  -- Actually do the associated actions
+  lift $ handleActions actions
+
+  -- Poll the input
+  _ <- lift $ pollGLFW newIpt ictl
+
+  -- If our main wire inhibited, return immediately.
+  case result of
+    Right obj -> do
+      put (obj, nextGame, nextSess, (accum - physicsDeltaUTC))
+      stepGame emptyRenderActions
+    Left _ -> return (result, (nextSess, accum), (nextGame, gs))
+
 run :: GLFW.Window -> a -> Game a -> IO ()
 run win initialGameObject initialGame = do
   GLFW.swapInterval 1
@@ -164,137 +305,10 @@ run win initialGameObject initialGame = do
   -- Stick in an initial poll events call...
   GLFW.pollEvents
 
-  run' renderCfg ictl
-    initialGameObject
-    session
-    (curTime, diffUTCTime curTime curTime)
-    initialGame
-  where
-
-    step :: a -> Game a -> TimeStep -> GameMonad (Either String a, Camera, [Light], Game a)
-    step go game t = do
-      (Right cam, nCamWire) <- W.stepWire (mainCamera game) t (Right ())
-      (result, gameWire) <- W.stepWire (gameLogic game) t (Right go)
-      lightObjs <- mapM (\w -> W.stepWire w t $ Right ()) (dynamicLights game)
-      let (lights, lwires) = collect lightObjs
-      return (result, cam, lights ++ (staticLights game), newGame nCamWire lwires gameWire)
-        where
-          collect :: [(Either e b, GameWire a b)] -> ([b], [GameWire a b])
-          collect [] = ([], [])
-          collect ((Left _, _) : rest) = collect rest
-          collect ((Right obj, wire) : rest) = let
-            (objs, wires) = collect rest
-            in
-             (obj : objs, wire : wires)
-
-          newGame cam lights logic = Game {
-            staticLights = (staticLights game),
-            staticGeometry = (staticGeometry game),
-            mainCamera = cam,
-            dynamicLights = lights,
-            gameLogic = logic}
-
-    playSounds :: [OutputAction] -> IO ([OutputAction])
-    playSounds [] = return []
-    playSounds (SoundAction sound cmd : rest) = handleCommand sound cmd >> return rest
-    playSounds (act : acts) = pure (act :) <*> playSounds acts
-
-    printLogs :: [OutputAction] -> IO ([OutputAction])
-    printLogs [] = return []
-    printLogs (LogAction s : rest) = putStrLn s >> printLogs rest
-    printLogs (act : acts) = pure (act :) <*> printLogs acts
-
-    run' :: RenderConfig -> GLFWInputControl -> a -> GameSession -> GameTime -> Game a -> IO ()
-    run' renderCfg ictl gameObject session (lastFrameTime, accumulator) game = do
-
-      -- Step
-      curTime <- getCurrentTime
-      let newAccum = accumulator + (diffUTCTime curTime lastFrameTime)
-      (go, (nextsession, accum), (nextGame, _)) <-
-        stepGame gameObject (session, newAccum) (game, emptyRenderActions)
-
-      case go of
-        Right gobj -> run' renderCfg ictl gobj nextsession (curTime, accum) nextGame
-        Left _ -> return ()
-     where
-       -- When we handle actions, only really print logs and play any sounds
-       -- that may need to start or stop.
-       handleActions :: [OutputAction] -> IO ()
-       handleActions actions =
-         foldM_ (\acts f -> f acts) actions [
-           printLogs,
-           playSounds
-         ]
+  (_, _, (_, _)) <- runRWST (runLoop curTime) (renderCfg, ictl, win)
+    (initialGameObject, initialGame, session, diffUTCTime curTime curTime)
+  return ()
   
-       stepGame :: a -> TimeStepper -> StateStepper a ->
-                   IO (Either String a, TimeStepper, StateStepper a)
-       stepGame go tstep@(sess, accum) sstep@(g, gs)
-         | accum < physicsDeltaUTC = return (Right go, tstep, sstep)
-         | otherwise = do
-
-           ipt <- getInput ictl
-
-           -- Retreive the next time step from our game session
-           (ts, nextSess) <- W.stepSession sess
-
-           let
-             -- The game step is the complete GameMonad computation that
-             -- produces four values: Either inhibition or a new game value
-             -- A new camera, a list of dynamic lights, and the next simulation
-             -- wire
-             gameStep = step go g ts
-
-             -- In order to get at the underlying RWS monad, let's create an
-             -- RWS program that works with the passed in input.
-             -- rwsPrg :: RWS () [OutputAction] RenderAction
-             --           ((Either () a, Camera, [Light], Game a), GLFWInputState)
-             rwsPrg = runStateT gameStep ipt
-
-             -- This is the meat of the step routine. This calls runRWS on the
-             -- main game wire, and uses the results to figure out what needs
-             -- to be done.
-             (((result, cam, lights, nextGame), newIpt), newGS, actions) = runRWS rwsPrg () gs
-
-             -- We need to render if we're going to fall below the physics threshold
-             -- on the next frame. This simulates a while loop. If we don't fall
-             -- through this threshold, we will perform another physics step before
-             -- we finally decide to render.
-             needsRender = ((accum - physicsDeltaUTC) < physicsDeltaUTC)
-
-             -- If we do render, we need to build the renderObjects and their
-             -- corresponding renderActions from the static geometry. These won't
-             -- get built or evaluated unless we actually render though.
-             sgRAs = map (uncurry xformObject) (staticGeometry g)
-
-           if needsRender then do
-             -- !FIXME! This should be moved to the camera...
-             GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
-             clearBuffers
-
-             let initActions = RenderActions {
-                   renderScene = RenderCons (RenderObjects sgRAs) (renderScene newGS),
-                   renderUI = renderUI newGS
-                 }
-                 renderPrg = performRenderActions lights cam initActions
-
-             runReaderT renderPrg renderCfg
-             GL.flush
-             GLFW.swapBuffers win
-             else return ()
-
-           -- Actually do the associated actions
-           handleActions actions
-
-           -- Poll the input
-           _ <- pollGLFW newIpt ictl
-
-           -- If our main wire inhibited, return immediately.
-           case result of
-             Right obj -> stepGame obj
-                          (nextSess, (accum - physicsDeltaUTC)) -- TimeStepper
-                          (nextGame, emptyRenderActions) -- StateStepper
-             Left _ -> return (result, tstep, sstep)
-
 runWindow :: Int -> Int -> String -> a -> IO (Game a) -> IO ()
 runWindow width height title initialGameObject loadGamePrg = do
   Just win <- makeWindow width height title
