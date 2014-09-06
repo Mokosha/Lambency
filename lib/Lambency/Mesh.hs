@@ -102,15 +102,15 @@ plane = Mesh {
 
 quad :: Mesh TVertex3
 quad = Mesh {
-  vertices = zipWith mkTexVertex3 (map texToVert texcoords) texcoords,
-  indices = [0, 2, 1, 1, 2, 3]
+    vertices = zipWith mkTexVertex3 (map texToVert texcoords) texcoords,
+    indices = [0, 2, 1, 1, 2, 3]
   }
   where
     texcoords :: [ Vec2f ]
-    texcoords = [ V2 x y | x <- [0, 1], y <- [0, 1] ]
+    texcoords = [ V2 x y | x <- [0, 1], y <- [1, 0] ]
 
     texToVert :: Vec2f -> Vec3f
-    texToVert (V2 x y) = V3 (x * 2 - 1) (y * 2 - 1) 0
+    texToVert (V2 x y) = V3 (x * 2 - 1) (y * (-2) + 1) 0
 
 
 instance Vertex a => Renderable (Mesh a) where
