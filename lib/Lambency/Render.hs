@@ -308,4 +308,4 @@ addRenderUIAction :: V2 Float -> RenderObject -> GameMonad ()
 addRenderUIAction (V2 x y) ro = lift $
   modify $ appendUI (xformObject xf ro)
   where
-    xf = translate (V3 x y 0) identity
+    xf = translate (V3 x y (-1)) identity
