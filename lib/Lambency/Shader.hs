@@ -153,7 +153,7 @@ createSimpleShader = do
      (FloatListTy, "texCoord"),
      (TextureTy 0, "diffuseTex"),
      (Matrix4Ty, "mvpMatrix"),
-     (Matrix2Ty, "texCoordMatrix")]
+     (Matrix3Ty, "texCoordMatrix")]
   return $ Shader prg vars
 
 createTransparentShader :: IO (Shader)
@@ -167,7 +167,7 @@ createTransparentShader = do
      (FloatTy, "alpha"),
      (TextureTy 0, "diffuseTex"),
      (Matrix4Ty, "mvpMatrix"),
-     (Matrix2Ty, "texCoordMatrix")]
+     (Matrix3Ty, "texCoordMatrix")]
   return $ Shader prg vars
 
 createSpotlightShader :: IO (Shader)
