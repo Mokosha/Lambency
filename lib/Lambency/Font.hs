@@ -6,8 +6,6 @@ module Lambency.Font (
 ) where
 
 --------------------------------------------------------------------------------
-import Control.Monad.Writer
-
 import qualified Data.Map as Map
 
 import Lambency.Render
