@@ -148,16 +148,6 @@ physicsDeltaUTC = let
   in
    diffUTCTime dayEnd dayStart
 
-type TimeStepper = (GameSession, NominalDiffTime)
-type StateStepper a = (Game a, GameState)
-
-type GameLoopM a =
-  RWST
-  (RenderConfig, GLFWInputControl, GLFW.Window) -- Reader
-  (NominalDiffTime, NominalDiffTime)        -- Writer (physics frame time, render frame time)
-  (a, Game a, GameSession, NominalDiffTime) -- State  (gameObject, logic, session and time)
-  IO
-
 playSounds :: [OutputAction] -> IO ([OutputAction])
 playSounds [] = return []
 playSounds (SoundAction sound cmd : rest) = handleCommand sound cmd >> return rest
@@ -177,11 +167,17 @@ handleActions actions =
     playSounds
   ]
 
+type GameLoopM a =
+  -- Reader
+  ReaderT (RenderConfig, GLFWInputControl, GLFW.Window) (
+  -- State  (gameObject, logic, session and time)
+  StateT (a, Game a, GameSession, NominalDiffTime) IO)
+
 runLoop :: UTCTime -> GameLoopM a ()
 runLoop lastFrameTime = do
   (_, _, _, accumulator) <- get
   -- Step
-  curTime <- lift getCurrentTime
+  curTime <- liftIO getCurrentTime
   let newAccum = accumulator + (diffUTCTime curTime lastFrameTime)
   modify $ \(o, l, s, _) -> (o, l, s, newAccum)
   (go, (nextsession, accum), (nextGame, _)) <- stepGame emptyRenderActions
@@ -215,6 +211,9 @@ step go game t = do
         dynamicLights = lights,
         gameLogic = logic}
 
+type TimeStepper = (GameSession, NominalDiffTime)
+type StateStepper a = (Game a, GameState)
+
 stepGame :: GameState -> GameLoopM a (Either String a, TimeStepper, StateStepper a)
 stepGame gs = do
   (go, game, session, accum) <- get
@@ -228,10 +227,10 @@ runGame gs = do
   (rcfg, ictl, win) <- ask
   (go, g, sess, accum) <- get
 
-  ipt <- lift $ getInput ictl
+  ipt <- liftIO $ getInput ictl
 
   -- Retreive the next time step from our game session
-  (ts, nextSess) <- lift $ W.stepSession sess
+  (ts, nextSess) <- liftIO $ W.stepSession sess
 
   let
     -- The game step is the complete GameMonad computation that
@@ -263,7 +262,7 @@ runGame gs = do
     sgRAs = map (uncurry xformObject) (staticGeometry g)
 
   if needsRender
-    then lift $ do
+    then liftIO $ do
       -- !FIXME! This should be moved to the camera...
       GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
       clearBuffers
@@ -279,11 +278,12 @@ runGame gs = do
       GLFW.swapBuffers win
     else return ()
 
-  -- Actually do the associated actions
-  lift $ handleActions actions
+  _ <- liftIO $ do
+    -- Actually do the associated actions
+    handleActions actions
 
-  -- Poll the input
-  _ <- lift $ pollGLFW newIpt ictl
+    -- Poll the input
+    pollGLFW newIpt ictl
 
   -- If our main wire inhibited, return immediately.
   case result of
@@ -305,9 +305,8 @@ run win initialGameObject initialGame = do
   -- Stick in an initial poll events call...
   GLFW.pollEvents
 
-  (_, _, (_, _)) <- runRWST (runLoop curTime) (renderCfg, ictl, win)
-    (initialGameObject, initialGame, session, diffUTCTime curTime curTime)
-  return ()
+  let statePrg = runReaderT (runLoop curTime) (renderCfg, ictl, win)
+  evalStateT statePrg (initialGameObject, initialGame, session, toEnum 0)
   
 runWindow :: Int -> Int -> String -> a -> IO (Game a) -> IO ()
 runWindow width height title initialGameObject loadGamePrg = do
