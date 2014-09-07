@@ -38,6 +38,6 @@ withVelocity initial velWire = velWire >>> (moveXForm initial)
           in (Right newxform, moveXForm newxform)
 
 pulseSound :: Sound -> GameWire a a
-pulseSound sound = mkGenN $ \val ->
-  censor (SoundAction sound StartSound :) $
+pulseSound sound = mkGenN $ \val -> do
+  tell $ [SoundAction sound StartSound]
   return (Right val, Control.Wire.id)
