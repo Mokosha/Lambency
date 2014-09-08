@@ -26,12 +26,12 @@ loadFont filename charInfo = let
   offsets = map (\(_, x, _) -> x) charInfo
   sizes = map (\(_, _, x) -> x) charInfo
   in do
-    sprite' <- loadAnimatedSprite filename sizes offsets
-    return . Font $ \c -> do
-      sprite <- sprite'
-      let frames = cyclicToList (getFrames sprite)
-          charMap = Map.fromList $ zip (map (\(c', _, _) -> c') charInfo) frames
-      c `Map.lookup` charMap
+    sprite <- loadAnimatedSprite filename sizes offsets
+    let charMap = do
+          s <- sprite
+          return $ Map.fromList $
+            zip (map (\(c', _, _) -> c') charInfo) (cyclicToList $ getFrames s)
+    return . Font $ \c -> charMap >>= (Map.lookup c)
 
 loadSystemFont :: IO (Font)
 loadSystemFont = let
