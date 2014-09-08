@@ -39,7 +39,7 @@ loadSystemFont = let
   systemSizes = repeat (V2 13 24)
   systemString = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
   in do
-    fontTexFile <- getDataFileName $ "assets" </> "font" <.> "png"
+    fontTexFile <- getDataFileName $ "font" <.> "png"
     loadFont fontTexFile (zip3 systemString systemOffsets systemSizes)
 
 renderUIString :: Font -> String -> V2 Float -> GameMonad ()
