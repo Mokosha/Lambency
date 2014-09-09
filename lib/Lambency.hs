@@ -123,30 +123,11 @@ destroyWindow m = do
   freeSound
 
 -- The physics framerate in frames per second
-physicsFramerate :: Double
-physicsFramerate = 60.0
-
 physicsDeltaTime :: Double
-physicsDeltaTime = 1.0 / physicsFramerate
+physicsDeltaTime = 1.0 / 60.0
 
 physicsDeltaUTC :: NominalDiffTime
-physicsDeltaUTC = let
-  someDay :: Day
-  someDay = fromGregorian 1970 1 1
-
-  dayStart :: UTCTime
-  dayStart = UTCTime {
-    utctDay = someDay,
-    utctDayTime = secondsToDiffTime 0
-    }
-
-  dayEnd :: UTCTime
-  dayEnd = UTCTime {
-    utctDay = someDay,
-    utctDayTime = picosecondsToDiffTime $ round $ 1e12 * physicsDeltaTime
-    }
-  in
-   diffUTCTime dayEnd dayStart
+physicsDeltaUTC = fromRational . toRational $ physicsDeltaTime
 
 playSounds :: [OutputAction] -> IO ([OutputAction])
 playSounds [] = return []
@@ -167,27 +148,6 @@ handleActions actions =
     playSounds
   ]
 
-type GameLoopM a =
-  -- Reader
-  ReaderT (RenderConfig, GLFWInputControl, GLFW.Window) (
-  -- State  (gameObject, logic, session and time)
-  StateT (a, Game a, GameSession, NominalDiffTime) IO)
-
-runLoop :: UTCTime -> GameLoopM a ()
-runLoop lastFrameTime = do
-  (_, _, _, accumulator) <- get
-  -- Step
-  curTime <- liftIO getCurrentTime
-  let newAccum = accumulator + (diffUTCTime curTime lastFrameTime)
-  modify $ \(o, l, s, _) -> (o, l, s, newAccum)
-  (go, (nextsession, accum), (nextGame, _)) <- stepGame emptyRenderActions
-
-  case go of
-    Right gobj -> do
-      put (gobj, nextGame, nextsession, accum)
-      runLoop curTime
-    Left _ -> return ()
-
 step :: a -> Game a -> TimeStep -> GameMonad (Either String a, Camera, [Light], Game a)
 step go game t = do
   (Right cam, nCamWire) <- W.stepWire (mainCamera game) t (Right ())
@@ -199,17 +159,35 @@ step go game t = do
       collect :: [(Either e b, GameWire a b)] -> ([b], [GameWire a b])
       collect [] = ([], [])
       collect ((Left _, _) : rest) = collect rest
-      collect ((Right obj, wire) : rest) = let
-        (objs, wires) = collect rest
-        in
-         (obj : objs, wire : wires)
+      collect ((Right obj, wire) : rest) = (obj : objs, wire : wires)
+        where
+          (objs, wires) = collect rest
 
-      newGame cam lights logic = Game {
-        staticLights = (staticLights game),
-        staticGeometry = (staticGeometry game),
+      newGame cam lights logic = game {
         mainCamera = cam,
         dynamicLights = lights,
         gameLogic = logic}
+
+type GameLoopM a =
+  -- Reader
+  ReaderT (RenderConfig, GLFWInputControl, GLFW.Window) (
+  -- State  (gameObject, logic, session and time)
+  StateT (a, Game a, GameSession, NominalDiffTime) IO)
+
+runLoop :: UTCTime -> GameLoopM a ()
+runLoop lastFrameTime = do
+  (_, _, _, accumulator) <- get
+  -- Step
+  thisFrameTime <- liftIO getCurrentTime
+  let newAccum = accumulator + (diffUTCTime thisFrameTime lastFrameTime)
+  modify $ \(o, l, s, _) -> (o, l, s, newAccum)
+  (go, (nextsession, accum), (nextGame, _)) <- stepGame emptyRenderActions
+
+  case go of
+    Right gobj -> do
+      put (gobj, nextGame, nextsession, accum)
+      runLoop thisFrameTime
+    Left _ -> return ()
 
 type TimeStepper = (GameSession, NominalDiffTime)
 type StateStepper a = (Game a, GameState)
@@ -261,18 +239,15 @@ runGame gs = do
     -- get built or evaluated unless we actually render though.
     sgRAs = map (uncurry xformObject) (staticGeometry g)
 
+    -- The ReaderT RenderConfig IO program that will do the actual rendering
+    renderPrg = performRenderActions lights cam $
+                newGS { renderScene = RenderCons (RenderObjects sgRAs) (renderScene newGS) }
+
   if needsRender
     then liftIO $ do
       -- !FIXME! This should be moved to the camera...
       GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
       clearBuffers
-
-      let initActions = RenderActions {
-            renderScene = RenderCons (RenderObjects sgRAs) (renderScene newGS),
-            renderUI = renderUI newGS
-            }
-          renderPrg = performRenderActions lights cam initActions
-
       runReaderT renderPrg rcfg
       GL.flush
       GLFW.swapBuffers win
