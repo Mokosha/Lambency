@@ -98,16 +98,16 @@ loadAnimatedSprite f frameSzs offsets = loadSpriteWith f $ initAnimatedSprite fr
 loadFixedSizeAnimatedSprite :: FilePath -> V2 Int -> [V2 Int] -> IO (Maybe Sprite)
 loadFixedSizeAnimatedSprite f frameSz offsets = loadAnimatedSprite f (repeat frameSz) offsets
 
-renderUISprite :: V2 Float -> Sprite -> GameMonad ()
-renderUISprite pos s = addRenderUIAction pos (frameRO currentFrame)
+renderUISprite :: Sprite -> V2 Float -> GameMonad ()
+renderUISprite s pos = addRenderUIAction pos (frameRO currentFrame)
   where
     currentFrame = extract $ getFrames s
 
-renderSprite :: V2 Float -> Sprite -> GameMonad ()
-renderSprite (V2 x y) s = (addRenderAction xf) $ frameRO currentFrame
+renderSprite :: Sprite -> Float -> V2 Float -> GameMonad ()
+renderSprite s depth (V2 x y) = (addRenderAction xf) $ frameRO currentFrame
   where
     currentFrame = extract . getFrames $ s
-    xf = translate (V3 x y 0) identity
+    xf = translate (V3 x y depth) identity
 
 data SpriteAnimationType
   = SpriteAnimationType'Forward
