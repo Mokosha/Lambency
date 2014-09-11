@@ -44,6 +44,7 @@ import Lambency.Mesh
 import Lambency.Render
 import Lambency.Shader
 import Lambency.Sound
+import Lambency.Sprite
 import Lambency.Texture
 import Lambency.Transform
 import Lambency.Types

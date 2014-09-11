@@ -124,7 +124,7 @@ animatedWire sprite SpriteAnimationType'Forward = let
    loop $ second (delay sprite) >>> let
      loopW :: GameWire (V2 Float, Sprite) (V2 Float, Sprite)
      loopW = mkGenN $ \(p, s) -> do
-        renderSprite p s
+        renderSprite s 0 p
         let nextSprite = Sprite . advance . getFrames $ s
             result = Right (p, nextSprite)
         if (curFrameOffset nextSprite) == start
