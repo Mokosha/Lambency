@@ -10,6 +10,7 @@ module Lambency (
   Mesh, triangle, cube, plane, quad,
   module Lambency.Render,
   module Lambency.Shader,
+  module Lambency.Sprite,
   module Lambency.Texture,
   module Lambency.Transform,
   Camera, CameraType, CameraViewDistance,
