@@ -2,6 +2,7 @@ module Lambency.Sprite (
   SpriteFrame(..),
   Sprite(..),
   loadStaticSprite,
+  loadStaticSpriteWithTexture,
   loadAnimatedSprite,
   loadFixedSizeAnimatedSprite,
 
@@ -46,18 +47,13 @@ updateScale (V2 sx sy) (V2 tx ty) =
   Map.insert "texCoordMatrix" (Matrix3Val $
                                V3 (V3 sx 0 0) (V3 0 sy 0) (V3 tx ty 1))
 
-scaleToSize :: V2 Int -> Transform
-scaleToSize sz =
-  let (V2 sx sy) = fmap ((*0.5) . fromIntegral) sz
-  in nonuniformScale (V3 sx sy 1) identity
-
 initStaticSprite :: Texture -> IO (Sprite)
 initStaticSprite tex = do
   ro <- createRenderObject quad (createTexturedMaterial tex)
   return . Sprite . cycleSingleton $ SpriteFrame {
     offset = zero,
     size = textureSize tex,
-    frameRO = xformObject (scaleToSize $ textureSize tex) ro
+    frameRO = ro
   }
 
 initAnimatedSprite :: [V2 Int] -> [V2 Int] -> Texture -> IO (Sprite)
@@ -71,8 +67,7 @@ initAnimatedSprite frameSzs offsets tex = do
       in SpriteFrame {
         offset = texOff,
         size = sz,
-        frameRO = xformObject (scaleToSize sz) $
-                  ro { material = updateScale (changeRange sz) texOff (material ro)}
+        frameRO = ro { material = updateScale (changeRange sz) texOff (material ro)}
         }
 
     changeRange :: V2 Int -> V2 Float
@@ -90,6 +85,9 @@ loadSpriteWith f initFn = do
     (Just t@(Texture _ _)) -> initFn t >>= (return . Just)
     _ -> return Nothing
 
+loadStaticSpriteWithTexture :: Texture -> IO (Sprite)
+loadStaticSpriteWithTexture = initStaticSprite
+
 loadStaticSprite :: FilePath -> IO (Maybe Sprite)
 loadStaticSprite f = loadSpriteWith f initStaticSprite
 
@@ -104,15 +102,17 @@ renderUISprite s pos = addRenderUIAction pos (frameRO currentFrame)
   where
     currentFrame = extract $ getFrames s
 
-renderFrameAt :: RenderObject -> Float -> V2 Float -> GameMonad ()
-renderFrameAt ro depth (V2 x y) = addRenderAction xf ro
+renderFrameAt :: RenderObject -> V2 Int -> Float -> V2 Float -> GameMonad ()
+renderFrameAt ro sc depth (V2 x y) = addRenderAction xf ro
   where
-    xf = translate (V3 x y depth) identity
+    (V2 sx sy) = fmap ((*0.5) . fromIntegral) sc
+    xf = translate (V3 x y depth) $
+         nonuniformScale (V3 sx sy 1) identity
 
-renderSprite :: Sprite -> Float -> V2 Float -> GameMonad ()
-renderSprite s = renderFrameAt (frameRO $ extract . getFrames $ s)
+renderSprite :: Sprite -> V2 Int -> Float -> V2 Float -> GameMonad ()
+renderSprite s = renderFrameAt $ frameRO $ extract. getFrames $ s
 
-renderSpriteWithAlpha :: Sprite -> Float -> Float -> V2 Float -> GameMonad ()
+renderSpriteWithAlpha :: Sprite -> Float -> V2 Int -> Float -> V2 Float -> GameMonad ()
 renderSpriteWithAlpha s a = renderFrameAt (setAlpha $ frameRO $ extract . getFrames $ s)
   where
     setAlpha ro = ro { material = Map.insert "alpha" (FloatVal a) (material ro),
@@ -128,14 +128,14 @@ data SpriteAnimationType
   | SpriteAnimationType'PingPong
     deriving(Eq, Ord, Show, Enum)
 
-animatedWire :: Sprite -> SpriteAnimationType -> GameWire (V2 Float) (V2 Float)
-animatedWire sprite SpriteAnimationType'Forward = let
+animatedWire :: Sprite -> V2 Int -> SpriteAnimationType -> GameWire (V2 Float) (V2 Float)
+animatedWire sprite sz SpriteAnimationType'Forward = let
   start = curFrameOffset sprite
   in
    loop $ second (delay sprite) >>> let
      loopW :: GameWire (V2 Float, Sprite) (V2 Float, Sprite)
      loopW = mkGenN $ \(p, s) -> do
-        renderSprite s 0 p
+        renderSprite s sz 0 p
         let nextSprite = Sprite . advance . getFrames $ s
             result = Right (p, nextSprite)
         if (curFrameOffset nextSprite) == start
@@ -144,19 +144,19 @@ animatedWire sprite SpriteAnimationType'Forward = let
      in
       loopW
 
-animatedWire (Sprite (CyclicList p c n)) SpriteAnimationType'Backward =
-   animatedWire (Sprite (CyclicList n c p)) SpriteAnimationType'Forward
+animatedWire (Sprite (CyclicList p c n)) sz SpriteAnimationType'Backward =
+   animatedWire (Sprite (CyclicList n c p)) sz SpriteAnimationType'Forward
 
-animatedWire s SpriteAnimationType'Loop =
-  let w = animatedWire s SpriteAnimationType'Forward
+animatedWire s sz SpriteAnimationType'Loop =
+  let w = animatedWire s sz SpriteAnimationType'Forward
   in w --> w
 
-animatedWire s SpriteAnimationType'LoopBack =
-  let w = animatedWire s SpriteAnimationType'Backward
+animatedWire s sz SpriteAnimationType'LoopBack =
+  let w = animatedWire s sz SpriteAnimationType'Backward
   in w --> w
 
-animatedWire s SpriteAnimationType'PingPong =
-  let f = animatedWire s SpriteAnimationType'Forward
-      b = animatedWire s SpriteAnimationType'Backward
+animatedWire s sz SpriteAnimationType'PingPong =
+  let f = animatedWire s sz SpriteAnimationType'Forward
+      b = animatedWire s sz SpriteAnimationType'Backward
   in
-   f --> b --> (animatedWire s SpriteAnimationType'PingPong)
+   f --> b --> (animatedWire s sz SpriteAnimationType'PingPong)
