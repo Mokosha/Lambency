@@ -159,7 +159,7 @@ place cam ro = let
 renderROs :: [RenderObject] -> Shader -> ShaderMap -> IO ()
 renderROs ros shdr shdrmap = do
   beforeRender shdr
-  mapM_ (\ro -> (render ro) shdr (Map.union (material ro) shdrmap)) ros
+  flip mapM_ ros $ \ro -> (render ro) shdr $ Map.union (material ro) shdrmap
   afterRender shdr
 
 appendXform :: Transform -> ShaderMap -> ShaderMap
@@ -175,11 +175,8 @@ appendXform xform sm' = let
    Map.unionWithKey updateMatrices sm sm'
 
 xformObject :: Transform -> RenderObject -> RenderObject
-xformObject xform ro = ro {
-  render = \shr sm -> do
-     let newmap = appendXform xform sm
-     (render ro) shr newmap
-  }
+xformObject xform ro =
+  ro { render = \shr -> (render ro) shr . appendXform xform }
 
 divideAndRenderROs :: [RenderObject] -> Camera -> Light -> IO ()
 divideAndRenderROs [] _ _ = return ()
