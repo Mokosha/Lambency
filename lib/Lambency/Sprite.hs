@@ -6,6 +6,7 @@ module Lambency.Sprite (
   loadFixedSizeAnimatedSprite,
 
   renderSprite,
+  renderSpriteWithAlpha,
   renderUISprite,
 
   SpriteAnimationType(..),
@@ -103,11 +104,21 @@ renderUISprite s pos = addRenderUIAction pos (frameRO currentFrame)
   where
     currentFrame = extract $ getFrames s
 
-renderSprite :: Sprite -> Float -> V2 Float -> GameMonad ()
-renderSprite s depth (V2 x y) = (addRenderAction xf) $ frameRO currentFrame
+renderFrameAt :: RenderObject -> Float -> V2 Float -> GameMonad ()
+renderFrameAt ro depth (V2 x y) = addRenderAction xf ro
   where
-    currentFrame = extract . getFrames $ s
     xf = translate (V3 x y depth) identity
+
+renderSprite :: Sprite -> Float -> V2 Float -> GameMonad ()
+renderSprite s = renderFrameAt (frameRO $ extract . getFrames $ s)
+
+renderSpriteWithAlpha :: Sprite -> Float -> Float -> V2 Float -> GameMonad ()
+renderSpriteWithAlpha s a = renderFrameAt (setAlpha $ frameRO $ extract . getFrames $ s)
+  where
+    setAlpha ro = ro { material = Map.insert "alpha" (FloatVal a) (material ro),
+                       flags = if a < 1.0
+                                 then (Transparent : (flags ro))
+                                 else (flags ro) }
 
 data SpriteAnimationType
   = SpriteAnimationType'Forward
