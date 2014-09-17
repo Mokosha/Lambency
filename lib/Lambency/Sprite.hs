@@ -116,9 +116,7 @@ renderSpriteWithAlpha :: Sprite -> Float -> V2 Int -> Float -> V2 Float -> GameM
 renderSpriteWithAlpha s a = renderFrameAt (setAlpha $ frameRO $ extract . getFrames $ s)
   where
     setAlpha ro = ro { material = Map.insert "alpha" (FloatVal a) (material ro),
-                       flags = if a < 1.0
-                                 then (Transparent : (flags ro))
-                                 else (flags ro) }
+                       flags = (Transparent : (flags ro)) }
 
 data SpriteAnimationType
   = SpriteAnimationType'Forward
