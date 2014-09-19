@@ -10,8 +10,7 @@ module Lambency.Render (
   performRenderActions,
   addRenderAction,
   addRenderUIAction,
-  addClipRenderAction,
-  resetClip,
+  addClippedRenderAction,
 ) where
 
 --------------------------------------------------------------------------------
@@ -50,11 +49,7 @@ data RenderConfig = RenderConfig {
 }
 
 mkRenderConfig :: IO (RenderConfig)
-mkRenderConfig = do
-  ui <- createNoLight
-  return $ RenderConfig {
-    uiLight = ui
-  }
+mkRenderConfig = createNoLight >>= return . RenderConfig
 
 type RenderContext = ReaderT RenderConfig IO
 
@@ -220,6 +215,8 @@ renderLight act cam (Light shdr shdrmap (Just (Shadow shadowShdr shadowMap))) = 
   liftIO clearRenderTexture
   renderLight act cam (Light shdr shadowShdrMap Nothing)
 
+-- If there's no clipped geometry then we're not rendering anything...
+renderLight (RenderClipped (RenderObjects []) action) camera light = return ()
 renderLight (RenderClipped clip action) camera light = do
   liftIO $ do
     -- Disable stencil test, and drawing into the color and depth buffers
@@ -299,12 +296,35 @@ appendSceneWith fn obj acts = acts { renderScene = fn obj (renderScene acts) }
 appendUIWith :: AppendObjectFn -> RenderObject -> RenderActions -> RenderActions
 appendUIWith fn obj acts = acts { renderUI = fn obj (renderUI acts) }
 
-addClipRenderAction :: Transform -> RenderObject -> GameMonad ()
-addClipRenderAction xf ro = lift $
-  modify $ appendSceneWith appendClip (xformObject xf ro)
+createClippedAction :: RenderAction -> RenderAction -> RenderAction -> RenderAction
+createClippedAction old clip draw = RenderCons old (RenderCons clipAction (RenderObjects []))
+  where
+    clipAction :: RenderAction
+    clipAction = RenderClipped clip draw
 
-resetClip :: GameMonad ()
-resetClip = lift $ modify $ appendSceneWith resetClipFn undefined
+addClippedRenderAction :: GameMonad () -> GameMonad a -> GameMonad a
+addClippedRenderAction clip draw = do
+  -- Get the existing actions
+  actions <- lift get
+
+  -- Put empty actions
+  lift $ put emptyRenderActions
+
+  -- Get the actions that render the clip
+  clipActions <- clip >> lift get
+
+  -- Put back empty actions again
+  lift $ put emptyRenderActions
+
+  -- Get the actions that render our clipped geometry
+  result <- draw
+  renderActions <- lift get
+
+  -- Finally, replace our existing actions with clipped actions
+  lift $ put $ RenderActions
+    (createClippedAction (renderScene actions) (renderScene clipActions) (renderScene renderActions))
+    (createClippedAction (renderUI actions) (renderUI clipActions) (renderUI renderActions))
+  return result
 
 addRenderAction :: Transform -> RenderObject -> GameMonad ()
 addRenderAction xf ro = lift $  modify $ appendSceneWith appendObj (xformObject xf ro)
