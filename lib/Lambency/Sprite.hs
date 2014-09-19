@@ -127,20 +127,16 @@ data SpriteAnimationType
     deriving(Eq, Ord, Show, Enum)
 
 animatedWire :: Sprite -> V2 Int -> SpriteAnimationType -> GameWire (V2 Float) (V2 Float)
-animatedWire sprite sz SpriteAnimationType'Forward = let
-  start = curFrameOffset sprite
-  in
-   loop $ second (delay sprite) >>> let
-     loopW :: GameWire (V2 Float, Sprite) (V2 Float, Sprite)
-     loopW = mkGenN $ \(p, s) -> do
-        renderSprite s sz 0 p
-        let nextSprite = Sprite . advance . getFrames $ s
-            result = Right (p, nextSprite)
-        if (curFrameOffset nextSprite) == start
-          then return (result, mkEmpty)
-          else return (result, loopW)
-     in
-      loopW
+animatedWire sprite sz SpriteAnimationType'Forward = loop $ second (delay sprite) >>> loopW
+  where
+    loopW :: GameWire (V2 Float, Sprite) (V2 Float, Sprite)
+    loopW = mkGenN $ \(p, s) -> do
+      renderSprite s sz 0 p
+      let nextSprite = Sprite . advance . getFrames $ s
+          result = Right (p, nextSprite)
+      if (curFrameOffset nextSprite) == curFrameOffset sprite
+        then return (result, mkEmpty)
+        else return (result, loopW)
 
 animatedWire (Sprite (CyclicList p c n)) sz SpriteAnimationType'Backward =
    animatedWire (Sprite (CyclicList n c p)) sz SpriteAnimationType'Forward

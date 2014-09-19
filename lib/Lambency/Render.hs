@@ -216,7 +216,7 @@ renderLight act cam (Light shdr shdrmap (Just (Shadow shadowShdr shadowMap))) = 
   renderLight act cam (Light shdr shadowShdrMap Nothing)
 
 -- If there's no clipped geometry then we're not rendering anything...
-renderLight (RenderClipped (RenderObjects []) action) camera light = return ()
+renderLight (RenderClipped (RenderObjects []) _) _ _ = return ()
 renderLight (RenderClipped clip action) camera light = do
   liftIO $ do
     -- Disable stencil test, and drawing into the color and depth buffers
@@ -280,16 +280,6 @@ appendObj obj (RenderObjects objs) = RenderObjects (obj : objs)
 appendObj obj (RenderClipped clip act) = RenderClipped clip (appendObj obj act)
 appendObj obj (RenderCons act1 act2) = RenderCons act1 (appendObj obj act2)
 
-appendClip :: AppendObjectFn
-appendClip obj (RenderClipped clip act) = RenderClipped (appendObj obj clip) act
-appendClip obj (RenderCons act1 act2) = RenderCons act1 (appendClip obj act2)
-appendClip obj act = RenderCons act (RenderClipped (RenderObjects [obj]) (RenderObjects []))
-
-resetClipFn :: AppendObjectFn
-resetClipFn _ x@(RenderClipped _ _) = RenderCons x (RenderObjects [])
-resetClipFn x (RenderCons act1 act2) = RenderCons act1 (resetClipFn x act2)
-resetClipFn _ x = x
-
 appendSceneWith :: AppendObjectFn -> RenderObject -> RenderActions -> RenderActions
 appendSceneWith fn obj acts = acts { renderScene = fn obj (renderScene acts) }
 
@@ -297,10 +287,19 @@ appendUIWith :: AppendObjectFn -> RenderObject -> RenderActions -> RenderActions
 appendUIWith fn obj acts = acts { renderUI = fn obj (renderUI acts) }
 
 createClippedAction :: RenderAction -> RenderAction -> RenderAction -> RenderAction
-createClippedAction old clip draw = RenderCons old (RenderCons clipAction (RenderObjects []))
+createClippedAction old clip draw =
+  let clipAction :: RenderAction
+      clipAction = RenderClipped clip draw
+  in RenderCons old (RenderCons clipAction (RenderObjects []))
+
+-- !FIXME! This would probably be cleaner with lenses
+createClippedActions :: RenderActions -> RenderActions -> RenderActions -> RenderActions
+createClippedActions old clip draw =
+  RenderActions { renderScene = createClippedAction (rs old) (rs clip) (rs draw),
+                  renderUI = createClippedAction (ru old) (ru clip) (ru draw) }
   where
-    clipAction :: RenderAction
-    clipAction = RenderClipped clip draw
+    rs = renderScene
+    ru = renderUI
 
 addClippedRenderAction :: GameMonad () -> GameMonad a -> GameMonad a
 addClippedRenderAction clip draw = do
@@ -321,9 +320,7 @@ addClippedRenderAction clip draw = do
   renderActions <- lift get
 
   -- Finally, replace our existing actions with clipped actions
-  lift $ put $ RenderActions
-    (createClippedAction (renderScene actions) (renderScene clipActions) (renderScene renderActions))
-    (createClippedAction (renderUI actions) (renderUI clipActions) (renderUI renderActions))
+  lift $ put $ createClippedActions actions clipActions renderActions
   return result
 
 addRenderAction :: Transform -> RenderObject -> GameMonad ()
