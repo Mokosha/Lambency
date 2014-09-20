@@ -24,8 +24,7 @@ import Lambency.Transform
 import Lambency.Types
 import Lambency.Vertex
 
-import Control.Monad.Reader
-import Control.Monad.State.Class
+import Control.Monad.RWS.Strict
 
 import Data.Array.IO
 import Data.Array.Storable
@@ -51,7 +50,7 @@ data RenderConfig = RenderConfig {
 mkRenderConfig :: IO (RenderConfig)
 mkRenderConfig = createNoLight >>= return . RenderConfig
 
-type RenderContext = ReaderT RenderConfig IO
+type RenderContext = RWST RenderConfig () Transform IO
 
 emptyRenderActions :: RenderActions
 emptyRenderActions = RenderActions {

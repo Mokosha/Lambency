@@ -250,7 +250,7 @@ runGame gs = do
       -- !FIXME! This should be moved to the camera...
       GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
       clearBuffers
-      runReaderT renderPrg rcfg
+      _ <- evalRWST renderPrg rcfg identity
       GL.flush
       GLFW.swapBuffers win
     else return ()
