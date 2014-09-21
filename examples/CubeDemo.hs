@@ -80,7 +80,7 @@ frameWire font = (W.mkId W.&&& (avgFps 5)) W.>>> renderWire
 
 loadGame :: IO (L.Game ())
 loadGame = do
-  sysFont <- L.loadSystemFont
+  sysFont <- getDataFileName ("kenpixel" <.> "ttf") >>= flip L.loadTTFont 18
   plane <- mkPlane
   bunny <- mkBunny
   cube <- cubeWire

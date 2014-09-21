@@ -17,7 +17,8 @@ cabal-version:       >=1.8
 data-files:          cube.obj,
                      bunnyN.obj,
                      crate.png,
-                     stereol.wav
+                     stereol.wav,
+                     kenpixel.ttf
 data-dir:            Assets
 
 executable lambcubedemo
