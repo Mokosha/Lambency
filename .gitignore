@@ -12,3 +12,6 @@ cabal-dev
 *~
 \#*
 *\#
+
+# OS X things
+.DS_Store
