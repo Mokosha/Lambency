@@ -4,6 +4,7 @@ module Lambency.Sprite (
   loadStaticSprite,
   loadStaticSpriteWithTexture,
   loadAnimatedSprite,
+  loadAnimatedSpriteWithTexture,
   loadFixedSizeAnimatedSprite,
 
   renderSprite,
@@ -93,6 +94,10 @@ loadStaticSprite f = loadSpriteWith f initStaticSprite
 
 loadAnimatedSprite :: FilePath -> [V2 Int] -> [V2 Int] -> IO (Maybe Sprite)
 loadAnimatedSprite f frameSzs offsets = loadSpriteWith f $ initAnimatedSprite frameSzs offsets
+
+loadAnimatedSpriteWithTexture :: Texture -> [V2 Int] -> [V2 Int] -> IO (Maybe Sprite)
+loadAnimatedSpriteWithTexture t frameSzs offsets =
+  initAnimatedSprite frameSzs offsets t >>= (return . Just)
 
 loadFixedSizeAnimatedSprite :: FilePath -> V2 Int -> [V2 Int] -> IO (Maybe Sprite)
 loadFixedSizeAnimatedSprite f frameSz offsets = loadAnimatedSprite f (repeat frameSz) offsets
