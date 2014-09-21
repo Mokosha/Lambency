@@ -112,6 +112,8 @@ makeWindow width height title = do
   initSound
   GL.dither GL.$= GL.Disabled
 
+  GL.rowAlignment GL.Unpack GL.$= 1
+
   -- !FIXME! Why is this Maybe?
   return (Just m)
 
