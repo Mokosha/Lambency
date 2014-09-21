@@ -2,11 +2,12 @@ module Lambency.Texture (
   getGLTexObj,
   textureSize,
   isRenderTexture,
-  createFramebufferObject,
+  initializeTexture,
   createSolidTexture,
   createDepthTexture,
   loadTexture,
   destroyTexture,
+  updateTexture,
   bindRenderTexture,
   clearRenderTexture,
 ) where
@@ -41,9 +42,20 @@ getGLTexObj :: Texture -> GL.TextureObject
 getGLTexObj (Texture (TexHandle h _) _) = h
 getGLTexObj (RenderTexture (TexHandle h _) _) = h
 
+getGLTexFmt :: Texture -> TextureFormat
+getGLTexFmt (Texture _ fmt) = fmt
+getGLTexFmt (RenderTexture _ _) = error "Render textures don't have a texture format"
+
 fmt2glpfmt :: TextureFormat -> GL.PixelFormat
 fmt2glpfmt RGBA8 = GL.RGBA
 fmt2glpfmt RGB8 = GL.RGB
+fmt2glpfmt Alpha8 = GL.Alpha
+
+internalglpfmt :: GL.PixelFormat -> GL.PixelInternalFormat
+internalglpfmt GL.RGBA = GL.RGBA8
+internalglpfmt GL.RGB = GL.RGB8
+internalglpfmt GL.Alpha = GL.Alpha8
+internalglpfmt _ = error "We don't know the data used for this pixelformat"
 
 isRenderTexture :: Texture -> Bool
 isRenderTexture (Texture _ _) = False
@@ -101,20 +113,16 @@ destroyTexture (RenderTexture (TexHandle h _) fboh) = do
   GL.deleteObjectName h
   GL.deleteObjectName fboh
 
-createFramebufferObject :: Int -> Int -> TextureFormat -> IO (Texture)
-createFramebufferObject w h fmt = do
-  handle <- GL.genObjectName
-  return $ Texture (TexHandle handle $ TexSize (V2 w h)) fmt
-
-initializeTexture :: Ptr a -> (Word32, Word32) -> TextureFormat -> IO(Texture)
+initializeTexture :: Ptr a -> (Word32, Word32) -> TextureFormat -> IO (Texture)
 initializeTexture ptr (w, h) fmt = do
   handle <- GL.genObjectName
   GL.activeTexture GL.$= GL.TextureUnit 0
   GL.textureBinding GL.Texture2D GL.$= Just handle
 
-  let size = GL.TextureSize2D (fromIntegral w) (fromIntegral h)
-      pd = GL.PixelData (fmt2glpfmt fmt) GL.UnsignedByte ptr
-  GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 size 0 pd
+  let glfmt = fmt2glpfmt fmt
+      size = GL.TextureSize2D (fromIntegral w) (fromIntegral h)
+      pd = GL.PixelData glfmt GL.UnsignedByte ptr
+  GL.texImage2D GL.Texture2D GL.NoProxy 0 (internalglpfmt glfmt) size 0 pd
   GL.generateMipmap' GL.Texture2D
   GL.textureFilter GL.Texture2D GL.$= ((GL.Linear', Just GL.Linear'), GL.Linear')
   GL.textureWrapMode GL.Texture2D GL.S GL.$= (GL.Repeated, GL.Repeat)
@@ -122,6 +130,16 @@ initializeTexture ptr (w, h) fmt = do
 
   putStrLn $ "Loaded " ++ (show fmt) ++ "texture with dimensions " ++ (show (w, h))
   return $ Texture (TexHandle handle $ TexSize $ fmap fromEnum (V2 w h)) fmt
+
+updateTexture :: Texture -> Ptr a -> (Word32, Word32) -> (Word32, Word32) -> IO ()
+updateTexture (RenderTexture _ _) _ _ _ = putStrLn "Cannot update render texture"
+updateTexture tex ptr (x, y) (w, h) = do
+  GL.textureBinding GL.Texture2D GL.$= Just (getGLTexObj tex)
+
+  let pd = GL.PixelData (fmt2glpfmt $ getGLTexFmt tex) GL.UnsignedByte ptr
+      size = GL.TextureSize2D (fromIntegral w) (fromIntegral h)
+      pos = GL.TexturePosition2D (fromIntegral x) (fromIntegral y)
+  GL.texSubImage2D GL.Texture2D 0 pos size pd
 
 loadTextureFromPNG :: FilePath -> IO(Maybe Texture)
 loadTextureFromPNG filename = do

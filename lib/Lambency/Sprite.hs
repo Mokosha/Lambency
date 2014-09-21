@@ -34,7 +34,7 @@ import Linear
 
 data SpriteFrame = SpriteFrame {
   offset :: V2 Float,
-  size :: V2 Int,
+  spriteSize :: V2 Int,
   frameRO :: RenderObject
 }
 
@@ -53,7 +53,7 @@ initStaticSprite tex = do
   ro <- createRenderObject quad (createTexturedMaterial tex)
   return . Sprite . cycleSingleton $ SpriteFrame {
     offset = zero,
-    size = textureSize tex,
+    spriteSize = textureSize tex,
     frameRO = ro
   }
 
@@ -67,7 +67,7 @@ initAnimatedSprite frameSzs offsets tex = do
       let texOff = changeRange off
       in SpriteFrame {
         offset = texOff,
-        size = sz,
+        spriteSize = sz,
         frameRO = ro { material = updateScale (changeRange sz) texOff (material ro)}
         }
 

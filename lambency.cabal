@@ -60,6 +60,7 @@ library
                        netwire >= 5.0.0,
                        netwire-input, netwire-input-glfw,
                        OpenAL, HCodecs,
+                       freetype2,
                        time,
                        containers,
                        bytestring,

@@ -131,7 +131,7 @@ newtype TextureSize = TexSize { getTextureSize :: Vec2i }
 type FBOHandle = GL.FramebufferObject
 data TextureHandle = TexHandle GL.TextureObject TextureSize
                      deriving(Show, Eq)
-data TextureFormat = RGBA8 | RGB8
+data TextureFormat = RGBA8 | RGB8 | Alpha8
                      deriving(Show, Eq)
 
 data Texture = Texture TextureHandle TextureFormat
