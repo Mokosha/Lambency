@@ -115,7 +115,7 @@ renderFrameAt ro sc depth (V2 x y) = addRenderAction xf ro
          nonuniformScale (V3 sx sy 1) identity
 
 renderSprite :: Sprite -> V2 Int -> Float -> V2 Float -> GameMonad ()
-renderSprite s = renderFrameAt $ frameRO $ extract. getFrames $ s
+renderSprite s = renderFrameAt $ frameRO $ extract . getFrames $ s
 
 renderSpriteWithAlpha :: Sprite -> Float -> V2 Int -> Float -> V2 Float -> GameMonad ()
 renderSpriteWithAlpha s a = renderFrameAt (setAlpha $ frameRO $ extract . getFrames $ s)
