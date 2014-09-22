@@ -198,7 +198,7 @@ data OutputAction = LogAction String
 -- !FIXME! Game config should be a list of configuration parameters like screen
 -- size so that we can do raycasting from mouse coordinates and maybe some
 -- other things...
-type GameConfig = ()
+type GameConfig = Integer -- Picoseconds last frame took to render
 type GameState = RenderActions
 
 -- Game

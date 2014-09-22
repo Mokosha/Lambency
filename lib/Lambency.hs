@@ -62,6 +62,8 @@ import GHC.Float
 
 import FRP.Netwire.Input
 import FRP.Netwire.Input.GLFW
+
+import System.CPUTime
 --------------------------------------------------------------------------------
 
 initLambency :: IO ()
@@ -172,24 +174,33 @@ step go game t = do
         dynamicLights = lights,
         gameLogic = logic}
 
+data GameLoopState a = GameLoopState {
+  currentGameValue :: a,
+  currentGameLogic :: Game a,
+  currentGameSession :: GameSession,
+  currentPhysicsAccum :: NominalDiffTime,
+  lastFramePicoseconds :: Integer
+}
+
 type GameLoopM a =
   -- Reader
   ReaderT (RenderConfig, GLFWInputControl, GLFW.Window) (
   -- State  (gameObject, logic, session and time)
-  StateT (a, Game a, GameSession, NominalDiffTime) IO)
+  StateT (GameLoopState a) IO)
 
 runLoop :: UTCTime -> GameLoopM a ()
 runLoop lastFrameTime = do
-  (_, _, _, accumulator) <- get
+  (GameLoopState _ _ _ accumulator _) <- get
   -- Step
   thisFrameTime <- liftIO getCurrentTime
   let newAccum = accumulator + (diffUTCTime thisFrameTime lastFrameTime)
-  modify $ \(o, l, s, _) -> (o, l, s, newAccum)
+  modify $ \ls -> ls { currentPhysicsAccum = newAccum }
   (go, (nextsession, accum), (nextGame, _)) <- stepGame emptyRenderActions
 
   case go of
     Right gobj -> do
-      put (gobj, nextGame, nextsession, accum)
+      ls <- get
+      put $ GameLoopState gobj nextGame nextsession accum (lastFramePicoseconds ls)
       runLoop thisFrameTime
     Left _ -> return ()
 
@@ -198,7 +209,7 @@ type StateStepper a = (Game a, GameState)
 
 stepGame :: GameState -> GameLoopM a (Either String a, TimeStepper, StateStepper a)
 stepGame gs = do
-  (go, game, session, accum) <- get
+  (GameLoopState go game session accum _) <- get
   if (accum < physicsDeltaUTC)
     then return (Right go, (session, accum), (game, gs))
     else runGame gs
@@ -207,19 +218,20 @@ runGame :: GameState -> GameLoopM a (Either String a, TimeStepper, StateStepper 
 runGame gs = do
 
   (rcfg, ictl, win) <- ask
-  (go, g, sess, accum) <- get
+  gls <- get
 
   ipt <- liftIO $ getInput ictl
 
   -- Retreive the next time step from our game session
-  (ts, nextSess) <- liftIO $ W.stepSession sess
+  (ts, nextSess) <- liftIO $ W.stepSession (currentGameSession gls)
 
   let
     -- The game step is the complete GameMonad computation that
     -- produces four values: Either inhibition or a new game value
     -- A new camera, a list of dynamic lights, and the next simulation
     -- wire
-    gameStep = step go g ts
+    g = currentGameLogic gls
+    gameStep = step (currentGameValue gls) g ts
 
     -- In order to get at the underlying RWS monad, let's create an
     -- RWS program that works with the passed in input.
@@ -230,12 +242,14 @@ runGame gs = do
     -- This is the meat of the step routine. This calls runRWS on the
     -- main game wire, and uses the results to figure out what needs
     -- to be done.
-    (((result, cam, lights, nextGame), newIpt), newGS, actions) = runRWS rwsPrg () gs
+    renderTime = lastFramePicoseconds gls
+    (((result, cam, lights, nextGame), newIpt), newGS, actions) = runRWS rwsPrg renderTime gs
 
     -- We need to render if we're going to fall below the physics threshold
     -- on the next frame. This simulates a while loop. If we don't fall
     -- through this threshold, we will perform another physics step before
     -- we finally decide to render.
+    accum = currentPhysicsAccum gls
     needsRender = ((accum - physicsDeltaUTC) < physicsDeltaUTC)
 
     -- If we do render, we need to build the renderObjects and their
@@ -247,15 +261,21 @@ runGame gs = do
     renderPrg = performRenderActions lights cam $
                 newGS { renderScene = RenderCons (RenderObjects sgRAs) (renderScene newGS) }
 
-  if needsRender
+  frameTime <-
+    if needsRender
     then liftIO $ do
+      t <- getCPUTime         
+                 
       -- !FIXME! This should be moved to the camera...
       GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
       clearBuffers
       runReaderT renderPrg rcfg
       GL.flush
       GLFW.swapBuffers win
-    else return ()
+
+      t' <- getCPUTime
+      return (t' - t)
+    else return renderTime
 
   _ <- liftIO $ do
     -- Actually do the associated actions
@@ -267,7 +287,7 @@ runGame gs = do
   -- If our main wire inhibited, return immediately.
   case result of
     Right obj -> do
-      put (obj, nextGame, nextSess, (accum - physicsDeltaUTC))
+      put $ GameLoopState obj nextGame nextSess (accum - physicsDeltaUTC) frameTime
       stepGame emptyRenderActions
     Left _ -> return (result, (nextSess, accum), (nextGame, gs))
 
@@ -285,7 +305,7 @@ run win initialGameObject initialGame = do
   GLFW.pollEvents
 
   let statePrg = runReaderT (runLoop curTime) (renderCfg, ictl, win)
-  evalStateT statePrg (initialGameObject, initialGame, session, toEnum 0)
+  evalStateT statePrg $ GameLoopState initialGameObject initialGame session (toEnum 0) 0
   
 runWindow :: Int -> Int -> String -> a -> IO (Game a) -> IO ()
 runWindow width height title initialGameObject loadGamePrg = do
