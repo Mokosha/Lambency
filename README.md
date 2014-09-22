@@ -13,14 +13,15 @@ Major Dependencies
 - [HCodecs](http://hackage.haskell.org/package/HCodecs) -- [github](https://github.com/giorgidze/HCodecs)
 - [Netwire 5](http://hackage.haskell.org/package/netwire) -- [darcs](http://hub.darcs.net/ertes/netwire)
 - [Linear](http://hackage.haskell.org/package/linear) -- [github](https://github.com/ekmett/linear)
+- [FreeType](https://hackage.haskell.org/package/freetype2) -- [github](https://github.com/dagit/freetype2)
 
 Try the Example:
 --------
 
 From the source directory:
 
-    cabal install --user
-    cd Examples
+    cd examples
+    cabal sandbox init
+    cabal install .. --only-dependencies
     cabal configure
     cabal build
-    ./dist/build/lambcubedemo/lambcubedemo
