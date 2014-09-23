@@ -4,6 +4,7 @@ module Lambency.Sprite (
   loadStaticSprite,
   loadStaticSpriteWithTexture,
   loadAnimatedSprite,
+  loadAnimatedSpriteWithTexture,
   loadFixedSizeAnimatedSprite,
 
   renderSprite,
@@ -33,7 +34,7 @@ import Linear
 
 data SpriteFrame = SpriteFrame {
   offset :: V2 Float,
-  size :: V2 Int,
+  spriteSize :: V2 Int,
   frameRO :: RenderObject
 }
 
@@ -52,7 +53,7 @@ initStaticSprite tex = do
   ro <- createRenderObject quad (createTexturedMaterial tex)
   return . Sprite . cycleSingleton $ SpriteFrame {
     offset = zero,
-    size = textureSize tex,
+    spriteSize = textureSize tex,
     frameRO = ro
   }
 
@@ -66,7 +67,7 @@ initAnimatedSprite frameSzs offsets tex = do
       let texOff = changeRange off
       in SpriteFrame {
         offset = texOff,
-        size = sz,
+        spriteSize = sz,
         frameRO = ro { material = updateScale (changeRange sz) texOff (material ro)}
         }
 
@@ -94,6 +95,10 @@ loadStaticSprite f = loadSpriteWith f initStaticSprite
 loadAnimatedSprite :: FilePath -> [V2 Int] -> [V2 Int] -> IO (Maybe Sprite)
 loadAnimatedSprite f frameSzs offsets = loadSpriteWith f $ initAnimatedSprite frameSzs offsets
 
+loadAnimatedSpriteWithTexture :: Texture -> [V2 Int] -> [V2 Int] -> IO (Maybe Sprite)
+loadAnimatedSpriteWithTexture t frameSzs offsets =
+  initAnimatedSprite frameSzs offsets t >>= (return . Just)
+
 loadFixedSizeAnimatedSprite :: FilePath -> V2 Int -> [V2 Int] -> IO (Maybe Sprite)
 loadFixedSizeAnimatedSprite f frameSz offsets = loadAnimatedSprite f (repeat frameSz) offsets
 
@@ -110,7 +115,7 @@ renderFrameAt ro sc depth (V2 x y) = addRenderAction xf ro
          nonuniformScale (V3 sx sy 1) identity
 
 renderSprite :: Sprite -> V2 Int -> Float -> V2 Float -> GameMonad ()
-renderSprite s = renderFrameAt $ frameRO $ extract. getFrames $ s
+renderSprite s = renderFrameAt $ frameRO $ extract . getFrames $ s
 
 renderSpriteWithAlpha :: Sprite -> Float -> V2 Int -> Float -> V2 Float -> GameMonad ()
 renderSpriteWithAlpha s a = renderFrameAt (setAlpha $ frameRO $ extract . getFrames $ s)

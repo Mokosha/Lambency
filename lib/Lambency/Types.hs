@@ -131,7 +131,7 @@ newtype TextureSize = TexSize { getTextureSize :: Vec2i }
 type FBOHandle = GL.FramebufferObject
 data TextureHandle = TexHandle GL.TextureObject TextureSize
                      deriving(Show, Eq)
-data TextureFormat = RGBA8 | RGB8
+data TextureFormat = RGBA8 | RGB8 | Alpha8
                      deriving(Show, Eq)
 
 data Texture = Texture TextureHandle TextureFormat
@@ -198,7 +198,7 @@ data OutputAction = LogAction String
 -- !FIXME! Game config should be a list of configuration parameters like screen
 -- size so that we can do raycasting from mouse coordinates and maybe some
 -- other things...
-type GameConfig = ()
+type GameConfig = Integer -- Picoseconds last frame took to render
 type GameState = RenderActions
 
 -- Game
