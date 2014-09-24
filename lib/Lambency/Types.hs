@@ -176,6 +176,7 @@ type RenderInstance = (XForm.Transform, RenderObject)
 
 data RenderAction = RenderObjects [RenderObject]
                   | RenderClipped RenderAction RenderAction
+                  | RenderTransformed XForm.Transform RenderAction
                   | RenderCons RenderAction RenderAction
 
 data RenderActions = RenderActions {

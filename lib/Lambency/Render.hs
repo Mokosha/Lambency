@@ -11,6 +11,7 @@ module Lambency.Render (
   addRenderAction,
   addRenderUIAction,
   addClippedRenderAction,
+  addTransformedRenderAction,
 ) where
 
 --------------------------------------------------------------------------------
@@ -172,6 +173,22 @@ xformObject :: Transform -> RenderObject -> RenderObject
 xformObject xform ro =
   ro { render = \shr -> (render ro) shr . appendXform xform }
 
+prependXform :: Transform -> ShaderMap -> ShaderMap
+prependXform xform sm' = let
+  matrix :: M44 Float
+  matrix = xform2Matrix xform
+
+  sm :: ShaderMap
+  sm = Map.fromList [
+    ("mvpMatrix", Matrix4Val matrix),
+    ("m2wMatrix", Matrix4Val matrix)]
+  in
+   Map.unionWithKey updateMatrices sm' sm
+
+xformObjectWorld :: Transform -> RenderObject -> RenderObject
+xformObjectWorld xform ro =
+  ro { render = \shr -> (render ro) shr . prependXform xform }
+
 divideAndRenderROs :: [RenderObject] -> Camera -> Light -> IO ()
 divideAndRenderROs [] _ _ = return ()
 divideAndRenderROs ros cam (Light shdr shdrmap _) = let
@@ -250,7 +267,14 @@ renderLight (RenderClipped clip action) camera light = do
   -- Finally, disable the stencil test
   liftIO $ GL.stencilTest GL.$= GL.Disabled
 
-renderLight (RenderObjects ros) camera light = liftIO $ divideAndRenderROs ros camera light
+renderLight (RenderTransformed xf act) camera light = do
+  modify $ transform xf
+  renderLight act camera light
+
+renderLight (RenderObjects ros) camera light = do
+  xf <- get
+  liftIO $ divideAndRenderROs (map (xformObject xf) ros) camera light
+
 renderLight (RenderCons act1 act2) camera light = do
   renderLight act1 camera light
   renderLight act2 camera light
@@ -278,6 +302,7 @@ appendObj :: AppendObjectFn
 appendObj obj (RenderObjects objs) = RenderObjects (obj : objs)
 appendObj obj (RenderClipped clip act) = RenderClipped clip (appendObj obj act)
 appendObj obj (RenderCons act1 act2) = RenderCons act1 (appendObj obj act2)
+appendObj obj (RenderTransformed xf act) = RenderTransformed xf (appendObj obj act)
 
 appendSceneWith :: AppendObjectFn -> RenderObject -> RenderActions -> RenderActions
 appendSceneWith fn obj acts = acts { renderScene = fn obj (renderScene acts) }
@@ -285,11 +310,11 @@ appendSceneWith fn obj acts = acts { renderScene = fn obj (renderScene acts) }
 appendUIWith :: AppendObjectFn -> RenderObject -> RenderActions -> RenderActions
 appendUIWith fn obj acts = acts { renderUI = fn obj (renderUI acts) }
 
+embedNewAction :: RenderAction -> RenderAction -> RenderAction
+embedNewAction old new = RenderCons old $ RenderCons new $ RenderObjects []
+
 createClippedAction :: RenderAction -> RenderAction -> RenderAction -> RenderAction
-createClippedAction old clip draw =
-  let clipAction :: RenderAction
-      clipAction = RenderClipped clip draw
-  in RenderCons old (RenderCons clipAction (RenderObjects []))
+createClippedAction old clip draw = embedNewAction old $ RenderClipped clip draw
 
 -- !FIXME! This would probably be cleaner with lenses
 createClippedActions :: RenderActions -> RenderActions -> RenderActions -> RenderActions
@@ -320,6 +345,35 @@ addClippedRenderAction clip draw = do
 
   -- Finally, replace our existing actions with clipped actions
   lift $ put $ createClippedActions actions clipActions renderActions
+  return result
+
+createTransformedAction :: Transform -> RenderAction -> RenderAction -> RenderAction
+createTransformedAction xf old new = embedNewAction old $ RenderTransformed xf new
+
+createTransformedActions :: Transform -> RenderActions -> RenderActions -> RenderActions
+createTransformedActions xf old new =
+  RenderActions { renderScene = createTransformedAction xf (rs old) (rs new),
+                  renderUI = createTransformedAction xf (ru old) (ru new) }
+  where
+    rs = renderScene
+    ru = renderUI
+
+addTransformedRenderAction :: Transform -> GameMonad a -> GameMonad a
+addTransformedRenderAction xf prg = do
+  -- Get the actions so far
+  actions <- lift get
+
+  -- Put empty actions
+  lift $ put emptyRenderActions
+
+  -- Run the actions
+  result <- prg
+
+  -- Get the resulting actions
+  xfActions <- lift get
+
+  -- Put the transformed actions back
+  lift $ put $ createTransformedActions xf actions xfActions
   return result
 
 addRenderAction :: Transform -> RenderObject -> GameMonad ()
