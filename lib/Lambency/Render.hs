@@ -268,8 +268,9 @@ renderLight (RenderClipped clip action) camera light = do
   liftIO $ GL.stencilTest GL.$= GL.Disabled
 
 renderLight (RenderTransformed xf act) camera light = do
-  modify $ transform xf
-  renderLight act camera light
+  oldxf <- get
+  withRWST (\x s -> (x, transform xf s)) $ renderLight act camera light
+  put oldxf
 
 renderLight (RenderObjects ros) camera light = do
   xf <- get
