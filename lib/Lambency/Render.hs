@@ -173,22 +173,6 @@ xformObject :: Transform -> RenderObject -> RenderObject
 xformObject xform ro =
   ro { render = \shr -> (render ro) shr . appendXform xform }
 
-prependXform :: Transform -> ShaderMap -> ShaderMap
-prependXform xform sm' = let
-  matrix :: M44 Float
-  matrix = xform2Matrix xform
-
-  sm :: ShaderMap
-  sm = Map.fromList [
-    ("mvpMatrix", Matrix4Val matrix),
-    ("m2wMatrix", Matrix4Val matrix)]
-  in
-   Map.unionWithKey updateMatrices sm' sm
-
-xformObjectWorld :: Transform -> RenderObject -> RenderObject
-xformObjectWorld xform ro =
-  ro { render = \shr -> (render ro) shr . prependXform xform }
-
 divideAndRenderROs :: [RenderObject] -> Camera -> Light -> IO ()
 divideAndRenderROs [] _ _ = return ()
 divideAndRenderROs ros cam (Light shdr shdrmap _) = let
