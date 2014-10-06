@@ -110,7 +110,7 @@ quad = Mesh {
     texcoords = [ V2 x y | x <- [0, 1], y <- [1, 0] ]
 
     texToVert :: Vec2f -> Vec3f
-    texToVert (V2 x y) = V3 (x * 2 - 1) (y * (-2) + 1) 0
+    texToVert (V2 x y) = V3 x (1 - y) 0
 
 
 instance Vertex a => Renderable (Mesh a) where
