@@ -33,8 +33,6 @@ import Linear
 
 import Paths_lambency
 import System.FilePath
-
-import Debug.Trace
 --------------------------------------------------------------------------------
 
 newtype Font = Font { getGlyph :: Char -> Maybe (SpriteFrame, (V2 Int, V2 Int)) }
