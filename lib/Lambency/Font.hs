@@ -18,15 +18,14 @@ import Foreign.Marshal.Alloc
 import Foreign.Storable
 
 import Graphics.Rendering.FreeType.Internal
-import Graphics.Rendering.FreeType.Internal.PrimitiveTypes
-import Graphics.Rendering.FreeType.Internal.Face
-import Graphics.Rendering.FreeType.Internal.GlyphSlot
 import Graphics.Rendering.FreeType.Internal.Bitmap
+import Graphics.Rendering.FreeType.Internal.Face
+import Graphics.Rendering.FreeType.Internal.GlyphSlot as FT_GS
+import Graphics.Rendering.FreeType.Internal.PrimitiveTypes
+import Graphics.Rendering.FreeType.Internal.Vector hiding (x, y)
 
-import Lambency.Render
 import Lambency.Sprite
 import Lambency.Texture
-import Lambency.Transform
 import Lambency.Types
 import Lambency.Utils
 
@@ -34,47 +33,46 @@ import Linear
 
 import Paths_lambency
 import System.FilePath
+
+import Debug.Trace
 --------------------------------------------------------------------------------
 
-newtype Font = Font { getGlyph :: Char -> Maybe SpriteFrame }
+newtype Font = Font { getGlyph :: Char -> Maybe (SpriteFrame, (V2 Int, V2 Int)) }
 
 renderUIString :: Font -> String -> V2 Float -> GameMonad ()
 renderUIString _ "" _ = return ()
 renderUIString font str pos = let
-  glyphSize :: Char -> V2 Int
+  glyphSize :: Char -> (V2 Float, V2 Float)
   glyphSize c =
     case (getGlyph font c) of
-      Nothing -> zero
-      Just f -> spriteSize f
+      Nothing -> (zero, zero)
+      Just (_, (adv, off)) -> (fmap fromIntegral adv, fmap fromIntegral off)
 
-  glyphSizes :: [V2 Int]
+  glyphSizes :: [(V2 Float, V2 Float)]
   glyphSizes = map glyphSize str
 
   positions :: [V2 Float]
   positions = let
     helper _ _ [] = []
-    helper (V2 cx cy) (V2 lx _) ((V2 x y):xs) =
-      let nextPos = V2 (cx + (fromIntegral lx)) cy
-      in nextPos : (helper nextPos (V2 x y) xs)
+    helper p (adv, off) (a:as) = (p ^+^ off) : (helper (p ^+^ adv) a as)
    in
     helper pos (head glyphSizes) (tail glyphSizes)
-  in do
-   mapM_ (\(c, p) ->
-           case (getGlyph font c) of
-                 Nothing -> return ()
-                 Just f ->
-                   let (V2 sx sy) = fmap ((*0.5) . fromIntegral) $ spriteSize f
-                       xf = nonuniformScale (V3 sx sy 1) $ identity
-                       ro = xformObject xf $ frameRO f
-                   in addRenderUIAction p ro)
-     (zip str positions)
 
-loadFont :: Sprite -> [(Char, V2 Int, V2 Int)] -> IO (Font)
-loadFont sprite charInfo = return . Font $ \c -> charMap >>= (Map.lookup c)
+  renderCharAtPos :: Char -> V2 Float -> GameMonad ()
+  renderCharAtPos ' ' _ = return () -- no need to render spaces...
+  renderCharAtPos c p =
+    case (getGlyph font c) of
+      Nothing -> return ()
+      Just (f, _) ->
+        let V2 _ glyphSzY = fmap fromIntegral $ spriteSize f
+        in renderUISprite (Sprite $ cycleSingleton f) $ p ^-^ (V2 0 glyphSzY)
+  in do
+   mapM_ (uncurry renderCharAtPos) $ zip str positions
+
+mkFont :: Sprite -> [Char] -> [V2 Int] -> [V2 Int] -> Font
+mkFont sprite string advances offsets  = Font $ flip Map.lookup charMap
   where
-    charMap = do
-      return $ Map.fromList $
-        zip (map (\(c', _, _) -> c') charInfo) (cyclicToList $ getFrames sprite)
+    charMap = Map.fromList $ zip string (zip (cyclicToList $ getFrames sprite) (zip advances offsets))
 
 charString :: [Char]
 charString = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -84,14 +82,10 @@ loadSystemFont :: IO (Font)
 loadSystemFont = let
   systemOffsets = [V2 x 0 | x <- [0,14..]]
   systemSizes = repeat (V2 13 24)
-
-  charInfo = zip3 charString systemOffsets systemSizes
-  offsets = map (\(_, x, _) -> x) charInfo
-  sizes = map (\(_, _, x) -> x) charInfo
   in do
     fontTexFile <- getDataFileName $ "font" <.> "png"
-    Just s <- loadAnimatedSprite fontTexFile sizes offsets
-    loadFont s charInfo
+    Just s <- loadAnimatedSprite fontTexFile systemSizes systemOffsets
+    return $ mkFont s charString (repeat zero) (repeat zero)
 
 --------------------------------------------------------------------------------
 -- Freetype fonts
@@ -113,6 +107,22 @@ analyzeGlyph ft_face (widthAccum, maxHeight) c = do
 
   -- Figure out the rows and height of the bitmap
   return (widthAccum + (fromEnum $ width bm), max maxHeight (fromEnum $ rows bm))
+
+getGlyphAdvanceOffset :: FT_Face -> Char -> IO (V2 Int, V2 Int)
+getGlyphAdvanceOffset ft_face c = do
+  runFreeType $ ft_Load_Char ft_face (toEnum . fromEnum $ c) ft_LOAD_RENDER
+
+  -- Get the glyph
+  g <- peek $ glyph ft_face
+
+  -- Get the advance
+  FT_Vector advx advy <- peek $ FT_GS.advance g
+
+  -- Get the offset
+  offx <- peek $ bitmap_left g
+  offy <- peek $ bitmap_top g
+
+  return $ (fmap fromIntegral $ V2 advx advy, fmap fromIntegral $ V2 offx offy)
 
 uploadGlyph :: FT_Face -> Texture -> Int -> Char -> IO (Int)
 uploadGlyph ft_face tex widthAccum c = do
@@ -155,12 +165,13 @@ loadTTFont filepath fontSize = do
   foldM_ (uploadGlyph ft_face tex) 0 charString
 
   -- Generate info for our rendering
+  advOffs <- mapM (getGlyphAdvanceOffset ft_face) charString
+  let advances = map (fmap (flip div 64) . fst) advOffs
+      offsets = map snd advOffs
+
   sizes <- mapM (analyzeGlyph ft_face (0, 0)) charString
-
-  -- Use info to generate our 3-tuple
-  let offsets = snd $ mapAccumL (\a (w, _) -> (a + w, V2 a 0)) 0 sizes
+  let texOffsets = snd $ mapAccumL (\a (w, _) -> (a + w, V2 a 0)) 0 sizes
       sizesV = map (\(x, y) -> V2 x y) sizes
-      charInfo = zip3 charString offsets sizesV
 
-  Just s <- loadAnimatedSpriteWithTexture tex sizesV offsets
-  loadFont s charInfo
+  Just s <- loadAnimatedSpriteWithTexture tex sizesV texOffsets
+  return $ mkFont s charString advances offsets

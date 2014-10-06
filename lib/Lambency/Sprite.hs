@@ -103,14 +103,16 @@ loadFixedSizeAnimatedSprite :: FilePath -> V2 Int -> [V2 Int] -> IO (Maybe Sprit
 loadFixedSizeAnimatedSprite f frameSz offsets = loadAnimatedSprite f (repeat frameSz) offsets
 
 renderUISprite :: Sprite -> V2 Float -> GameMonad ()
-renderUISprite s pos = addRenderUIAction pos (frameRO currentFrame)
+renderUISprite s pos = addRenderUIAction pos ro
   where
     currentFrame = extract $ getFrames s
+    (V2 sx sy) = spriteSize currentFrame
+    ro = xformObject (nonuniformScale (fmap fromIntegral $ V3 sx sy 1) identity) $ frameRO currentFrame
 
 renderFrameAt :: RenderObject -> V2 Int -> Float -> V2 Float -> GameMonad ()
 renderFrameAt ro sc depth (V2 x y) = addRenderAction xf ro
   where
-    (V2 sx sy) = fmap ((*0.5) . fromIntegral) sc
+    (V2 sx sy) = fmap fromIntegral sc
     xf = translate (V3 x y depth) $
          nonuniformScale (V3 sx sy 1) identity
 
