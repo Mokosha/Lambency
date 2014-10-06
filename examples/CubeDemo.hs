@@ -79,7 +79,7 @@ frameWire font = (W.mkId W.&&& (lastRenderTime W.>>> sAvg 5)) W.>>> renderWire
     lastRenderTime = W.mkGen_ $ \_ -> do
       lastPicoSeconds <- ask
       return . Right $ fromIntegral lastPicoSeconds / 1000000000.0
-    
+
     renderWire :: L.GameWire (a, Float) a
     renderWire = W.mkGen_ $ \(v, fps) -> do
       L.renderUIString font ("Frame Time (ms): " ++ (show fps)) (V2 10 10)
