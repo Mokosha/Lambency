@@ -3,13 +3,14 @@ module Lambency.Font (
   loadSystemFont,
   loadTTFont,
   renderUIString,
+  stringWidth,
 ) where
 
 --------------------------------------------------------------------------------
 import Control.Monad
 
 import Data.Array.Storable
-import Data.List (mapAccumL)
+import Data.List (mapAccumL, foldl')
 import qualified Data.Map as Map
 import Data.Word
 
@@ -37,17 +38,17 @@ import System.FilePath
 
 newtype Font = Font { getGlyph :: Char -> Maybe (SpriteFrame, (V2 Int, V2 Int)) }
 
+glyphSize :: Font -> Char -> (V2 Float, V2 Float)
+glyphSize font c =
+  case (getGlyph font c) of
+    Nothing -> (zero, zero)
+    Just (_, (adv, off)) -> (fmap fromIntegral adv, fmap fromIntegral off)
+
 renderUIString :: Font -> String -> V2 Float -> GameMonad ()
 renderUIString _ "" _ = return ()
 renderUIString font str pos = let
-  glyphSize :: Char -> (V2 Float, V2 Float)
-  glyphSize c =
-    case (getGlyph font c) of
-      Nothing -> (zero, zero)
-      Just (_, (adv, off)) -> (fmap fromIntegral adv, fmap fromIntegral off)
-
   glyphSizes :: [(V2 Float, V2 Float)]
-  glyphSizes = map glyphSize str
+  glyphSizes = map (glyphSize font) str
 
   positions :: [V2 Float]
   positions = let
@@ -65,7 +66,16 @@ renderUIString font str pos = let
         let V2 _ glyphSzY = fmap fromIntegral $ spriteSize f
         in renderUISprite (Sprite $ cycleSingleton f) $ p ^-^ (V2 0 glyphSzY)
   in do
-   mapM_ (uncurry renderCharAtPos) $ zip str positions
+    mapM_ (uncurry renderCharAtPos) $ zip str positions
+
+stringWidth :: Font -> String -> Float
+stringWidth _ "" = 0
+stringWidth f str = foldl' (+) 0 sizes
+  where
+    sizes :: [Float]
+    sizes = map (getX . fst . glyphSize f) str
+
+    getX (V2 x _) = x
 
 mkFont :: Sprite -> [Char] -> [V2 Int] -> [V2 Int] -> Font
 mkFont sprite string advances offsets  = Font $ flip Map.lookup charMap
