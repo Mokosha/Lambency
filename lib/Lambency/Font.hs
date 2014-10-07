@@ -52,7 +52,7 @@ renderUIString font str pos = let
 
   positions :: [V2 Float]
   positions = let
-    helper _ _ [] = []
+    helper p (_, off) [] = [(p ^+^ off)]
     helper p (adv, off) (a:as) = (p ^+^ off) : (helper (p ^+^ adv) a as)
    in
     helper pos (head glyphSizes) (tail glyphSizes)
