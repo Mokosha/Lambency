@@ -18,6 +18,7 @@ data-files:          cube.obj,
                      bunnyN.obj,
                      crate.png,
                      stereol.wav,
+                     pong-bloop.wav,
                      kenpixel.ttf
 data-dir:            Assets
 
@@ -31,5 +32,18 @@ executable lambcubedemo
                   linear,
                   mtl,
                   containers,
+                  directory,
+                  filepath
+
+executable lambpong
+  main-is:        Pong.hs
+  ghc-options:    -Wall -rtsopts -O3
+  build-depends:  base > 4.5,
+                  netwire >= 5,
+                  netwire-input,
+                  GLFW-b,
+                  lambency,
+                  linear, lens,
+                  mtl,
                   directory,
                   filepath
