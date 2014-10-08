@@ -164,7 +164,8 @@ type Material = ShaderMap
 -- Renderable Objects
 
 data RenderFlag = Transparent
-                deriving (Show, Read, Ord, Eq)
+                | Text
+                deriving (Show, Read, Ord, Eq, Enum)
 
 data RenderObject = RenderObject {
   material :: Material,

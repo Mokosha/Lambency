@@ -127,6 +127,7 @@ initializeTexture ptr (w, h) fmt = do
   GL.textureFilter GL.Texture2D GL.$= ((GL.Linear', Just GL.Linear'), GL.Linear')
   GL.textureWrapMode GL.Texture2D GL.S GL.$= (GL.Repeated, GL.Repeat)
   GL.textureWrapMode GL.Texture2D GL.T GL.$= (GL.Repeated, GL.Repeat)
+  GL.textureFunction GL.$= GL.Replace
 
   putStrLn $ "Loaded " ++ (show fmt) ++ "texture with dimensions " ++ (show (w, h))
   return $ Texture (TexHandle handle $ TexSize $ fmap fromEnum (V2 w h)) fmt

@@ -7,6 +7,7 @@ module Lambency.Shader (
   createMinimalShader,
   createSimpleShader,
   createTransparentShader,
+  createFontShader,
   createSpotlightShader,
   destroyShader,
   beforeRender, afterRender
@@ -164,6 +165,21 @@ createTransparentShader = do
      (FloatListTy, "texCoord"),
      (FloatTy, "alpha"),
      (TextureTy 0, "diffuseTex"),
+     (Matrix4Ty, "mvpMatrix"),
+     (Matrix3Ty, "texCoordMatrix")]
+  return $ Shader prg vars
+
+createFontShader :: IO (Shader)
+createFontShader = do
+  vs <- getShaderPath "simple" GL.VertexShader
+  fs <- getShaderPath "font" GL.FragmentShader
+  (Just prg) <- loadProgram [vs, fs]
+  vars <- extractVars $ map (uncurry (lookupShaderVar prg))
+    [(FloatListTy, "position"),
+     (FloatListTy, "texCoord"),
+     (Vector3Ty, "color"),
+     (FloatTy, "alpha"),
+     (TextureTy 0, "maskTex"),
      (Matrix4Ty, "mvpMatrix"),
      (Matrix3Ty, "texCoordMatrix")]
   return $ Shader prg vars

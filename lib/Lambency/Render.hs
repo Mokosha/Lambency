@@ -45,11 +45,15 @@ import Linear
 --------------------------------------------------------------------------------
 
 data RenderConfig = RenderConfig {
-  uiLight :: Light
+  uiLight :: Light,
+  fontLight :: Light
 }
 
 mkRenderConfig :: IO (RenderConfig)
-mkRenderConfig = createNoLight >>= return . RenderConfig
+mkRenderConfig = do
+  ui <- createNoLight
+  font <- createFontLight
+  return $ RenderConfig ui font
 
 type RenderContext = RWST RenderConfig () Transform IO
 
@@ -264,6 +268,25 @@ renderLight (RenderCons act1 act2) camera light = do
   renderLight act1 camera light
   renderLight act2 camera light
 
+renderText :: RenderAction -> Camera -> RenderContext ()
+renderText (RenderObjects objs) camera = do
+  xf <- get
+  config <- ask
+  liftIO $
+    divideAndRenderROs
+    (map (xformObject xf) $ filter ((elem Text) . flags) objs)
+    camera
+    (fontLight config)
+renderText (RenderTransformed xf act) camera = do
+  oldxf <- get
+  withRWST (\x s -> (x, transform xf s)) $ renderText act camera
+  put oldxf
+renderText (RenderClipped _ act) camera = do
+  -- !FIXME! ignoring clipped text...
+  liftIO $ putStrLn "Warning: Unable to render clipped text!"
+  renderText act camera
+renderText (RenderCons act1 act2) camera = renderText act1 camera >> renderText act2 camera
+
 performRenderActions :: [Light] -> Camera -> RenderActions -> RenderContext ()
 performRenderActions lights camera actions = do
   mapM_ (\l -> renderLight (renderScene actions) camera l) lights
@@ -280,6 +303,7 @@ performRenderActions lights camera actions = do
       0 (fromIntegral szx) (fromIntegral szy) 0   -- Match the screen size
       0.01 50.0                                   -- The near and far planes
   renderLight (renderUI actions) cam (uiLight config)
+  renderText (renderUI actions) cam
 
 type AppendObjectFn = RenderObject -> RenderAction -> RenderAction
 

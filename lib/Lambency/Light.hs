@@ -1,6 +1,7 @@
 module Lambency.Light (
   createSpotlight,
   createNoLight,
+  createFontLight,
   setAmbient,
 ) where
 
@@ -45,3 +46,13 @@ createNoLight = let
   in do
     shdr <- createTransparentShader
     return $ Light shdr shdrMap Nothing
+
+createFontLight :: IO (Light)
+createFontLight = let
+  shdrMap = Map.fromList [
+    ("color", Vector3Val (V3 1 1 1)),
+    ("alpha", FloatVal 1.0),
+    ("texCoordMatrix", Matrix3Val eye3)]
+  in do
+    shdr <- createFontShader
+    return $ Light shdr shdrMap Nothing  

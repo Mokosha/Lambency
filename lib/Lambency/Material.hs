@@ -2,6 +2,7 @@ module Lambency.Material (
   getShaderMap,
   createSimpleMaterial,
   createTexturedMaterial,
+  createMaskedMaterial,
   switchTexture
 ) where
 
@@ -21,6 +22,9 @@ createSimpleMaterial =
 
 createTexturedMaterial :: Texture -> Material
 createTexturedMaterial tex = Map.singleton "diffuseTex" (TextureVal tex)
+
+createMaskedMaterial :: Texture -> Material
+createMaskedMaterial tex = Map.singleton "maskTex" (TextureVal tex)
 
 switchTexture :: Material -> String -> Texture -> Material
 switchTexture shdrMap name tex = Map.adjust (\_ -> (TextureVal tex)) name shdrMap

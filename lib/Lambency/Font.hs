@@ -91,8 +91,8 @@ loadSystemFont = let
   systemOffsets = [V2 x 0 | x <- [0,14..]]
   systemSizes = repeat (V2 13 24)
   in do
-    fontTexFile <- getDataFileName $ "font" <.> "png"
-    Just s <- loadAnimatedSprite fontTexFile systemSizes systemOffsets
+    Just tex <- getDataFileName ("font" <.> "png") >>= loadTexture 
+    Just s <- loadAnimatedSpriteWithMask tex systemSizes systemOffsets
     return $ mkFont s charString (repeat zero) (repeat zero)
 
 --------------------------------------------------------------------------------
@@ -181,5 +181,5 @@ loadTTFont filepath fontSize = do
   let texOffsets = snd $ mapAccumL (\a (w, _) -> (a + w, V2 a 0)) 0 sizes
       sizesV = map (\(x, y) -> V2 x y) sizes
 
-  Just s <- loadAnimatedSpriteWithTexture tex sizesV texOffsets
+  Just s <- loadAnimatedSpriteWithMask tex sizesV texOffsets
   return $ mkFont s charString advances offsets
