@@ -262,7 +262,7 @@ renderLight (RenderTransformed xf act) camera light = do
 
 renderLight (RenderObjects ros) camera light = do
   xf <- get
-  liftIO $ divideAndRenderROs (map (xformObject xf) ros) camera light
+  liftIO $ divideAndRenderROs (map (xformObject xf) (filter (not . elem Text . flags) ros)) camera light
 
 renderLight (RenderCons act1 act2) camera light = do
   renderLight act1 camera light
