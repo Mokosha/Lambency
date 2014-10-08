@@ -204,7 +204,7 @@ handleScore f = scoreWire 0 0
 
 gameFeedback :: L.RenderObject -> L.RenderObject -> IO (L.GameWire (Int, Ball) (Int, Ball))
 gameFeedback quad circle = do
-  sysFont <- getDataFileName ("kenpixel.ttf") >>= L.loadTTFont 36 (V3 0 0 0)
+  sysFont <- getDataFileName ("kenpixel.ttf") >>= L.loadTTFont 36 (V3 1 1 1)
   sound <- getDataFileName ("pong-bloop.wav") >>= L.loadSound
   return $ (second $
             (collideWith True sound keyHandler) >>>
@@ -228,28 +228,17 @@ pongCam = pure zero >>> (L.mk2DCam screenWidth screenHeight)
 --------------------------------------------------
 -- Init
 
-whiteHack :: IO (L.GameWire a a)
-whiteHack = do
-  white <- L.createSolidTexture (255, 255, 255, 255)
-  quad <- L.createRenderObject L.quad (L.createTexturedMaterial white)
-  return $ mkGen_ (\a -> renderQuad quad >> return (Right a))
-  where
-    xf = L.translate (V3 0 0 (-2)) $
-         L.nonuniformScale (vi2f3 $ V3 screenWidth screenHeight 1) L.identity
-    renderQuad q = L.addRenderAction xf q
-
 loadGame :: IO (L.Game Int)
 loadGame = do
-  black <- L.createSolidTexture (0, 0, 0, 255)
-  quad <- L.createRenderObject L.quad (L.createTexturedMaterial black)
+  white <- L.createSolidTexture (255, 255, 255, 255)
+  quad <- L.createRenderObject L.quad (L.createTexturedMaterial white)
   nolight <- L.createNoLight
   w <- gameWire quad quad
-  hack <- whiteHack
   return $ L.Game { L.staticLights = [nolight],
                     L.staticGeometry = [mkWall False quad, mkWall True quad] ++ dashedMidsection quad,
                     L.mainCamera = pongCam,
                     L.dynamicLights = [],
-                    L.gameLogic = hack >>> w >>> L.quitWire GLFW.Key'Q}
+                    L.gameLogic = w >>> L.quitWire GLFW.Key'Q}
 
 main :: IO ()
 main = L.runWindow screenWidth screenHeight "Pong Demo" 0 loadGame
