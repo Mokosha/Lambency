@@ -260,9 +260,10 @@ renderLight (RenderTransformed xf act) camera light = do
   withRWST (\x s -> (x, transform xf s)) $ renderLight act camera light
   put oldxf
 
-renderLight (RenderObjects ros) camera light = do
+renderLight (RenderObjects ros') camera light = do
   xf <- get
-  liftIO $ divideAndRenderROs (map (xformObject xf) (filter (not . elem Text . flags) ros)) camera light
+  let ros = map (xformObject xf) $ filter (not . elem Text . flags) ros'
+  liftIO $ divideAndRenderROs ros camera light
 
 renderLight (RenderCons act1 act2) camera light = do
   renderLight act1 camera light
