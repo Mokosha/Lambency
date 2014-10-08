@@ -86,14 +86,14 @@ charString :: [Char]
 charString = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ"
              ++ "[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 
-loadSystemFont :: IO (Font)
-loadSystemFont = let
+loadSystemFont :: V3 Float -> IO (Font)
+loadSystemFont color = let
   systemOffsets = [V2 x 0 | x <- [0,14..]]
   systemSizes = repeat (V2 13 24)
   in do
     Just tex <- getDataFileName ("font" <.> "png") >>= loadTexture 
     Just s <- loadAnimatedSpriteWithMask tex systemSizes systemOffsets
-    return $ mkFont s charString (repeat zero) (repeat zero)
+    return $ mkFont (changeSpriteColor color s) charString (repeat zero) (repeat zero)
 
 --------------------------------------------------------------------------------
 -- Freetype fonts
@@ -147,8 +147,8 @@ uploadGlyph ft_face tex widthAccum c = do
     cvt :: (Enum a, Enum b) => a -> b
     cvt = toEnum . fromEnum
 
-loadTTFont :: FilePath -> Int -> IO (Font)
-loadTTFont filepath fontSize = do
+loadTTFont :: Int -> V3 Float -> FilePath -> IO (Font)
+loadTTFont fontSize fontColor filepath = do
   -- Create local copy of freetype library... this will free itself once it
   -- goes out of scope...
   ft_library <- alloca $ \p -> do { runFreeType $ ft_Init_FreeType p; peek p }
@@ -182,4 +182,4 @@ loadTTFont filepath fontSize = do
       sizesV = map (\(x, y) -> V2 x y) sizes
 
   Just s <- loadAnimatedSpriteWithMask tex sizesV texOffsets
-  return $ mkFont s charString advances offsets
+  return $ mkFont (changeSpriteColor fontColor s) charString advances offsets

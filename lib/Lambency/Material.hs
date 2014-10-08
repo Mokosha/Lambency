@@ -3,6 +3,7 @@ module Lambency.Material (
   createSimpleMaterial,
   createTexturedMaterial,
   createMaskedMaterial,
+  setMaterialColor,
   switchTexture
 ) where
 
@@ -11,6 +12,7 @@ import Lambency.Types
 import Lambency.Texture
 
 import qualified Data.Map as Map
+import Linear.V3
 --------------------------------------------------------------------------------
 
 getShaderMap :: Material -> ShaderMap
@@ -25,6 +27,9 @@ createTexturedMaterial tex = Map.singleton "diffuseTex" (TextureVal tex)
 
 createMaskedMaterial :: Texture -> Material
 createMaskedMaterial tex = Map.singleton "maskTex" (TextureVal tex)
+
+setMaterialColor :: V3 Float -> Material -> Material
+setMaterialColor c = Map.insert "color" (Vector3Val c)
 
 switchTexture :: Material -> String -> Texture -> Material
 switchTexture shdrMap name tex = Map.adjust (\_ -> (TextureVal tex)) name shdrMap

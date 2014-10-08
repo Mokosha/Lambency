@@ -204,7 +204,7 @@ handleScore f = scoreWire 0 0
 
 gameFeedback :: L.RenderObject -> L.RenderObject -> IO (L.GameWire (Int, Ball) (Int, Ball))
 gameFeedback quad circle = do
-  sysFont <- getDataFileName ("kenpixel.ttf") >>= flip L.loadTTFont 36
+  sysFont <- getDataFileName ("kenpixel.ttf") >>= L.loadTTFont 36 (V3 0 0 0)
   sound <- getDataFileName ("pong-bloop.wav") >>= L.loadSound
   return $ (second $
             (collideWith True sound keyHandler) >>>

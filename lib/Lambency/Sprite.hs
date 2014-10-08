@@ -1,6 +1,7 @@
 module Lambency.Sprite (
   SpriteFrame(..),
   Sprite(..),
+  changeSpriteColor,
   loadStaticSprite,
   loadStaticSpriteWithTexture,
   loadStaticSpriteWithMask,
@@ -50,13 +51,23 @@ updateScale (V2 sx sy) (V2 tx ty) =
   Map.insert "texCoordMatrix" (Matrix3Val $
                                V3 (V3 sx 0 0) (V3 0 sy 0) (V3 tx ty 1))
 
+-- !FIXME! This function shouldn't be here and we should really be using lenses
+mapROMaterial :: (Material -> Material) -> RenderObject -> RenderObject
+mapROMaterial fn ro = ro { material = fn (material ro) }
+
+mapFrameRO :: (RenderObject -> RenderObject) -> SpriteFrame -> SpriteFrame
+mapFrameRO fn sf = sf { frameRO = fn (frameRO sf) }
+
 addTextFlag :: SpriteFrame -> SpriteFrame
-addTextFlag sf = sf { frameRO = (frameRO sf) { flags = [Text, Transparent] } }
+addTextFlag = mapFrameRO $ \ro -> ro { flags = [Text, Transparent] }
+
+changeSpriteColor :: V3 Float -> Sprite -> Sprite
+changeSpriteColor c = Sprite . fmap (mapFrameRO $ mapROMaterial $ setMaterialColor c) . getFrames
 
 initStaticSprite :: Bool -> Texture -> IO (Sprite)
 initStaticSprite isMask tex = do
-  let material = if isMask then createMaskedMaterial tex else createTexturedMaterial tex
-  ro <- createRenderObject quad material
+  let mat = if isMask then createMaskedMaterial tex else createTexturedMaterial tex
+  ro <- createRenderObject quad mat
   return . Sprite . cycleSingleton $ SpriteFrame {
     offset = zero,
     spriteSize = textureSize tex,
@@ -65,8 +76,8 @@ initStaticSprite isMask tex = do
 
 initAnimatedSprite :: Bool -> [V2 Int] -> [V2 Int] -> Texture -> IO (Sprite)
 initAnimatedSprite isMask frameSzs offsets tex = do
-  let material = if isMask then createMaskedMaterial tex else createTexturedMaterial tex
-  ro <- createRenderObject quad material
+  let mat = if isMask then createMaskedMaterial tex else createTexturedMaterial tex
+  ro <- createRenderObject quad mat
   return . Sprite . cyclicFromList $ map (genFrame ro) (zip frameSzs offsets)
   where
     genFrame :: RenderObject -> (V2 Int, V2 Int) -> SpriteFrame
