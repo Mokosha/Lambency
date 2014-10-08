@@ -64,6 +64,7 @@ import FRP.Netwire.Input
 import FRP.Netwire.Input.GLFW
 
 import System.CPUTime
+import System.IO
 --------------------------------------------------------------------------------
 
 initLambency :: IO ()
@@ -264,8 +265,8 @@ runGame gs = do
   frameTime <-
     if needsRender
     then liftIO $ do
-      t <- getCPUTime         
-                 
+      t <- getCPUTime
+
       -- !FIXME! This should be moved to the camera...
       GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
       clearBuffers
@@ -293,6 +294,9 @@ runGame gs = do
 
 run :: GLFW.Window -> a -> Game a -> IO ()
 run win initialGameObject initialGame = do
+  oldBuffering <- hGetBuffering stdout
+  hSetBuffering stdout NoBuffering
+
   GLFW.swapInterval 1
   ictl <- mkInputControl win
   let session = W.countSession (double2Float physicsDeltaTime) W.<*> W.pure ()
@@ -306,7 +310,9 @@ run win initialGameObject initialGame = do
 
   let statePrg = runReaderT (runLoop curTime) (renderCfg, ictl, win)
   evalStateT statePrg $ GameLoopState initialGameObject initialGame session (toEnum 0) 0
-  
+
+  hSetBuffering stdout oldBuffering
+
 runWindow :: Int -> Int -> String -> a -> IO (Game a) -> IO ()
 runWindow width height title initialGameObject loadGamePrg = do
   Just win <- makeWindow width height title
