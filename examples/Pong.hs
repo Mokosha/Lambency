@@ -104,7 +104,7 @@ dashedMidsection ro = [(L.translate (tr x) $ L.nonuniformScale sc L.identity, ro
     sc = V3 3 20 1
 
     tr :: Int -> V3 Float
-    tr x = 0.5 *^ (vi2f3 $ V3 screenWidth (80 * x) 0)
+    tr x = 0.5 *^ (vi2f3 $ V3 screenWidth (80 * x) (-1)) ^-^ (V3 1.5 0 0)
 
 wallXF :: L.Transform
 wallXF = L.nonuniformScale (vi2f3 $ V3 screenWidth wallHeight 1) L.identity
