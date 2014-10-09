@@ -39,7 +39,12 @@ library
                        Lambency.Mesh
                        Lambency.GameObject
                        Lambency.Render
+
                        Lambency.Shader
+                       Lambency.Shader.Var
+                       Lambency.Shader.Program
+                       Lambency.Shader.Expr
+
                        Lambency.Sprite
                        Lambency.Texture
                        Lambency.Transform
