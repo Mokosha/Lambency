@@ -5,6 +5,14 @@ module Lambency.Vertex (
   OVertex3,
   OTVertex3,
 
+  VertexTy,
+
+  vertex2Ty,
+  vertex3Ty,
+  texVertex3Ty,
+  normVertex3Ty,
+  normTexVertex3Ty,
+
   Vertex(..),
   HasTextureCoordinates(..),
 
@@ -35,6 +43,30 @@ data Vertex3 = Vertex3 !Vec3f deriving (Show, Read)
 data TVertex3 = TVertex3 !Vec3f !Vec2f deriving (Show, Read)
 data OVertex3 = OVertex3 !Vec3f !Vec3f deriving (Show, Read)
 data OTVertex3 = OTVertex3 !Vec3f !Vec3f !Vec2f deriving (Show, Read)
+
+data VertexTyRep = Vertex2Ty
+                 | Vertex3Ty
+                 | TVertex3Ty
+                 | OVertex3Ty
+                 | OTVertex3Ty
+                   deriving (Show, Read, Ord, Eq, Bounded, Enum)
+
+type VertexTy a = VertexTyRep
+
+vertex2Ty :: VertexTy Vertex2
+vertex2Ty = Vertex2Ty
+
+vertex3Ty :: VertexTy Vertex3
+vertex3Ty = Vertex3Ty
+
+texVertex3Ty :: VertexTy TVertex3
+texVertex3Ty = TVertex3Ty
+
+normVertex3Ty :: VertexTy OVertex3
+normVertex3Ty = OVertex3Ty
+
+normTexVertex3Ty :: VertexTy OTVertex3
+normTexVertex3Ty = OTVertex3Ty
 
 instance Storable Vertex2 where
   sizeOf _ = sizeOf (undefined :: Vec2f)
@@ -98,33 +130,33 @@ class Storable a => Vertex a where
   getAttribNames :: a -> [String]
 
 instance Vertex Vertex2 where
-  getOpenGLDescriptors (Vertex2 _) = [
+  getOpenGLDescriptors _ = [
     GL.VertexArrayDescriptor 2 GL.Float 0 (nullPtr :: Ptr Float)]
-  getAttribNames (Vertex2 _) = ["position"]
+  getAttribNames _ = ["position"]
 
 instance Vertex Vertex3 where
-  getOpenGLDescriptors (Vertex3 _) = [
+  getOpenGLDescriptors _ = [
     GL.VertexArrayDescriptor 3 GL.Float 0 (nullPtr :: Ptr Float)]
-  getAttribNames (Vertex3 _) = ["position"]
+  getAttribNames _ = ["position"]
 
 instance Vertex TVertex3 where
-  getOpenGLDescriptors (TVertex3 _ _) = [
+  getOpenGLDescriptors _ = [
     GL.VertexArrayDescriptor 3 GL.Float 20 (nullPtr :: Ptr Float),
     GL.VertexArrayDescriptor 2 GL.Float 20 (plusPtr (nullPtr :: Ptr Float) 12)]
-  getAttribNames (TVertex3 _ _) = ["position", "texCoord"]
+  getAttribNames _ = ["position", "texCoord"]
 
 instance Vertex OVertex3 where
-  getOpenGLDescriptors (OVertex3 _ _) = [
+  getOpenGLDescriptors _ = [
     GL.VertexArrayDescriptor 3 GL.Float 24 (nullPtr :: Ptr Float),
     GL.VertexArrayDescriptor 3 GL.Float 24 (plusPtr (nullPtr :: Ptr Float) 12)]
-  getAttribNames (OVertex3 _ _) = ["position", "normal"]
+  getAttribNames _ = ["position", "normal"]
 
 instance Vertex OTVertex3 where
-  getOpenGLDescriptors (OTVertex3 _ _ _) = [
+  getOpenGLDescriptors _ = [
     GL.VertexArrayDescriptor 3 GL.Float 32 (nullPtr :: Ptr Float),
     GL.VertexArrayDescriptor 3 GL.Float 32 (plusPtr (nullPtr :: Ptr Float) 12),
     GL.VertexArrayDescriptor 2 GL.Float 32 (plusPtr (nullPtr :: Ptr Float) 24)]
-  getAttribNames (OTVertex3 _ _ _) = ["position", "normal", "texCoord"]
+  getAttribNames _ = ["position", "normal", "texCoord"]
 
 class HasTextureCoordinates a where
   getTextureCoordinates :: a -> Vec2f
