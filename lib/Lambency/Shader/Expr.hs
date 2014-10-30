@@ -1,4 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
 module Lambency.Shader.Expr where
 
 --------------------------------------------------------------------------------
@@ -127,7 +128,7 @@ data Sw2D4D a = Sw2D4D (Sw2D3D a) SwizzleVar
 data Sw3D4D a = Sw3D4D (Sw3D3D a) SwizzleVar
 data Sw4D4D a = Sw4D4D (Sw4D3D a) SwizzleVar
 
-class Swizzlable a b where
+class Swizzlable a b | a -> b where
   startSwizzle :: Expr (a t) -> b t
 
 instance Swizzlable V2 Sw2D where
@@ -151,7 +152,7 @@ instance SwizzleExpressibleS Sw3D1D where
 instance SwizzleExpressibleS Sw4D1D where
   finishSwizzleS (Sw4D1D e v) = SwizzleExpr e (v, Nothing, Nothing, Nothing)
 
-class SwizzleExpressibleV a b where
+class SwizzleExpressibleV a b | a -> b where
   finishSwizzleV :: a t -> Expr (b t)
 
 instance SwizzleExpressibleV Sw2D V2 where
@@ -190,7 +191,7 @@ instance SwizzleExpressibleV Sw3D4D V4 where
 instance SwizzleExpressibleV Sw4D4D V4 where
   finishSwizzleV (Sw4D4D (Sw4D3D (Sw4D2D (Sw4D1D e v1) v2) v3) v4) = SwizzleExpr e (v1, Just v2, Just v3, Just v4)
 
-class Swizzlable2D a b where
+class Swizzlable2D a b | a -> b where
   _x_ :: a t -> b t
   _y_ :: a t -> b t
 
@@ -242,7 +243,7 @@ instance Swizzlable2D Sw4D3D Sw4D4D where
   _x_ = flip Sw4D4D SwizzleX
   _y_ = flip Sw4D4D SwizzleY
 
-class Swizzlable3D a b where
+class Swizzlable3D a b | a -> b where
   _z_ :: a t -> b t
 
 instance Swizzlable3D Sw3D Sw3D1D where
@@ -269,7 +270,7 @@ instance Swizzlable3D Sw3D3D Sw3D4D where
 instance Swizzlable3D Sw4D3D Sw4D4D where
   _z_ = flip Sw4D4D SwizzleZ
 
-class Swizzlable4D a b where
+class Swizzlable4D a b | a -> b where
   _w_ :: a t -> b t
 
 instance Swizzlable4D Sw4D Sw4D1D where
