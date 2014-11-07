@@ -8,8 +8,6 @@ import Control.Monad.RWS.Strict
 
 import qualified Data.Map as Map
 
-import qualified Graphics.Rendering.OpenGL as GL
-
 import Lambency.Vertex
 import Lambency.Shader.Var
 import Lambency.Shader.Expr
