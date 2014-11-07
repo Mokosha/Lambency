@@ -14,6 +14,11 @@ module Lambency.Vertex (
   normTexVertex3Ty,
 
   Vertex(..),
+
+  VertexAttributeTy(..),
+  VertexAttribute(..),
+  vertexAttributesToOpenGL,
+
   HasTextureCoordinates(..),
 
   mkVertex3,
@@ -37,6 +42,24 @@ import Foreign.Ptr
 
 type Vec2f = V2 Float
 type Vec3f = V3 Float
+
+data VertexAttributeTy = FloatAttribTy
+                       | IntAttribTy
+                       | DoubleAttribTy
+                       deriving (Enum, Bounded, Read, Show, Eq, Ord)
+
+data VertexAttribute = VertexAttribute Int VertexAttributeTy
+
+getVertexAttributeDimension :: VertexAttribute -> Int
+getVertexAttributeDimension (VertexAttribute x _) = x
+
+getVertexAttributeByteSize :: VertexAttribute -> Int
+getVertexAttributeByteSize x = f x * g x
+  where
+    f = getVertexAttributeDimension
+    g (VertexAttribute _ FloatAttribTy) = 4
+    g (VertexAttribute _ IntAttribTy) = 4
+    g (VertexAttribute _ DoubleAttribTy) = 8
 
 data Vertex2 = Vertex2 !Vec2f deriving (Show, Read)
 data Vertex3 = Vertex3 !Vec3f deriving (Show, Read)
@@ -126,37 +149,57 @@ instance Storable OTVertex3 where
     poke (castPtr (ptr `plusPtr` 24)) uv
 
 class Storable a => Vertex a where
-  getOpenGLDescriptors :: a -> [GL.VertexArrayDescriptor Float]
+  getVertexAttributes :: a -> [VertexAttribute]
   getAttribNames :: a -> [String]
 
 instance Vertex Vertex2 where
-  getOpenGLDescriptors _ = [
-    GL.VertexArrayDescriptor 2 GL.Float 0 (nullPtr :: Ptr Float)]
+  getVertexAttributes _ = [
+    VertexAttribute 2 FloatAttribTy]
   getAttribNames _ = ["position"]
 
 instance Vertex Vertex3 where
-  getOpenGLDescriptors _ = [
-    GL.VertexArrayDescriptor 3 GL.Float 0 (nullPtr :: Ptr Float)]
+  getVertexAttributes _ = [
+    VertexAttribute 3 FloatAttribTy]
   getAttribNames _ = ["position"]
 
 instance Vertex TVertex3 where
-  getOpenGLDescriptors _ = [
-    GL.VertexArrayDescriptor 3 GL.Float 20 (nullPtr :: Ptr Float),
-    GL.VertexArrayDescriptor 2 GL.Float 20 (plusPtr (nullPtr :: Ptr Float) 12)]
+  getVertexAttributes _ = [
+    VertexAttribute 2 FloatAttribTy,
+    VertexAttribute 3 FloatAttribTy]
   getAttribNames _ = ["position", "texCoord"]
 
 instance Vertex OVertex3 where
-  getOpenGLDescriptors _ = [
-    GL.VertexArrayDescriptor 3 GL.Float 24 (nullPtr :: Ptr Float),
-    GL.VertexArrayDescriptor 3 GL.Float 24 (plusPtr (nullPtr :: Ptr Float) 12)]
+  getVertexAttributes _ = [
+    VertexAttribute 3 FloatAttribTy,
+    VertexAttribute 3 FloatAttribTy]
   getAttribNames _ = ["position", "normal"]
 
 instance Vertex OTVertex3 where
-  getOpenGLDescriptors _ = [
-    GL.VertexArrayDescriptor 3 GL.Float 32 (nullPtr :: Ptr Float),
-    GL.VertexArrayDescriptor 3 GL.Float 32 (plusPtr (nullPtr :: Ptr Float) 12),
-    GL.VertexArrayDescriptor 2 GL.Float 32 (plusPtr (nullPtr :: Ptr Float) 24)]
+  getVertexAttributes _ = [
+    VertexAttribute 3 FloatAttribTy,
+    VertexAttribute 3 FloatAttribTy,
+    VertexAttribute 2 FloatAttribTy]
   getAttribNames _ = ["position", "normal", "texCoord"]
+
+vertexAttributesToOpenGL :: [VertexAttribute] -> [GL.VertexArrayDescriptor Float]
+vertexAttributesToOpenGL attribs =
+  let bytesPerVertex = sum $ map getVertexAttributeByteSize attribs
+
+      attribTypeToGLType FloatAttribTy = GL.Float
+      attribTypeToGLType IntAttribTy = GL.Int
+      attribTypeToGLType DoubleAttribTy = GL.Double
+
+      buildVertexDescriptors _ [] = []
+      buildVertexDescriptors sz (attrib@(VertexAttribute dim ty) : rest) =
+        let desc = GL.VertexArrayDescriptor
+                   (toEnum dim)
+                   (attribTypeToGLType ty)
+                   (toEnum bytesPerVertex)
+                   (nullPtr `plusPtr` (toEnum sz))
+        in
+         desc : (buildVertexDescriptors (sz + (getVertexAttributeByteSize attrib)) rest)
+  in
+   buildVertexDescriptors 0 attribs
 
 class HasTextureCoordinates a where
   getTextureCoordinates :: a -> Vec2f
