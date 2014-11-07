@@ -32,7 +32,7 @@ bulletSpeed :: Float
 bulletSpeed = 100.0
 
 bulletDelay :: Float
-bulletDelay = 1.0
+bulletDelay = 0.2
 
 --------------------------------------------------
 -- Rendering
@@ -73,6 +73,9 @@ bulletWire pos vel bullet = mkGen $ \dt _ -> do
 shipWire :: V2 Float -> L.RenderObject -> L.RenderObject -> Ship
 shipWire pos' ship' bullet' = loop $ (second $ delay 0) >>> (shipFeedback pos' ship' bullet')
   where
+    fireWire :: L.GameWire () Bool
+    fireWire = (keyDebounced GLFW.Key'Space >>> pure True) <|> pure False
+
     shipFeedback :: V2 Float -> L.RenderObject -> L.RenderObject ->
                     L.GameWire (V2 Float, Float) ([Bullet], Float)
     shipFeedback pos ship bullet = 
@@ -81,7 +84,8 @@ shipWire pos' ship' bullet' = loop $ (second $ delay 0) >>> (shipFeedback pos' s
             nextSW = shipFeedback newPos ship bullet
             b = bulletWire newPos vel bullet
         renderQuad ship newPos shipSz
-        if (vel /= zero && t > bulletDelay)
+        (Right fire, _) <- stepWire fireWire dt $ Right ()
+        if (fire && t > bulletDelay)
           then return $ (Right ([b], 0 :: Float), nextSW) -- Spawn bullet
           else return $ (Right ([], t + (dtime dt)), nextSW)
 
