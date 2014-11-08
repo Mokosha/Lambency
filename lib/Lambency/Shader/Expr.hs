@@ -13,6 +13,8 @@ data UnaryInfix = Negate
 
 data UnaryFun = Floor
               | Ceiling
+              | Sine
+              | Cosine
               deriving(Show, Eq, Ord, Enum, Bounded)
 
 data UnaryOp = UnaryInfixOp UnaryInfix

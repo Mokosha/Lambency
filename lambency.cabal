@@ -44,6 +44,7 @@ library
                        Lambency.Shader.Var
                        Lambency.Shader.Program
                        Lambency.Shader.Expr
+                       Lambency.Shader.OpenGL
 
                        Lambency.Sprite
                        Lambency.Texture

@@ -6,8 +6,6 @@ module Lambency.Shader.Program where
 import Control.Applicative
 import Control.Monad.RWS.Strict
 
-import qualified Data.Map as Map
-
 import Lambency.Vertex
 import Lambency.Shader.Var
 import Lambency.Shader.Expr
@@ -15,23 +13,31 @@ import Lambency.Shader.Expr
 import Linear
 --------------------------------------------------------------------------------
 
-data DeclarationTy = AttributeTy
-                   | UniformTy
-                   | VaryingTy
+data DeclarationTy = AttributeDeclTy
+                   | UniformDeclTy
+                   | VaryingDeclTy
+                   | ConstDeclTy
+                   deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
 data Declaration = Attribute ShaderVarRep
                  | Uniform ShaderVarRep
                  | Varying ShaderVarRep
-                 | ConstDecl ExprRep
+                 | ConstDecl ShaderVarRep ExprRep
 
-data Statement = LocalDecl ShaderVarRep ExprRep
+getDeclType :: Declaration -> DeclarationTy
+getDeclType (Attribute _) = AttributeDeclTy
+getDeclType (Uniform _) = UniformDeclTy
+getDeclType (Varying _) = VaryingDeclTy
+getDeclType (ConstDecl _ _) = ConstDeclTy
+
+data Statement = LocalDecl ShaderVarRep (Maybe ExprRep)
                | Assignment ShaderVarRep ExprRep
-               | IfThenElse (Expr Bool) Statement Statement
+               | IfThenElse (Expr Bool) [Statement] [Statement]
 
-newtype ShaderIO = ShaderIO (Int -> ShaderVarRep)
+newtype ShaderIO = ShaderIO [ShaderVarRep]
 
-data ShaderInput i = ShaderInput ShaderIO
-data ShaderOutput o = ShaderOutput Int ShaderIO
+newtype ShaderInput i = ShaderInput ShaderIO
+newtype ShaderOutput o = ShaderOutput ShaderIO
 newtype ShaderContext i a =
   ShdrCtx { compileShdrCode :: RWS (ShaderInput i) ([Declaration], [Statement]) Int a }
   deriving (Functor, Applicative, Monad, MonadReader (ShaderInput i),
@@ -54,13 +60,12 @@ newUniformVar n t = do
   return var
 
 data ShaderProgram = ShaderProgram {
-  shaderUniforms :: Map.Map String ShaderVarRep,
   shaderDecls :: [Declaration],
   shaderStmts :: [Statement]
 }
 
 emptyPrg :: ShaderProgram
-emptyPrg = ShaderProgram Map.empty [] []
+emptyPrg = ShaderProgram [] []
 
 data Shader v = Shader {
   vertexProgram :: ShaderProgram,
@@ -80,15 +85,16 @@ mkAttributes _ =
   let attribs = getVertexAttributes (undefined :: v)
       mkVar n = ShdrVarRep ("attrib" ++ (show n)) n . attribToVarTy
   in
-   ShaderInput $ ShaderIO (zipWith mkVar [0,1..] attribs !!)
+   ShaderInput $ ShaderIO (zipWith mkVar [0,1..] attribs)
 
 getInput :: ShaderVarTyRep -> Int -> ShaderContext i (ShaderVarRep)
 getInput expected idx = do
-  (ShaderInput (ShaderIO fn)) <- ask
-  let v@(ShdrVarRep _ _ ty) = fn idx
+  (ShaderInput (ShaderIO vars)) <- ask
+  let v@(ShdrVarRep _ _ ty) = vars !! idx
   if expected == ty
     then return v
-    else error $ concat ["Type mismatch for attribute ", show idx, ": Expected Int got", show ty]
+    else error $ concat ["Type mismatch for attribute ", show idx,
+                         ": Expected ", show expected, " got ", show ty]
 
 getInputi :: Int -> ShaderContext i (ShaderVar Int)
 getInputi = getInput IntTy

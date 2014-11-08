@@ -137,7 +137,7 @@ extractVars :: [IO(String, Maybe ShaderVar)] -> IO ShaderVarMap
 extractVars iomvars = M.liftM constructMap $ sequence iomvars
   where
     constructMap :: [(String, Maybe ShaderVar)] -> ShaderVarMap
-    constructMap vs = foldl (\m (n, sv) -> Map.insert n sv m) Map.empty (gatherValid vs)
+    constructMap vs = Map.fromList (gatherValid vs)
 
     gatherValid :: [(String, Maybe ShaderVar)] -> [(String, ShaderVar)]
     gatherValid vs = catMaybes $ map (\(n, msv) -> case msv of Nothing -> Nothing
