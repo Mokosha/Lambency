@@ -84,6 +84,9 @@ binFnBS :: BinaryFunction -> String
 binFnBS Max = "max"
 binFnBS Min = "min"
 binFnBS Dot = "dot"
+binFnBS Sample1D = "sample1D"
+binFnBS Sample2D = "sample2D"
+binFnBS Sample3D = "sample3D"
 
 buildBinary :: BinaryOp -> ExprRep -> ExprRep -> BS.ByteString
 
@@ -113,6 +116,23 @@ buildTernary fn e1 e2 e3 = BS.concat [
 
 --------------------------------------------------
 
+buildVecExpr :: VecExpr -> BS.ByteString
+buildVecExpr (Vec2Expr e1 e2) = BS.concat [BS.pack "vec2(", buildExpr e1, BS.pack ", ",
+                                           buildExpr e2, BS.pack ")"]
+
+buildVecExpr (Vec3Expr e1 e2 e3) = BS.concat [BS.pack "vec3(",
+                                                buildExpr e1, BS.pack ", ",
+                                                buildExpr e2, BS.pack ", ",
+                                                buildExpr e3, BS.pack ")"]
+
+buildVecExpr (Vec4Expr e1 e2 e3 e4) = BS.concat [BS.pack "vec4(",
+                                                   buildExpr e1, BS.pack ", ",
+                                                   buildExpr e2, BS.pack ", ",
+                                                   buildExpr e3, BS.pack ", ",
+                                                   buildExpr e4, BS.pack ")"]
+
+--------------------------------------------------
+
 buildExpr :: ExprRep -> BS.ByteString
 buildExpr (VarExpr v) = BS.pack $ varName v
 buildExpr (ConstExpr c) = buildConstant c
@@ -120,6 +140,7 @@ buildExpr (SwizzleExpr e sw) = BS.concat [BS.pack "(", buildExpr e, BS.pack ")."
 buildExpr (Unary op e) = buildUnary op e
 buildExpr (Binary op e1 e2) = buildBinary op e1 e2
 buildExpr (Ternary op e1 e2 e3) = buildTernary op e1 e2 e3
+buildExpr (NewVec ve) = buildVecExpr ve
 
 buildStatement :: Statement -> BS.ByteString
 buildStatement = flip BS.append (BS.pack ";\n") . buildStmt
@@ -137,6 +158,10 @@ buildStatement = flip BS.append (BS.pack ";\n") . buildStmt
           BS.pack "} else {\n",
           buildStatements s2,
           BS.pack "}\n"]
+        buildStmt (SpecialAssignment VertexPosition v) =
+          BS.pack $ concat ["gl_Position = ", varName v, ";\n"]
+        buildStmt (SpecialAssignment FragmentColor v) =
+          BS.pack $ concat ["gl_FragColor = ", varName v, ";\n"]
 
 buildStatements :: [Statement] -> BS.ByteString
 buildStatements stmts = BS.concat $

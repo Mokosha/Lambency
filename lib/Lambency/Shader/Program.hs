@@ -30,8 +30,13 @@ getDeclType (Uniform _) = UniformDeclTy
 getDeclType (Varying _) = VaryingDeclTy
 getDeclType (ConstDecl _ _) = ConstDeclTy
 
+data SpecialVar = VertexPosition
+                | FragmentColor
+                deriving (Show, Read, Eq, Ord, Enum, Bounded)
+
 data Statement = LocalDecl ShaderVarRep (Maybe ExprRep)
                | Assignment ShaderVarRep ExprRep
+               | SpecialAssignment SpecialVar ShaderVarRep
                | IfThenElse (Expr Bool) [Statement] [Statement]
 
 newtype ShaderIO = ShaderIO [ShaderVarRep]
@@ -58,6 +63,15 @@ newUniformVar n t = do
   var <- newVar n t
   tell ([Uniform var], mempty)
   return var
+
+setE :: ShaderVarTy a -> Expr a -> ShaderContext i (ShaderVar a)
+setE ty e = do
+  v <- newVar "_t" ty
+  tell (mempty, [LocalDecl v (Just e)])
+  return v
+
+assignE :: ShaderVar a -> Expr a -> ShaderContext i ()
+assignE v e = tell (mempty, [Assignment v e])
 
 data ShaderProgram = ShaderProgram {
   shaderDecls :: [Declaration],
@@ -111,5 +125,26 @@ getInput3f = getInput Vector3Ty
 getInput4f :: Int -> ShaderContext i (ShaderVar (V4 Float))
 getInput4f = getInput Vector4Ty
 
-compileProgram :: VertexTy v -> ShaderCode v o -> ShaderCode o f -> Shader v
-compileProgram inputs vertexPrg fragmentPrg = Shader emptyPrg emptyPrg
+compileProgram :: Vertex v => VertexTy v -> ShaderCode v o -> ShaderCode o f -> Shader v
+compileProgram iptTy (ShdrCode vertexPrg) (ShdrCode fragmentPrg) =
+  let vs_input = mkAttributes iptTy
+      (ShaderOutput (ShaderIO vs_output), varID, (vs_decls, vs_stmts)) =
+        runRWS (compileShdrCode vertexPrg) vs_input 0
+      fs_input_vars = tail vs_output
+      fs_input = ShaderInput $ ShaderIO fs_input_vars
+      (ShaderOutput (ShaderIO fs_output), _, (fs_decls, fs_stmts)) =
+        runRWS (compileShdrCode fragmentPrg) fs_input 0
+
+      varyingDecls = map Varying fs_input_vars
+  in
+   Shader {
+     vertexProgram = ShaderProgram {
+        shaderDecls = vs_decls ++ varyingDecls,
+        shaderStmts = vs_stmts ++ [SpecialAssignment VertexPosition $ head vs_output]
+        },
+     fragmentProgram = ShaderProgram {
+       shaderDecls = fs_decls ++ varyingDecls,
+       shaderStmts = fs_stmts ++ [SpecialAssignment FragmentColor $ head fs_output]
+       }
+     }
+    

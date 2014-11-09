@@ -15,8 +15,14 @@ module Lambency.Shader (
 
 --------------------------------------------------------------------------------
 
+import Lambency.Vertex
 import Lambency.Texture
 import Lambency.Types
+
+import qualified Lambency.Shader.Var as I
+import qualified Lambency.Shader.Expr as I
+import qualified Lambency.Shader.Program as I
+import qualified Lambency.Shader.OpenGL as I
 
 import Paths_lambency
 
@@ -155,6 +161,7 @@ createSimpleShader = do
      (Matrix3Ty, "texCoordMatrix")]
   return $ Shader prg vars
 
+{--
 createTransparentShader :: IO (Shader)
 createTransparentShader = do
   vs <- getShaderPath "simple" GL.VertexShader
@@ -168,6 +175,72 @@ createTransparentShader = do
      (Matrix4Ty, "mvpMatrix"),
      (Matrix3Ty, "texCoordMatrix")]
   return $ Shader prg vars
+
+attribute vec3 position;
+attribute vec2 texCoord;
+
+uniform mat4 mvpMatrix;
+uniform mat3 texCoordMatrix;
+
+varying vec2 uv;
+
+void main() {
+  vec3 uvp = texCoordMatrix * vec3(texCoord, 1.0);
+  uv = (uvp / uvp.z).xy; // Perspective correction
+
+  gl_Position = mvpMatrix * vec4(position, 1.0);
+}
+
+varying vec2 uv;
+
+uniform sampler2D diffuseTex;
+uniform float alpha;
+
+void main() {
+  gl_FragColor = texture2D(diffuseTex, uv);
+  gl_FragColor.a *= alpha;
+}
+--}
+
+createTransparentShader :: IO (Shader)
+createTransparentShader =
+  let vshdr :: I.ShaderCode TVertex3 Vertex2
+      vshdr = I.ShdrCode (do
+        position <- I.getInput3f 0
+        texCoord <- I.getInput2f 1
+
+        mvpMatrix <- I.newUniformVar "mvpMatrix" I.matrix4Ty
+        texCoordMatrix <- I.newUniformVar "texCoordMatrix" I.matrix3Ty
+
+        uvp <- I.setE I.vector3fTy $
+               I.xform3f (I.mkVarExpr texCoordMatrix) $
+               (I.mkVec3f_21 (I.mkVarExpr texCoord) (I.mkConstf 1))
+
+        uv <- I.setE I.vector2fTy $
+              I.finishSwizzleV . I._y_ . I._x_ . I.swizzle3D $
+              I.div3f (I.mkVarExpr uvp) ((I.finishSwizzleS . I._z_ . I.swizzle3D) (I.mkVarExpr uvp))
+
+        out_pos <- I.setE I.vector4fTy $ I.mkVarExpr mvpMatrix 
+
+        return $ I.ShaderOutput $ I.ShaderIO [out_pos, uv])
+
+      fshdr :: I.ShaderCode Vertex2 ()
+      fshdr = I.ShdrCode (do
+        uv <- I.getInput2f 0
+
+        diffuseTex <- I.newUniformVar "diffuseTex" I.sampler2DTy
+        alpha <- I.newUniformVar "alpha" I.floatTy
+
+        texColor <- I.setE I.vector4fTy $ I.sample2D (I.mkVarExpr diffuseTex) (I.mkVarExpr uv)
+        out_color <- I.setE I.vector4fTy $ I.mkVec4f_31
+                     ((I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D) (I.mkVarExpr texColor)) $
+                     I.multf ((I.finishSwizzleS . I._w_ . I.swizzle4D) (I.mkVarExpr texColor)) (I.mkVarExpr alpha)
+
+        return $ I.ShaderOutput $ I.ShaderIO [out_color])
+
+      shdr = I.compileProgram texVertex3Ty vshdr fshdr
+  in
+   I.generateOpenGLShader shdr
 
 createFontShader :: IO (Shader)
 createFontShader = do

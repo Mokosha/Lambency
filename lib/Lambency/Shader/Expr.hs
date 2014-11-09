@@ -30,6 +30,9 @@ data BinaryInfix = Add
 data BinaryFunction = Max
                     | Min
                     | Dot
+                    | Sample1D
+                    | Sample2D
+                    | Sample3D
                     deriving(Show, Eq, Ord, Enum, Bounded)
 
 data BinaryOp = BinaryInfixOp BinaryInfix
@@ -53,12 +56,17 @@ data Constant = ConstMat2 (M22 Float)
               | ConstInt Int
                 deriving (Show, Ord, Eq)
 
+data VecExpr = Vec2Expr ExprRep ExprRep
+             | Vec3Expr ExprRep ExprRep ExprRep
+             | Vec4Expr ExprRep ExprRep ExprRep ExprRep
+
 data ExprRep = VarExpr ShaderVarRep
              | ConstExpr Constant
              | SwizzleExpr ExprRep (SwizzleVar, Maybe SwizzleVar, Maybe SwizzleVar, Maybe SwizzleVar)
              | Unary UnaryOp ExprRep
              | Binary BinaryOp ExprRep ExprRep
              | Ternary TernaryOp ExprRep ExprRep ExprRep
+             | NewVec VecExpr
 
 type Expr a = ExprRep
 
@@ -98,6 +106,86 @@ mkConsti i = ConstExpr $ ConstInt i
 mkVarExpr :: ShaderVar a -> Expr a
 mkVarExpr = VarExpr
 
+xform3f :: Expr (M33 Float) -> Expr (V3 Float) -> Expr (V3 Float)
+xform3f = Binary (BinaryInfixOp Mult)
+
+xform4f :: Expr (M44 Float) -> Expr (V4 Float) -> Expr (V4 Float)
+xform4f = Binary (BinaryInfixOp Mult)
+
+multf :: Expr Float -> Expr Float -> Expr Float
+multf = Binary (BinaryInfixOp Mult)
+
+div3f :: Expr (V3 Float) -> Expr Float -> Expr (V3 Float)
+div3f = Binary (BinaryInfixOp Div)
+
+sample1D :: Expr Sampler1D -> Expr Float -> Expr (V4 Float)
+sample1D = Binary (BinaryFunctionOp Sample1D)
+
+sample2D :: Expr Sampler2D -> Expr (V2 Float) -> Expr (V4 Float)
+sample2D = Binary (BinaryFunctionOp Sample2D)
+
+sample3D :: Expr Sampler3D -> Expr (V3 Float) -> Expr (V4 Float)
+sample3D = Binary (BinaryFunctionOp Sample3D)
+
+--------------------------------------------------------------------------------
+
+mkVec2f :: Expr Float -> Expr Float -> Expr (V2 Float)
+mkVec2f x y = NewVec $ Vec2Expr x y
+
+mkVec3f_111 :: Expr Float -> Expr Float -> Expr Float -> Expr (V3 Float)
+mkVec3f_111 x y z = NewVec $ Vec3Expr x y z
+
+mkVec3f_12 :: Expr Float -> Expr (V2 Float) -> Expr (V3 Float)
+mkVec3f_12 x v =
+  let sw = swizzle2D v
+      f = finishSwizzleS :: Sw2D1D Float -> Expr Float
+  in NewVec $ Vec3Expr x ((f . _x_) sw) ((f . _y_) sw)
+
+mkVec3f_21 :: Expr (V2 Float) -> Expr Float -> Expr (V3 Float)
+mkVec3f_21 v z =
+  let sw = swizzle2D v
+      f = finishSwizzleS
+  in NewVec $ Vec3Expr ((f . _x_) sw) ((f . _y_) sw) z
+
+mkVec4f_1111 :: Expr Float -> Expr Float -> Expr Float -> Expr Float -> Expr (V4 Float)
+mkVec4f_1111 x y z w = NewVec $ Vec4Expr x y z w
+
+mkVec4f_211 :: Expr (V2 Float) -> Expr Float -> Expr Float -> Expr (V4 Float)
+mkVec4f_211 v z w =
+  let sw = swizzle2D v
+      f = finishSwizzleS
+  in NewVec $ Vec4Expr ((f . _x_) sw) ((f . _y_) sw) z w
+
+mkVec4f_121 :: Expr Float -> Expr (V2 Float) -> Expr Float -> Expr (V4 Float)
+mkVec4f_121 x v w =
+  let sw = swizzle2D v
+      f = finishSwizzleS
+  in NewVec $ Vec4Expr x ((f . _x_) sw) ((f . _y_) sw) w
+
+mkVec4f_112 :: Expr Float -> Expr Float -> Expr (V2 Float) -> Expr (V4 Float)
+mkVec4f_112 x y v =
+  let sw = swizzle2D v
+      f = finishSwizzleS
+  in NewVec $ Vec4Expr x y ((f . _x_) sw) ((f . _y_) sw)
+
+mkVec4f_22 :: Expr (V2 Float) -> Expr (V2 Float) -> Expr (V4 Float)
+mkVec4f_22 v1 v2 =
+  let s = swizzle2D
+      f = finishSwizzleS
+  in NewVec $ Vec4Expr ((f . _x_ . s) v1) ((f . _y_ . s) v1) ((f . _x_ . s) v2) ((f . _y_ . s) v2)
+
+mkVec4f_31 :: Expr (V3 Float) -> Expr Float -> Expr (V4 Float)
+mkVec4f_31 v w =
+  let s = swizzle3D
+      f = finishSwizzleS
+  in NewVec $ Vec4Expr ((f . _x_ . s) v) ((f . _y_ . s) v) ((f . _z_ . s) v) w
+
+mkVec4f_13 :: Expr Float -> Expr (V3 Float) -> Expr (V4 Float)
+mkVec4f_13 x v =
+  let s = swizzle3D
+      f = finishSwizzleS
+  in NewVec $ Vec4Expr x ((f . _x_ . s) v) ((f . _y_ . s) v) ((f . _z_ . s) v)
+
 --------------------------------------------------------------------------------
 
 -- Swizzle
@@ -130,17 +218,15 @@ data Sw2D4D a = Sw2D4D (Sw2D3D a) SwizzleVar
 data Sw3D4D a = Sw3D4D (Sw3D3D a) SwizzleVar
 data Sw4D4D a = Sw4D4D (Sw4D3D a) SwizzleVar
 
-class Swizzlable a b | a -> b where
-  startSwizzle :: Expr (a t) -> b t
 
-instance Swizzlable V2 Sw2D where
-  startSwizzle = Sw2D
+swizzle2D :: Expr (V2 a) -> Sw2D a
+swizzle2D = Sw2D
 
-instance Swizzlable V3 Sw3D where
-  startSwizzle = Sw3D
+swizzle3D :: Expr (V3 a) -> Sw3D a
+swizzle3D = Sw3D
 
-instance Swizzlable V4 Sw4D where
-  startSwizzle = Sw4D
+swizzle4D :: Expr (V4 a) -> Sw4D a
+swizzle4D = Sw4D
 
 class SwizzleExpressibleS a where
   finishSwizzleS :: a t -> Expr t
