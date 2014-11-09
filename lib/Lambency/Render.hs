@@ -284,7 +284,7 @@ renderText (RenderTransformed xf act) camera = do
   put oldxf
 renderText (RenderClipped _ act) camera = do
   -- !FIXME! ignoring clipped text...
-  liftIO $ putStrLn "Warning: Unable to render clipped text!"
+  -- liftIO $ putStrLn "Warning: Unable to render clipped text!"
   renderText act camera
 renderText (RenderCons act1 act2) camera = renderText act1 camera >> renderText act2 camera
 
