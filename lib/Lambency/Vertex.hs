@@ -164,8 +164,8 @@ instance Vertex Vertex3 where
 
 instance Vertex TVertex3 where
   getVertexAttributes _ = [
-    VertexAttribute 2 FloatAttribTy,
-    VertexAttribute 3 FloatAttribTy]
+    VertexAttribute 3 FloatAttribTy,
+    VertexAttribute 2 FloatAttribTy]
   getAttribNames _ = ["position", "texCoord"]
 
 instance Vertex OVertex3 where
