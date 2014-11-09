@@ -84,8 +84,10 @@ data ShaderVarTy = Matrix2Ty
                  | Matrix4Ty
                  | Matrix3ListTy
                  | Matrix4ListTy
+                 | Vector2Ty
                  | Vector3Ty
                  | Vector4Ty
+                 | Vector2ListTy
                  | Vector3ListTy
                  | Vector4ListTy
                  | IntTy
