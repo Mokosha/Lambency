@@ -74,22 +74,22 @@ data VertexTyRep = Vertex2Ty
                  | OTVertex3Ty
                    deriving (Show, Read, Ord, Eq, Bounded, Enum)
 
-type VertexTy a = VertexTyRep
+newtype VertexTy a = VertexTy VertexTyRep
 
 vertex2Ty :: VertexTy Vertex2
-vertex2Ty = Vertex2Ty
+vertex2Ty = VertexTy Vertex2Ty
 
 vertex3Ty :: VertexTy Vertex3
-vertex3Ty = Vertex3Ty
+vertex3Ty = VertexTy Vertex3Ty
 
 texVertex3Ty :: VertexTy TVertex3
-texVertex3Ty = TVertex3Ty
+texVertex3Ty = VertexTy TVertex3Ty
 
 normVertex3Ty :: VertexTy OVertex3
-normVertex3Ty = OVertex3Ty
+normVertex3Ty = VertexTy OVertex3Ty
 
 normTexVertex3Ty :: VertexTy OTVertex3
-normTexVertex3Ty = OTVertex3Ty
+normTexVertex3Ty = VertexTy OTVertex3Ty
 
 instance Storable Vertex2 where
   sizeOf _ = sizeOf (undefined :: Vec2f)
