@@ -37,12 +37,74 @@ data SpecialVar = VertexPosition
 data Statement = LocalDecl ShaderVarRep (Maybe ExprRep)
                | Assignment ShaderVarRep ExprRep
                | SpecialAssignment SpecialVar ShaderVarRep
-               | IfThenElse (Expr Bool) [Statement] [Statement]
+               | IfThenElse ExprRep [Statement] [Statement]
 
-newtype ShaderIO = ShaderIO [ShaderVarRep]
+newtype ShaderInput i = ShaderInput { getInputVars :: [ShaderVarRep] }
 
-newtype ShaderInput i = ShaderInput ShaderIO
-newtype ShaderOutput o = ShaderOutput ShaderIO
+data ShaderOutputVar = CustomOutput ShaderVarRep
+                     | SpecialOutput SpecialVar ShaderVarRep
+
+newtype ShaderOutput o = ShaderOutput { getOutputVars :: [ShaderOutputVar] }
+
+addCustomOVar :: ShaderVar a -> ShaderOutput b -> ShaderOutput b
+addCustomOVar (ShaderVar v) (ShaderOutput vs) = ShaderOutput ((CustomOutput v):vs)
+
+addVertexPosition :: ShaderVar (V4 Float) -> ShaderOutput b -> ShaderOutput b
+addVertexPosition (ShaderVar v) (ShaderOutput vs) =
+  ShaderOutput ((SpecialOutput VertexPosition v) : vs)
+
+addFragmentColor :: ShaderVar (V4 Float) -> ShaderOutput b -> ShaderOutput b
+addFragmentColor (ShaderVar v) (ShaderOutput vs) =
+  ShaderOutput ((SpecialOutput FragmentColor v) : vs)
+
+emptyO :: ShaderOutput a
+emptyO = ShaderOutput []
+
+getOutputVar :: ShaderOutputVar -> ShaderVarRep
+getOutputVar (CustomOutput v) = v
+getOutputVar (SpecialOutput _ v) = v
+
+collectOutput :: (ShaderOutputVar -> Bool) -> ShaderOutput a -> [ShaderVarRep]
+collectOutput fn = map getOutputVar . filter fn . getOutputVars
+
+collectCustom :: ShaderOutput a -> [ShaderVarRep]
+collectCustom = collectOutput isCustom
+  where
+    isCustom (CustomOutput _) = True
+    isCustom _ = False
+
+collectSpecial :: ShaderOutput a -> [ShaderVarRep]
+collectSpecial = collectOutput isSpecial
+  where
+    isSpecial (SpecialOutput _ _) = True
+    isSpecial _ = False
+
+mkSpecialStmts :: ShaderOutput a -> [Statement]
+mkSpecialStmts (ShaderOutput ovars) = concatMap mkStmt ovars
+  where
+    mkStmt :: ShaderOutputVar -> [Statement]
+    mkStmt (SpecialOutput sv v) = [SpecialAssignment sv v]
+    mkStmt _ = []
+
+updateStmt :: ShaderVarRep -> Statement -> [Statement]
+updateStmt v1 s@(LocalDecl v2 Nothing)
+  | v1 == v2 = []
+  | otherwise = [s]
+updateStmt v1 s@(LocalDecl v2 (Just e))
+  | v1 == v2 = [Assignment v1 e]
+  | otherwise = [s]
+updateStmt v s@(Assignment _ _) = [s]
+updateStmt v s@(SpecialAssignment _ _) = [s]
+updateStmt v (IfThenElse e s1 s2) =
+  let output = ShaderOutput [CustomOutput v]
+  in [IfThenElse e (updateStmts s1 output) (updateStmts s2 output)]
+
+updateStmts :: [Statement] -> ShaderOutput a -> [Statement]
+updateStmts stmts vars =
+  let updateFor :: ShaderVarRep -> [Statement] -> [Statement]
+      updateFor v = concat . map (updateStmt v)
+  in foldl (flip updateFor) stmts (collectCustom vars) ++ (mkSpecialStmts vars)
+  
 newtype ShaderContext i a =
   ShdrCtx { compileShdrCode :: RWS (ShaderInput i) ([Declaration], [Statement]) Int a }
   deriving (Functor, Applicative, Monad, MonadReader (ShaderInput i),
@@ -51,27 +113,27 @@ newtype ShaderContext i a =
 newtype ShaderCode i o = ShdrCode (ShaderContext i (ShaderOutput o))
 
 newVar :: String -> ShaderVarTy a -> ShaderContext i (ShaderVar a)
-newVar name ty = do
+newVar name (ShaderVarTy ty) = do
   varID <- get
   let nextVarID = varID + 1
-      var = ShdrVarRep name nextVarID ty
+      var = ShaderVar $ ShdrVarRep name nextVarID ty
   put nextVarID
   return var
 
 newUniformVar :: String -> ShaderVarTy a -> ShaderContext i (ShaderVar a)
 newUniformVar n t = do
-  var <- newVar n t
-  tell ([Uniform var], mempty)
-  return var
+  v@(ShaderVar vrep) <- newVar n t
+  tell ([Uniform vrep], mempty)
+  return v
 
 setE :: ShaderVarTy a -> Expr a -> ShaderContext i (ShaderVar a)
-setE ty e = do
-  v <- newVar "_t" ty
-  tell (mempty, [LocalDecl v (Just e)])
+setE ty (Expr e) = do
+  v@(ShaderVar vrep) <- newVar "_t" ty
+  tell (mempty, [LocalDecl vrep (Just e)])
   return v
 
 assignE :: ShaderVar a -> Expr a -> ShaderContext i ()
-assignE v e = tell (mempty, [Assignment v e])
+assignE (ShaderVar v) (Expr e) = tell (mempty, [Assignment v e])
 
 data ShaderProgram = ShaderProgram {
   shaderDecls :: [Declaration],
@@ -97,54 +159,58 @@ attribToVarTy _ = error "Not implemented!"
 mkAttributes :: forall v. Vertex v => VertexTy v -> ShaderInput v
 mkAttributes _ =
   let attribs = getVertexAttributes (undefined :: v)
-      mkVar n = ShdrVarRep ("attrib" ++ (show n)) n . attribToVarTy
+      names = getAttribNames (undefined :: v)
+      mkVar (n, i) = ShdrVarRep n i . attribToVarTy
   in
-   ShaderInput $ ShaderIO (zipWith mkVar [0,1..] attribs)
+   ShaderInput $ zipWith mkVar (zip names [0,1..]) attribs
 
-getInput :: ShaderVarTyRep -> Int -> ShaderContext i (ShaderVarRep)
-getInput expected idx = do
-  (ShaderInput (ShaderIO vars)) <- ask
+getInput :: ShaderVarTy a -> Int -> ShaderContext i (ShaderVar a)
+getInput (ShaderVarTy expected) idx = do
+  (ShaderInput vars) <- ask
   let v@(ShdrVarRep _ _ ty) = vars !! idx
   if expected == ty
-    then return v
+    then return (ShaderVar v)
     else error $ concat ["Type mismatch for attribute ", show idx,
                          ": Expected ", show expected, " got ", show ty]
 
 getInputi :: Int -> ShaderContext i (ShaderVar Int)
-getInputi = getInput IntTy
+getInputi = getInput (ShaderVarTy IntTy)
 
 getInputf :: Int -> ShaderContext i (ShaderVar Float)
-getInputf = getInput FloatTy
+getInputf = getInput (ShaderVarTy FloatTy)
 
 getInput2f :: Int -> ShaderContext i (ShaderVar (V2 Float))
-getInput2f = getInput Vector2Ty
+getInput2f = getInput (ShaderVarTy Vector2Ty)
 
 getInput3f :: Int -> ShaderContext i (ShaderVar (V3 Float))
-getInput3f = getInput Vector3Ty
+getInput3f = getInput (ShaderVarTy Vector3Ty)
 
 getInput4f :: Int -> ShaderContext i (ShaderVar (V4 Float))
-getInput4f = getInput Vector4Ty
+getInput4f = getInput (ShaderVarTy Vector4Ty)
 
 compileProgram :: Vertex v => VertexTy v -> ShaderCode v o -> ShaderCode o f -> Shader v
 compileProgram iptTy (ShdrCode vertexPrg) (ShdrCode fragmentPrg) =
-  let vs_input = mkAttributes iptTy
-      (ShaderOutput (ShaderIO vs_output), varID, (vs_decls, vs_stmts)) =
+  let vs_input@(ShaderInput vs_input_vars) = mkAttributes iptTy
+      (vs_output, varID, (vs_decls, vs_stmts)) =
         runRWS (compileShdrCode vertexPrg) vs_input 0
-      fs_input_vars = tail vs_output
-      fs_input = ShaderInput $ ShaderIO fs_input_vars
-      (ShaderOutput (ShaderIO fs_output), _, (fs_decls, fs_stmts)) =
-        runRWS (compileShdrCode fragmentPrg) fs_input 0
+
+      fs_input_vars = collectCustom vs_output
+
+      fs_input = ShaderInput fs_input_vars
+      (fs_output, _, (fs_decls, fs_stmts)) =
+        runRWS (compileShdrCode fragmentPrg) fs_input varID
 
       varyingDecls = map Varying fs_input_vars
+      attribDecls = map Attribute vs_input_vars
   in
    Shader {
      vertexProgram = ShaderProgram {
-        shaderDecls = vs_decls ++ varyingDecls,
-        shaderStmts = vs_stmts ++ [SpecialAssignment VertexPosition $ head vs_output]
+        shaderDecls = concat [attribDecls, vs_decls, varyingDecls],
+        shaderStmts = updateStmts vs_stmts vs_output
         },
      fragmentProgram = ShaderProgram {
        shaderDecls = fs_decls ++ varyingDecls,
-       shaderStmts = fs_stmts ++ [SpecialAssignment FragmentColor $ head fs_output]
+       shaderStmts = updateStmts fs_stmts fs_output
        }
      }
     

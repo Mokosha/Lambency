@@ -84,9 +84,9 @@ binFnBS :: BinaryFunction -> String
 binFnBS Max = "max"
 binFnBS Min = "min"
 binFnBS Dot = "dot"
-binFnBS Sample1D = "sample1D"
-binFnBS Sample2D = "sample2D"
-binFnBS Sample3D = "sample3D"
+binFnBS Sample1D = "texture1D"
+binFnBS Sample2D = "texture2D"
+binFnBS Sample3D = "texture3D"
 
 buildBinary :: BinaryOp -> ExprRep -> ExprRep -> BS.ByteString
 
@@ -159,9 +159,9 @@ buildStatement = flip BS.append (BS.pack ";\n") . buildStmt
           buildStatements s2,
           BS.pack "}\n"]
         buildStmt (SpecialAssignment VertexPosition v) =
-          BS.pack $ concat ["gl_Position = ", varName v, ";\n"]
+          BS.pack $ concat ["gl_Position = ", varName v]
         buildStmt (SpecialAssignment FragmentColor v) =
-          BS.pack $ concat ["gl_FragColor = ", varName v, ";\n"]
+          BS.pack $ concat ["gl_FragColor = ", varName v]
 
 buildStatements :: [Statement] -> BS.ByteString
 buildStatements stmts = BS.concat $
@@ -182,7 +182,7 @@ varTy = BS.pack . cvtTyRep
     cvtTyRep Sampler1DTy = "sampler1D"
     cvtTyRep Sampler2DTy = "sampler2D"
     cvtTyRep Sampler3DTy = "sampler3D"
-    cvtTyRep _ = error "Not implemented!"
+    cvtTyRep _ = error "Lambency.Shader.OpenGL -- varTy -- cvtTyRep:  Not implemented!"
 
 {-- !FIXME! what was I thinking here?    
     cvtTyRep IntListTy = "IntListTy"
@@ -198,7 +198,7 @@ varName :: ShaderVarRep -> String
 varName (ShdrVarRep n i _) = concat [n, "_", show i]
 
 varDeclaration :: ShaderVarRep -> BS.ByteString
-varDeclaration v@(ShdrVarRep _ _ ty) = BS.append (varTy ty) (BS.pack $ varName v)
+varDeclaration v@(ShdrVarRep _ _ ty) = BS.append (varTy ty) (BS.pack $ ' ' : (varName v))
 
 buildDeclaration :: Declaration -> BS.ByteString
 buildDeclaration = flip BS.append (BS.pack ";\n") . declString
@@ -217,7 +217,7 @@ buildDeclarations :: [Declaration] -> BS.ByteString
 buildDeclarations decls' =
   let groupDecls x y = getDeclType x == getDeclType y
       decls = concat $ List.groupBy groupDecls decls'
-  in BS.concat $ map (BS.cons '\n' . buildDeclaration) decls
+  in BS.concat $ map buildDeclaration decls ++ [BS.singleton '\n']
 
 buildOpenGLSource :: ShaderProgram -> BS.ByteString
 buildOpenGLSource (ShaderProgram decls stmts) =
@@ -229,12 +229,20 @@ buildOpenGLSource (ShaderProgram decls stmts) =
 generateShader :: ShaderProgram -> GL.ShaderType -> IO (GL.Shader)
 generateShader prg ty = do
   shdr <- GL.createShader ty
-  GL.shaderSourceBS shdr GL.$= (buildOpenGLSource prg)
+  let shdrSrc = buildOpenGLSource prg
+  GL.shaderSourceBS shdr GL.$= shdrSrc
   GL.compileShader shdr
   shaderLog <- GL.get $ GL.shaderInfoLog shdr
   if null shaderLog
     then return ()
-    else putStrLn shaderLog
+    else do
+    putStrLn shaderLog
+    putStrLn $
+      let numStrs = map (BS.pack . take 5 . flip (++) ":      " . show) [1::Int,2..]
+          numberedSrc = BS.intercalate (BS.singleton '\n') $
+                        zipWith BS.append numStrs $ BS.lines shdrSrc
+      in BS.unpack numberedSrc
+    error "Internal Error: OpenGL shader compilation failed!"
   return shdr
 
 toHighLevelTy :: Int -> ShaderVarTyRep -> L.ShaderVarTy
@@ -243,10 +251,10 @@ toHighLevelTy _ Matrix3Ty = L.Matrix3Ty
 toHighLevelTy _ Matrix4Ty = L.Matrix4Ty
 toHighLevelTy _ Matrix3ListTy = L.Matrix3ListTy
 toHighLevelTy _ Matrix4ListTy = L.Matrix4ListTy
-toHighLevelTy _ Vector2Ty = error "Not implemented"
+toHighLevelTy _ Vector2Ty = L.Vector2Ty
 toHighLevelTy _ Vector3Ty = L.Vector3Ty
 toHighLevelTy _ Vector4Ty = L.Vector4Ty
-toHighLevelTy _ Vector2ListTy = error "Not implemented"
+toHighLevelTy _ Vector2ListTy = L.Vector2ListTy
 toHighLevelTy _ Vector3ListTy = L.Vector3ListTy
 toHighLevelTy _ Vector4ListTy = L.Vector4ListTy
 toHighLevelTy _ IntTy = L.IntTy

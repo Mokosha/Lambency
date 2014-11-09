@@ -203,44 +203,49 @@ void main() {
 --}
 
 createTransparentShader :: IO (Shader)
-createTransparentShader =
-  let vshdr :: I.ShaderCode TVertex3 Vertex2
-      vshdr = I.ShdrCode (do
-        position <- I.getInput3f 0
-        texCoord <- I.getInput2f 1
+createTransparentShader = I.generateOpenGLShader shdr
+  where
+    shdr = I.compileProgram texVertex3Ty vshdr fshdr
 
-        mvpMatrix <- I.newUniformVar "mvpMatrix" I.matrix4Ty
-        texCoordMatrix <- I.newUniformVar "texCoordMatrix" I.matrix3Ty
+    vshdr :: I.ShaderCode TVertex3 Vertex2
+    vshdr = I.ShdrCode $ do
+      position <- I.getInput3f 0
+      texCoord <- I.getInput2f 1
 
-        uvp <- I.setE I.vector3fTy $
-               I.xform3f (I.mkVarExpr texCoordMatrix) $
-               (I.mkVec3f_21 (I.mkVarExpr texCoord) (I.mkConstf 1))
+      mvpMatrix <- I.newUniformVar "mvpMatrix" I.matrix4Ty
+      texCoordMatrix <- I.newUniformVar "texCoordMatrix" I.matrix3Ty
 
-        uv <- I.setE I.vector2fTy $
-              I.finishSwizzleV . I._y_ . I._x_ . I.swizzle3D $
-              I.div3f (I.mkVarExpr uvp) ((I.finishSwizzleS . I._z_ . I.swizzle3D) (I.mkVarExpr uvp))
+      uvp <- I.setE I.vector3fTy $
+             I.xform3f (I.mkVarExpr texCoordMatrix) $
+             I.mkVec3f_21 (I.mkVarExpr texCoord) (I.mkConstf 1)
 
-        out_pos <- I.setE I.vector4fTy $ I.mkVarExpr mvpMatrix 
+      uv <- I.setE I.vector2fTy $
+            I.finishSwizzleV . I._y_ . I._x_ . I.swizzle3D $
+            I.div3f (I.mkVarExpr uvp) ((I.finishSwizzleS . I._z_ . I.swizzle3D) (I.mkVarExpr uvp))
 
-        return $ I.ShaderOutput $ I.ShaderIO [out_pos, uv])
+      out_pos <- I.setE I.vector4fTy $
+                 I.xform4f (I.mkVarExpr mvpMatrix) $
+                 I.mkVec4f_31 (I.mkVarExpr position) (I.mkConstf 1)
 
-      fshdr :: I.ShaderCode Vertex2 ()
-      fshdr = I.ShdrCode (do
-        uv <- I.getInput2f 0
+      let output = I.addVertexPosition out_pos $
+                   I.addCustomOVar uv I.emptyO
 
-        diffuseTex <- I.newUniformVar "diffuseTex" I.sampler2DTy
-        alpha <- I.newUniformVar "alpha" I.floatTy
+      return output
 
-        texColor <- I.setE I.vector4fTy $ I.sample2D (I.mkVarExpr diffuseTex) (I.mkVarExpr uv)
-        out_color <- I.setE I.vector4fTy $ I.mkVec4f_31
-                     ((I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D) (I.mkVarExpr texColor)) $
-                     I.multf ((I.finishSwizzleS . I._w_ . I.swizzle4D) (I.mkVarExpr texColor)) (I.mkVarExpr alpha)
+    fshdr :: I.ShaderCode Vertex2 ()
+    fshdr = I.ShdrCode $ do
+      uv <- I.getInput2f 0
 
-        return $ I.ShaderOutput $ I.ShaderIO [out_color])
+      diffuseTex <- I.newUniformVar "diffuseTex" I.sampler2DTy
+      alpha <- I.newUniformVar "alpha" I.floatTy
 
-      shdr = I.compileProgram texVertex3Ty vshdr fshdr
-  in
-   I.generateOpenGLShader shdr
+      texColor <- I.setE I.vector4fTy $ I.sample2D (I.mkVarExpr diffuseTex) (I.mkVarExpr uv)
+      out_color <- I.setE I.vector4fTy $ I.mkVec4f_31
+                   ((I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D) (I.mkVarExpr texColor)) $
+                   I.multf ((I.finishSwizzleS . I._w_ . I.swizzle4D) (I.mkVarExpr texColor)) (I.mkVarExpr alpha)
+
+      let output = I.addFragmentColor out_color I.emptyO
+      return output
 
 createFontShader :: IO (Shader)
 createFontShader = do
