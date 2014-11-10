@@ -111,9 +111,9 @@ data Shader v = Shader {
 
 ifThen :: Expr Bool -> ShaderContext i () -> ShaderContext i () -> ShaderContext i ()
 ifThen (Expr e) c1 c2 = ShdrCtx $ RWST $ \ipt st ->
-  let (_, id1, (decls1, s1)) = runRWS (compileShdrCode c1) ipt st
-      (_, id2, (decls2, s2)) = runRWS (compileShdrCode c2) ipt st
-  in return ((), id1 + id2, (decls1 ++ decls2, [IfThenElse e s1 s2]))
+  let (_, id1, (decls1, s1)) = runRWS (compileShdrCode c1) ipt (st + 1)
+      (_, id2, (decls2, s2)) = runRWS (compileShdrCode c2) ipt (id1 + 1)
+  in return ((), id2 + 1, (decls1 ++ decls2, [IfThenElse e s1 s2]))
 
 attribToVarTy :: VertexAttribute -> ShaderVarTyRep
 attribToVarTy (VertexAttribute 1 IntAttribTy) = IntTy

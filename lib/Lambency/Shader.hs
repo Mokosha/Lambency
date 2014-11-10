@@ -294,7 +294,7 @@ fragSpotlight = I.ShdrCode $ do
   out_color <- I.setE I.vector4fTy $ I.mkVec4f_31 ditheredColor (I.mkConstf 1)
 
   return $ I.addFragmentColor out_color I.emptyO
-  
+
   where
 
     dither :: I.ShaderVar Float -> I.ShaderVar Float -> I.ShaderContext i (I.Expr Float)
