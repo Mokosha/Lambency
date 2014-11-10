@@ -152,8 +152,8 @@ buildExpr (Binary op e1 e2) = buildBinary op e1 e2
 buildExpr (Ternary op e1 e2 e3) = buildTernary op e1 e2 e3
 buildExpr (NewVec ve) = buildVecExpr ve
 
-buildStatement :: Statement -> BS.ByteString
-buildStatement = flip BS.append (BS.pack ";\n") . buildStmt
+buildStatement :: Int -> Statement -> BS.ByteString
+buildStatement indent = flip BS.append (BS.pack ";\n") . buildStmt
   where buildStmt (LocalDecl v (Just e)) = BS.concat [
           varDeclaration v,
           BS.pack " = ",
@@ -164,18 +164,18 @@ buildStatement = flip BS.append (BS.pack ";\n") . buildStmt
           BS.pack "if (",
           buildExpr e,
           BS.pack ") {\n",
-          buildStatements s1,
-          BS.pack "} else {\n",
-          buildStatements s2,
-          BS.pack "}\n"]
+          buildStatements (indent + 2) s1,
+          BS.pack $ take indent (repeat ' ') ++ "} else {\n",
+          buildStatements (indent + 2) s2,
+          BS.pack $ take indent (repeat ' ') ++ "}"]
         buildStmt (SpecialAssignment VertexPosition v) =
           BS.pack $ concat ["gl_Position = ", varName v]
         buildStmt (SpecialAssignment FragmentColor v) =
           BS.pack $ concat ["gl_FragColor = ", varName v]
 
-buildStatements :: [Statement] -> BS.ByteString
-buildStatements stmts = BS.concat $
-                        map ((BS.append $ BS.pack "  ") . buildStatement) stmts
+buildStatements :: Int -> [Statement] -> BS.ByteString
+buildStatements indent stmts =
+  BS.concat $ map ((BS.append $ BS.pack $ take indent $ repeat ' ') . buildStatement indent) stmts
 
 varTy :: ShaderVarTyRep -> BS.ByteString
 varTy = BS.pack . cvtTyRep
@@ -233,7 +233,7 @@ buildOpenGLSource :: ShaderProgram -> BS.ByteString
 buildOpenGLSource (ShaderProgram decls stmts) =
   BS.append (buildDeclarations decls) $ BS.concat [
     BS.pack "void main() {\n",
-    buildStatements stmts,
+    buildStatements 2 stmts,
     BS.pack "}"]
 
 generateShader :: ShaderProgram -> GL.ShaderType -> IO (GL.Shader)
@@ -250,7 +250,7 @@ generateShader prg ty = do
                       zipWith BS.append numStrs $ BS.lines shdrSrc
     in BS.unpack numberedSrc
 --}
-  if null shaderLog
+  if null (filter (/= '\0') $ shaderLog)
     then return ()
     else do
     putStrLn shaderLog

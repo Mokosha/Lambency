@@ -188,27 +188,7 @@ vertMinimal = I.ShdrCode $ do
   out_pos <- I.setE I.vector4fTy $
              I.xform4f (I.mkVarExpr mvpMatrix) $
              I.mkVec4f_31 (I.mkVarExpr position) (I.mkConstf 1)
-  let output = I.addVertexPosition out_pos I.emptyO
-  return output
-
-{--
-
-  attribute vec3 position;
-  attribute vec2 texCoord;
-
-  uniform mat4 mvpMatrix;
-  uniform mat3 texCoordMatrix;
-
-  varying vec2 uv;
-
-  void main() {
-    vec3 uvp = texCoordMatrix * vec3(texCoord, 1.0);
-    uv = (uvp / uvp.z).xy; // Perspective correction
-
-    gl_Position = mvpMatrix * vec4(position, 1.0);
-  }
-
---}
+  return $ I.addVertexPosition out_pos I.emptyO
 
 vertSimple :: I.ShaderCode TVertex3 Vertex2
 vertSimple = I.ShdrCode $ do
@@ -234,30 +214,6 @@ vertSimple = I.ShdrCode $ do
                I.addCustomOVar uv I.emptyO
 
   return output
-
-{--
-
-  attribute vec3 position;
-  attribute vec3 normal;
-  attribute vec2 texCoord;
-  
-  uniform mat4 mvpMatrix;
-  uniform mat4 m2wMatrix;
-  
-  varying vec3 pos;
-  varying vec3 norm;
-  varying vec2 uv;
-  
-  void main() {
-
-    pos = (m2wMatrix * vec4(position, 1.0)).xyz;
-    norm = normalize((m2wMatrix * vec4(normal, 0)).xyz);
-    uv = texCoord;
-  
-    gl_Position = mvpMatrix * vec4(position, 1.0);
-  }
-
---}
   
 vertStandard :: I.ShaderCode OTVertex3 OTVertex3
 vertStandard = I.ShdrCode $ do
@@ -295,37 +251,12 @@ vertStandard = I.ShdrCode $ do
 fragMinimal :: I.ShaderCode a ()
 fragMinimal = I.ShdrCode $ return I.emptyO
 
-{--
-
-  varying vec2 uv;
-
-  uniform sampler2D diffuseTex;
-
-  void main() {
-    gl_FragColor = texture2D(diffuseTex, uv);
-  }
-
---}
-
 fragSimple :: I.ShaderCode Vertex2 ()
 fragSimple = I.ShdrCode $ do
   uv <- I.getInput2f 0
   diffuseTex <- I.newUniformVar "diffuseTex" I.sampler2DTy
   out_color <- I.setE I.vector4fTy $ I.sample2D (I.mkVarExpr diffuseTex) (I.mkVarExpr uv)
   return $ I.addFragmentColor out_color I.emptyO
-
-{--  
-  varying vec2 uv;
-
-  uniform sampler2D diffuseTex;
-  uniform float alpha;
-
-  void main() {
-    gl_FragColor = texture2D(diffuseTex, uv);
-    gl_FragColor.a *= alpha;
-  }
-
---}
 
 fragSimpleTrans :: I.ShaderCode Vertex2 ()
 fragSimpleTrans = I.ShdrCode $ do
@@ -341,21 +272,6 @@ fragSimpleTrans = I.ShdrCode $ do
 
   let output = I.addFragmentColor out_color I.emptyO
   return output
-
-{--
-
-  varying vec2 uv;
-
-  uniform sampler2D maskTex;
-  uniform float alpha;
-  uniform vec3 color;
-
-  ovoid main() {
-    float al = alpha * texture2D(maskTex, uv).a;
-    gl_FragColor = vec4(color, al);
-  }
-
---}
 
 fragFont :: I.ShaderCode Vertex2 ()
 fragFont = I.ShdrCode $ do
@@ -373,82 +289,6 @@ fragFont = I.ShdrCode $ do
   out_color <- I.setE I.vector4fTy $ I.mkVec4f_31 (I.mkVarExpr color) (I.mkVarExpr al)
 
   return $ I.addFragmentColor out_color I.emptyO
-
-{--
-
-  varying vec2 uv;
-  varying vec3 norm;
-  varying vec3 pos;
-
-  uniform sampler2D diffuseTex;
-
-  uniform vec3 ambient;
-  uniform vec3 lightPos;
-  uniform vec3 lightDir;
-  uniform float lightCosCutoff;
-
-  uniform sampler2DShadow shadowMap;
-  uniform mat4 shadowVP;
-
-  float rnd(vec2 co)
-  {
-    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
-  }
-
-  // Fix values from their floating point representation
-  // to what they should be in the interval [0,255] based
-  // on a stochastic dithering pattern where the dithering
-  // is done based on the proximity to an integer value in
-  // the aforementioned interval.
-  float dither(float v, float r) {
-    float val = v * 255.0;
-    float ival = floor(val);
-    float diff = val - ival;
-    return (ival + float(r < diff)) / 255.0;
-  }
-
-  vec3 dither3(vec3 v, vec2 seed) {
-    float r = rnd(seed);
-    return vec3(dither(v.x, r), dither(v.y, r), dither(v.z, r));
-  }
-
-  float bias(float d) {
-    return d - 0.0001;
-  }
-
-  void main() {
-  
-    vec4 lightPersp = shadowVP * vec4(pos, 1);
-    lightPersp /= lightPersp.w;
-    lightPersp = lightPersp * 0.5 + 0.5;
-    lightPersp.z = bias(lightPersp.z);
-    float shadow = float(shadow2D(shadowMap, lightPersp.xyz));
-
-    vec3 p2l = pos-lightPos;
-    float dist = length(p2l);
-    p2l = normalize(p2l);
-
-    float cosToPt = dot(lightDir, p2l);
-    float spot = clamp(cosToPt, lightCosCutoff, 1.0);
-  
-    const vec3 color = vec3(1.0, 1.0, 1.0);
-    vec3 lightColor = vec3(0, 0, 0);
-    if(spot > 0.0) {
-      lightColor += color*(spot/(0.1*dist));
-    }
-
-    // diffuse
-    lightColor *= max(0.0, dot(-lightDir, norm)) * (1.0 - 0.5*shadow);
-
-    // ambient
-    lightColor += ambient;
-    vec3 finalColor = lightColor*texture2D(diffuseTex, uv).xyz;
-    finalColor = dither3(finalColor, uv);
-
-    gl_FragColor = vec4(finalColor, 1.0);
-  }
-
---}
 
 fragSpotlight :: I.ShaderCode OTVertex3 ()
 fragSpotlight = I.ShdrCode $ do
@@ -482,16 +322,12 @@ fragSpotlight = I.ShdrCode $ do
   objDepth <- I.setE I.floatTy $
               I.subf (I.finishSwizzleS . I._z_ . I.swizzle4D $ I.mkVarExpr lightPersp) (I.mkConstf 0.0001)
   shdwDepth <- I.setE I.floatTy $
-               I.finishSwizzleS . I._x_ . I.swizzle4D $
+               I.finishSwizzleS . I._z_ . I.swizzle4D $
                I.sample2D (I.mkVarExpr shadowMap) $
                I.finishSwizzleV . I._y_ . I._x_ . I.swizzle4D $
                I.mkVarExpr lightPersp
 
-  -- Ideally we'd like to cast the bool to a float here...
-  shadow <- I.setE I.floatTy $ I.mkConstf 0
-  I.ifThen (I.gtf (I.mkVarExpr shdwDepth) (I.mkVarExpr objDepth))
-    (I.assignE shadow (I.mkConstf 1.0))
-    (return ())
+  shadow <- I.setE I.floatTy $ I.castBoolToFloat $ I.gtf (I.mkVarExpr objDepth) (I.mkVarExpr shdwDepth)
 
   posToLight <- I.setE I.vector3fTy $ I.sub3f (I.mkVarExpr pos) (I.mkVarExpr lightPos)
   distToLight <- I.setE I.floatTy $ I.length3f (I.mkVarExpr posToLight)
@@ -532,14 +368,14 @@ fragSpotlight = I.ShdrCode $ do
 
     dither :: I.ShaderVar Float -> I.ShaderVar Float -> I.ShaderContext i (I.Expr Float)
     dither v r = do
-      val <- I.setE I.floatTy $ I.multf (I.mkVarExpr v) (I.mkVarExpr r)
+      val <- I.setE I.floatTy $ I.multf (I.mkVarExpr v) (I.mkConstf 255)
       ival <- I.setE I.floatTy $ I.floorf (I.mkVarExpr val)
       diff <- I.setE I.floatTy $ I.subf (I.mkVarExpr val) (I.mkVarExpr ival)
       return $
         I.divf
         (I.addf
          (I.mkVarExpr ival)
-         (I.castBoolToFloat $ I.gtf (I.mkVarExpr r) (I.mkVarExpr diff)))
+         (I.castBoolToFloat $ I.ltf (I.mkVarExpr r) (I.mkVarExpr diff)))
         (I.mkConstf 255.0)
 
     dither3 :: I.ShaderVar (V3 Float) -> I.ShaderVar (V2 Float) -> I.ShaderContext i (I.Expr (V3 Float))

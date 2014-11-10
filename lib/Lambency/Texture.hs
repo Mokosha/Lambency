@@ -172,9 +172,7 @@ createDepthTexture = do
   GL.textureWrapMode GL.Texture2D GL.S GL.$= (GL.Repeated, GL.ClampToEdge)
   GL.textureWrapMode GL.Texture2D GL.T GL.$= (GL.Repeated, GL.ClampToEdge)
   GL.textureFilter GL.Texture2D GL.$= ((GL.Nearest, Nothing), GL.Nearest)
-  GL.textureCompareMode GL.Texture2D GL.$= (Just GL.Greater)
-  GL.depthTextureMode GL.Texture2D GL.$= GL.Intensity
-  GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.DepthComponent32
+  GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.DepthComponent'
     (GL.TextureSize2D kShadowMapSize kShadowMapSize) 0 $ GL.PixelData GL.DepthComponent GL.UnsignedInt nullPtr
 
   putStrLn "Creating framebuffer object..."

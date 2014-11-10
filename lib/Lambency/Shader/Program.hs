@@ -198,7 +198,7 @@ getInput4f :: Int -> ShaderContext i (ShaderVar (V4 Float))
 getInput4f = getInput (ShaderVarTy Vector4Ty)
 
 copyShdrVars :: Int -> [ShaderVarRep] -> [ShaderVarRep]
-copyShdrVars lastID [] = []
+copyShdrVars _ [] = []
 copyShdrVars lastID ((ShdrVarRep n _ ty) : vs) = (ShdrVarRep n lastID ty) : (copyShdrVars (lastID + 1) vs)
 
 addVertexOutputs :: [ShaderVarRep] -> [ShaderVarRep] -> [Statement]
@@ -210,39 +210,36 @@ addVertexOutputs = zipWith setCopyStmt
 compileProgram :: Vertex v => VertexTy v -> ShaderCode v o -> ShaderCode o f -> Shader v
 compileProgram iptTy (ShdrCode vertexPrg) (ShdrCode fragmentPrg) =
   let vs_input@(ShaderInput vs_input_vars) = mkAttributes iptTy
-      (vs_output, varID, (vs_decls, vs_stmts)) =
+      (vs_output, varID, (vs_decls, vs_stmts')) =
         runRWS (compileShdrCode vertexPrg) vs_input (length vs_input_vars)
 
-      fs_input_vars = collectCustom vs_output
+      vs_output_vars = collectCustom vs_output
+      (fs_input_vars, vs_stmts) =
+        case vs_output_vars `intersect` vs_input_vars of
+          [] -> (vs_output_vars, updateStmts vs_stmts' vs_output)
+          bothIO -> 
+            let newVars = copyShdrVars (varID + 1) bothIO
+            in
+             ((vs_output_vars \\ bothIO) ++ newVars, 
+              updateStmts vs_stmts' vs_output ++ (addVertexOutputs newVars bothIO))
 
       fs_input = ShaderInput fs_input_vars
-      (fs_output, lastID, (fs_decls, fs_stmts)) =
-        runRWS (compileShdrCode fragmentPrg) fs_input varID
+      (fs_output, _, (fs_decls, fs_stmts)) =
+        runRWS (compileShdrCode fragmentPrg) fs_input (varID + length fs_input_vars)
 
       varyingDecls = map Varying fs_input_vars
       attribDecls = map Attribute vs_input_vars
   in
    Shader {
      vertexProgram =
-        case fs_input_vars `intersect` vs_input_vars of
-          [] ->
-            ShaderProgram {
-              shaderDecls = concat [attribDecls, vs_decls, varyingDecls],
-              shaderStmts = updateStmts vs_stmts vs_output
-            }
-          bothIO ->
-            let newVars = copyShdrVars (lastID + 1) bothIO
-            in
-             ShaderProgram {
-              shaderDecls = concat [attribDecls, vs_decls,
-                                    varyingDecls \\ (map Varying bothIO),
-                                    map Varying newVars],
-              shaderStmts = updateStmts vs_stmts vs_output ++ (addVertexOutputs newVars bothIO)
-             },
-              
-     fragmentProgram = ShaderProgram {
-       shaderDecls = fs_decls ++ varyingDecls,
-       shaderStmts = updateStmts fs_stmts fs_output
+       ShaderProgram {
+         shaderDecls = concat [attribDecls, vs_decls, varyingDecls],
+         shaderStmts = vs_stmts
+         },
+     fragmentProgram =
+       ShaderProgram {
+         shaderDecls = fs_decls ++ varyingDecls,
+         shaderStmts = updateStmts fs_stmts fs_output
        }
      }
     
