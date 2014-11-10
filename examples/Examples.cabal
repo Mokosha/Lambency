@@ -47,3 +47,16 @@ executable lambpong
                   mtl,
                   directory,
                   filepath
+
+executable lambshooter
+  main-is:        Shooter.hs
+  ghc-options:    -Wall -rtsopts -O3
+  build-depends:  base > 4.5,
+                  netwire >= 5,
+                  netwire-input,
+                  GLFW-b,
+                  lambency,
+                  linear, lens,
+                  mtl,
+                  directory,
+                  filepath
