@@ -63,14 +63,22 @@ buildSwizzle _ = error "Internal error: Swizzle function built incorrectly!"
 
 --------------------------------------------------
 
+unaryOpBS :: UnaryInfix -> String
+unaryOpBS Negate = "-"
+
+unaryFnBS :: UnaryFun -> String
+unaryFnBS Floor = "floor"
+unaryFnBS Ceiling = "ceil"
+unaryFnBS Sine = "sin"
+unaryFnBS Cosine = "cos"
+unaryFnBS Normalize = "normalize"
+unaryFnBS Length = "length"
+unaryFnBS Fract = "fract"
+unaryFnBS CastFloat = "float"
+
 buildUnary :: UnaryOp -> ExprRep -> BS.ByteString
-
-buildUnary (UnaryInfixOp Negate) e = BS.concat [BS.pack "-(", buildExpr e, BS.pack ")"]
-
-buildUnary (UnaryFunOp Floor) e = BS.concat [BS.pack "floor(", buildExpr e, BS.pack ")"]
-buildUnary (UnaryFunOp Ceiling) e = BS.concat [BS.pack "ceil(", buildExpr e, BS.pack ")"]
-buildUnary (UnaryFunOp Sine) e = BS.concat [BS.pack "sin(", buildExpr e, BS.pack ")"]
-buildUnary (UnaryFunOp Cosine) e = BS.concat [BS.pack "cos(", buildExpr e, BS.pack ")"]
+buildUnary (UnaryInfixOp op) e = BS.concat [BS.pack $ unaryOpBS op ++ "(", buildExpr e, BS.pack ")"]
+buildUnary (UnaryFunOp op) e = BS.concat [BS.pack $ unaryFnBS op ++ "(", buildExpr e, BS.pack ")"]
 
 --------------------------------------------------
 
@@ -79,6 +87,8 @@ binOpBS Add = "+"
 binOpBS Sub = "-"
 binOpBS Mult = "*"
 binOpBS Div = "/"
+binOpBS LessThan = "<"
+binOpBS GreaterThan = ">"
 
 binFnBS :: BinaryFunction -> String
 binFnBS Max = "max"
@@ -95,7 +105,7 @@ buildBinary (BinaryInfixOp op) e1 e2 =
              BS.pack $ concat [") ", binOpBS op, " ("],
              buildExpr e2, BS.pack ")"]
 
-buildBinary (BinaryFunctionOp fn) e1 e2 =
+buildBinary (BinaryFunOp fn) e1 e2 =
   BS.concat [BS.pack (binFnBS fn ++ "("), buildExpr e1, BS.pack ", ", buildExpr e2, BS.pack ")"]
 
 --------------------------------------------------
@@ -233,6 +243,13 @@ generateShader prg ty = do
   GL.shaderSourceBS shdr GL.$= shdrSrc
   GL.compileShader shdr
   shaderLog <- GL.get $ GL.shaderInfoLog shdr
+{--
+  putStrLn $
+    let numStrs = map (BS.pack . take 5 . flip (++) ":      " . show) [1::Int,2..]
+        numberedSrc = BS.intercalate (BS.singleton '\n') $
+                      zipWith BS.append numStrs $ BS.lines shdrSrc
+    in BS.unpack numberedSrc
+--}
   if null shaderLog
     then return ()
     else do

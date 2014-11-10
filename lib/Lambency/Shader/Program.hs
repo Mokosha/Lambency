@@ -6,6 +6,8 @@ module Lambency.Shader.Program where
 import Control.Applicative
 import Control.Monad.RWS.Strict
 
+import Data.List ((\\), intersect)
+
 import Lambency.Vertex
 import Lambency.Shader.Var
 import Lambency.Shader.Expr
@@ -23,6 +25,7 @@ data Declaration = Attribute ShaderVarRep
                  | Uniform ShaderVarRep
                  | Varying ShaderVarRep
                  | ConstDecl ShaderVarRep ExprRep
+                 deriving (Eq, Show)
 
 getDeclType :: Declaration -> DeclarationTy
 getDeclType (Attribute _) = AttributeDeclTy
@@ -93,8 +96,8 @@ updateStmt v1 s@(LocalDecl v2 Nothing)
 updateStmt v1 s@(LocalDecl v2 (Just e))
   | v1 == v2 = [Assignment v1 e]
   | otherwise = [s]
-updateStmt v s@(Assignment _ _) = [s]
-updateStmt v s@(SpecialAssignment _ _) = [s]
+updateStmt _ s@(Assignment _ _) = [s]
+updateStmt _ s@(SpecialAssignment _ _) = [s]
 updateStmt v (IfThenElse e s1 s2) =
   let output = ShaderOutput [CustomOutput v]
   in [IfThenElse e (updateStmts s1 output) (updateStmts s2 output)]
@@ -148,6 +151,12 @@ data Shader v = Shader {
   fragmentProgram :: ShaderProgram
 }
 
+ifThen :: Expr Bool -> ShaderContext i () -> ShaderContext i () -> ShaderContext i ()
+ifThen (Expr e) c1 c2 = ShdrCtx $ RWST $ \ipt st ->
+  let (_, id1, (decls1, s1)) = runRWS (compileShdrCode c1) ipt st
+      (_, id2, (decls2, s2)) = runRWS (compileShdrCode c2) ipt st
+  in return ((), id1 + id2, (decls1 ++ decls2, [IfThenElse e s1 s2]))
+
 attribToVarTy :: VertexAttribute -> ShaderVarTyRep
 attribToVarTy (VertexAttribute 1 IntAttribTy) = IntTy
 attribToVarTy (VertexAttribute 1 FloatAttribTy) = FloatTy
@@ -188,26 +197,49 @@ getInput3f = getInput (ShaderVarTy Vector3Ty)
 getInput4f :: Int -> ShaderContext i (ShaderVar (V4 Float))
 getInput4f = getInput (ShaderVarTy Vector4Ty)
 
+copyShdrVars :: Int -> [ShaderVarRep] -> [ShaderVarRep]
+copyShdrVars lastID [] = []
+copyShdrVars lastID ((ShdrVarRep n _ ty) : vs) = (ShdrVarRep n lastID ty) : (copyShdrVars (lastID + 1) vs)
+
+addVertexOutputs :: [ShaderVarRep] -> [ShaderVarRep] -> [Statement]
+addVertexOutputs = zipWith setCopyStmt
+  where
+    setCopyStmt :: ShaderVarRep -> ShaderVarRep -> Statement
+    setCopyStmt new old = Assignment new (VarExpr old)
+
 compileProgram :: Vertex v => VertexTy v -> ShaderCode v o -> ShaderCode o f -> Shader v
 compileProgram iptTy (ShdrCode vertexPrg) (ShdrCode fragmentPrg) =
   let vs_input@(ShaderInput vs_input_vars) = mkAttributes iptTy
       (vs_output, varID, (vs_decls, vs_stmts)) =
-        runRWS (compileShdrCode vertexPrg) vs_input 0
+        runRWS (compileShdrCode vertexPrg) vs_input (length vs_input_vars)
 
       fs_input_vars = collectCustom vs_output
 
       fs_input = ShaderInput fs_input_vars
-      (fs_output, _, (fs_decls, fs_stmts)) =
+      (fs_output, lastID, (fs_decls, fs_stmts)) =
         runRWS (compileShdrCode fragmentPrg) fs_input varID
 
       varyingDecls = map Varying fs_input_vars
       attribDecls = map Attribute vs_input_vars
   in
    Shader {
-     vertexProgram = ShaderProgram {
-        shaderDecls = concat [attribDecls, vs_decls, varyingDecls],
-        shaderStmts = updateStmts vs_stmts vs_output
-        },
+     vertexProgram =
+        case fs_input_vars `intersect` vs_input_vars of
+          [] ->
+            ShaderProgram {
+              shaderDecls = concat [attribDecls, vs_decls, varyingDecls],
+              shaderStmts = updateStmts vs_stmts vs_output
+            }
+          bothIO ->
+            let newVars = copyShdrVars (lastID + 1) bothIO
+            in
+             ShaderProgram {
+              shaderDecls = concat [attribDecls, vs_decls,
+                                    varyingDecls \\ (map Varying bothIO),
+                                    map Varying newVars],
+              shaderStmts = updateStmts vs_stmts vs_output ++ (addVertexOutputs newVars bothIO)
+             },
+              
      fragmentProgram = ShaderProgram {
        shaderDecls = fs_decls ++ varyingDecls,
        shaderStmts = updateStmts fs_stmts fs_output

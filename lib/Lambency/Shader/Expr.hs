@@ -13,8 +13,12 @@ data UnaryInfix = Negate
 
 data UnaryFun = Floor
               | Ceiling
+              | Fract
               | Sine
               | Cosine
+              | Normalize
+              | Length
+              | CastFloat
               deriving(Show, Eq, Ord, Enum, Bounded)
 
 data UnaryOp = UnaryInfixOp UnaryInfix
@@ -25,6 +29,8 @@ data BinaryInfix = Add
                  | Sub
                  | Mult
                  | Div
+                 | GreaterThan
+                 | LessThan
                  deriving(Show, Eq, Ord, Enum, Bounded)
 
 data BinaryFunction = Max
@@ -36,7 +42,7 @@ data BinaryFunction = Max
                     deriving(Show, Eq, Ord, Enum, Bounded)
 
 data BinaryOp = BinaryInfixOp BinaryInfix
-              | BinaryFunctionOp BinaryFunction
+              | BinaryFunOp BinaryFunction
               deriving(Show, Eq, Ord)
 
 data TernaryOp = Clamp
@@ -59,6 +65,7 @@ data Constant = ConstMat2 (M22 Float)
 data VecExpr = Vec2Expr ExprRep ExprRep
              | Vec3Expr ExprRep ExprRep ExprRep
              | Vec4Expr ExprRep ExprRep ExprRep ExprRep
+               deriving (Eq, Show)
 
 data ExprRep = VarExpr ShaderVarRep
              | ConstExpr Constant
@@ -67,8 +74,9 @@ data ExprRep = VarExpr ShaderVarRep
              | Binary BinaryOp ExprRep ExprRep
              | Ternary TernaryOp ExprRep ExprRep ExprRep
              | NewVec VecExpr
+               deriving (Eq, Show)
 
-newtype Expr a = Expr ExprRep
+newtype Expr a = Expr ExprRep deriving (Eq, Show)
 
 mkConstMat2 :: M22 Float -> Expr (M22 Float)
 mkConstMat2 m = Expr $ ConstExpr $ ConstMat2 m
@@ -108,8 +116,76 @@ mkVarExpr (ShaderVar v) = Expr $ VarExpr v
 
 --------------------------------------------------
 
+unaryExpr :: UnaryOp -> Expr a -> Expr b
+unaryExpr op (Expr e) = Expr $ Unary op e
+
+normalize3f :: Expr (V3 Float) -> Expr (V3 Float)
+normalize3f = unaryExpr (UnaryFunOp Normalize)
+
+length3f :: Expr (V3 Float) -> Expr Float
+length3f = unaryExpr (UnaryFunOp Length)
+
+neg2f :: Expr (V2 Float) -> Expr (V2 Float)
+neg2f = unaryExpr (UnaryInfixOp Negate)
+
+neg3f :: Expr (V3 Float) -> Expr (V3 Float)
+neg3f = unaryExpr (UnaryInfixOp Negate)
+
+neg4f :: Expr (V4 Float) -> Expr (V4 Float)
+neg4f = unaryExpr (UnaryInfixOp Negate)
+
+sinf :: Expr Float -> Expr Float
+sinf = unaryExpr (UnaryFunOp Sine)
+
+cosf :: Expr Float -> Expr Float
+cosf = unaryExpr (UnaryFunOp Cosine)
+
+floorf :: Expr Float -> Expr Float
+floorf = unaryExpr (UnaryFunOp Floor)
+
+fractf :: Expr Float -> Expr Float
+fractf = unaryExpr (UnaryFunOp Fract)
+
+castBoolToFloat :: Expr Bool -> Expr Float
+castBoolToFloat = unaryExpr (UnaryFunOp CastFloat)
+
+castIntToFloat :: Expr Int -> Expr Float
+castIntToFloat = unaryExpr (UnaryFunOp CastFloat)
+
+--------------------------------------------------
+
 binaryExpr :: BinaryOp -> Expr a -> Expr b -> Expr c
 binaryExpr op (Expr e1) (Expr e2) = Expr $ Binary op e1 e2
+
+maxf :: Expr Float -> Expr Float -> Expr Float
+maxf = binaryExpr (BinaryFunOp Max)
+
+minf :: Expr Float -> Expr Float -> Expr Float
+minf = binaryExpr (BinaryFunOp Min)
+
+addf :: Expr Float -> Expr Float -> Expr Float
+addf = binaryExpr (BinaryInfixOp Add)
+
+add2f :: Expr (V2 Float) -> Expr (V2 Float) -> Expr (V2 Float)
+add2f = binaryExpr (BinaryInfixOp Add)
+
+add3f :: Expr (V3 Float) -> Expr (V3 Float) -> Expr (V3 Float)
+add3f = binaryExpr (BinaryInfixOp Add)
+
+add4f :: Expr (V4 Float) -> Expr (V4 Float) -> Expr (V4 Float)
+add4f = binaryExpr (BinaryInfixOp Add)
+
+subf :: Expr Float -> Expr Float -> Expr Float
+subf = binaryExpr (BinaryInfixOp Sub)
+
+sub2f :: Expr (V2 Float) -> Expr (V2 Float) -> Expr (V2 Float)
+sub2f = binaryExpr (BinaryInfixOp Sub)
+
+sub3f :: Expr (V3 Float) -> Expr (V3 Float) -> Expr (V3 Float)
+sub3f = binaryExpr (BinaryInfixOp Sub)
+
+sub4f :: Expr (V4 Float) -> Expr (V4 Float) -> Expr (V4 Float)
+sub4f = binaryExpr (BinaryInfixOp Sub)
 
 xform3f :: Expr (M33 Float) -> Expr (V3 Float) -> Expr (V3 Float)
 xform3f = binaryExpr (BinaryInfixOp Mult)
@@ -117,20 +193,61 @@ xform3f = binaryExpr (BinaryInfixOp Mult)
 xform4f :: Expr (M44 Float) -> Expr (V4 Float) -> Expr (V4 Float)
 xform4f = binaryExpr (BinaryInfixOp Mult)
 
+scale3f :: Expr (V3 Float) -> Expr Float -> Expr (V3 Float)
+scale3f = binaryExpr (BinaryInfixOp Mult)
+
+scale4f :: Expr (V4 Float) -> Expr Float -> Expr (V4 Float)
+scale4f = binaryExpr (BinaryInfixOp Mult)
+
 multf :: Expr Float -> Expr Float -> Expr Float
 multf = binaryExpr (BinaryInfixOp Mult)
+
+mult3f :: Expr (V3 Float) -> Expr (V3 Float) -> Expr (V3 Float)
+mult3f = binaryExpr (BinaryInfixOp Mult)
+
+divf :: Expr Float -> Expr Float -> Expr Float
+divf = binaryExpr (BinaryInfixOp Div)
+
+div2f :: Expr (V2 Float) -> Expr Float -> Expr (V2 Float)
+div2f = binaryExpr (BinaryInfixOp Div)
 
 div3f :: Expr (V3 Float) -> Expr Float -> Expr (V3 Float)
 div3f = binaryExpr (BinaryInfixOp Div)
 
+div4f :: Expr (V4 Float) -> Expr Float -> Expr (V4 Float)
+div4f = binaryExpr (BinaryInfixOp Div)
+
+dot2f :: Expr (V2 Float) -> Expr (V2 Float) -> Expr Float
+dot2f = binaryExpr (BinaryFunOp Dot)
+
+dot3f :: Expr (V3 Float) -> Expr (V3 Float) -> Expr Float
+dot3f = binaryExpr (BinaryFunOp Dot)
+
+dot4f :: Expr (V4 Float) -> Expr (V4 Float) -> Expr Float
+dot4f = binaryExpr (BinaryFunOp Dot)
+
+gtf :: Expr Float -> Expr Float -> Expr Bool
+gtf = binaryExpr (BinaryInfixOp GreaterThan)
+
+ltf :: Expr Float -> Expr Float -> Expr Bool
+ltf = binaryExpr (BinaryInfixOp LessThan)
+
 sample1D :: Expr Sampler1D -> Expr Float -> Expr (V4 Float)
-sample1D = binaryExpr (BinaryFunctionOp Sample1D)
+sample1D = binaryExpr (BinaryFunOp Sample1D)
 
 sample2D :: Expr Sampler2D -> Expr (V2 Float) -> Expr (V4 Float)
-sample2D = binaryExpr (BinaryFunctionOp Sample2D)
+sample2D = binaryExpr (BinaryFunOp Sample2D)
 
 sample3D :: Expr Sampler3D -> Expr (V3 Float) -> Expr (V4 Float)
-sample3D = binaryExpr (BinaryFunctionOp Sample3D)
+sample3D = binaryExpr (BinaryFunOp Sample3D)
+
+--------------------------------------------------
+
+ternaryExpr :: TernaryOp -> Expr a -> Expr b -> Expr c -> Expr d
+ternaryExpr op (Expr e1) (Expr e2) (Expr e3) = Expr $ Ternary op e1 e2 e3
+
+clampf :: Expr Float -> Expr Float -> Expr Float -> Expr Float
+clampf = ternaryExpr Clamp
 
 --------------------------------------------------------------------------------
 
@@ -211,26 +328,27 @@ mkVec4f_13 x v =
 --    in (finishSwizzleV . _z_ . _y_ . _x_ . startSwizzle) foo
 
 data SwizzleVar = SwizzleX | SwizzleY | SwizzleZ | SwizzleW
+                deriving(Show, Eq, Ord, Enum, Bounded)
 
-data Sw2D a = Sw2D (Expr (V2 a))
-data Sw3D a = Sw3D (Expr (V3 a))
-data Sw4D a = Sw4D (Expr (V4 a))
+data Sw2D a = Sw2D (Expr (V2 a)) deriving (Eq, Show)
+data Sw3D a = Sw3D (Expr (V3 a)) deriving (Eq, Show)
+data Sw4D a = Sw4D (Expr (V4 a)) deriving (Eq, Show)
 
-data Sw2D1D a = Sw2D1D (Expr (V2 a)) SwizzleVar
-data Sw3D1D a = Sw3D1D (Expr (V3 a)) SwizzleVar
-data Sw4D1D a = Sw4D1D (Expr (V4 a)) SwizzleVar
+data Sw2D1D a = Sw2D1D (Expr (V2 a)) SwizzleVar deriving (Eq, Show)
+data Sw3D1D a = Sw3D1D (Expr (V3 a)) SwizzleVar deriving (Eq, Show)
+data Sw4D1D a = Sw4D1D (Expr (V4 a)) SwizzleVar deriving (Eq, Show)
 
-data Sw2D2D a = Sw2D2D (Sw2D1D a) SwizzleVar
-data Sw3D2D a = Sw3D2D (Sw3D1D a) SwizzleVar
-data Sw4D2D a = Sw4D2D (Sw4D1D a) SwizzleVar
+data Sw2D2D a = Sw2D2D (Sw2D1D a) SwizzleVar deriving (Eq, Show)
+data Sw3D2D a = Sw3D2D (Sw3D1D a) SwizzleVar deriving (Eq, Show)
+data Sw4D2D a = Sw4D2D (Sw4D1D a) SwizzleVar deriving (Eq, Show)
 
-data Sw2D3D a = Sw2D3D (Sw2D2D a) SwizzleVar
-data Sw3D3D a = Sw3D3D (Sw3D2D a) SwizzleVar
-data Sw4D3D a = Sw4D3D (Sw4D2D a) SwizzleVar
+data Sw2D3D a = Sw2D3D (Sw2D2D a) SwizzleVar deriving (Eq, Show)
+data Sw3D3D a = Sw3D3D (Sw3D2D a) SwizzleVar deriving (Eq, Show)
+data Sw4D3D a = Sw4D3D (Sw4D2D a) SwizzleVar deriving (Eq, Show)
 
-data Sw2D4D a = Sw2D4D (Sw2D3D a) SwizzleVar
-data Sw3D4D a = Sw3D4D (Sw3D3D a) SwizzleVar
-data Sw4D4D a = Sw4D4D (Sw4D3D a) SwizzleVar
+data Sw2D4D a = Sw2D4D (Sw2D3D a) SwizzleVar deriving (Eq, Show)
+data Sw3D4D a = Sw3D4D (Sw3D3D a) SwizzleVar deriving (Eq, Show)
+data Sw4D4D a = Sw4D4D (Sw4D3D a) SwizzleVar deriving (Eq, Show)
 
 
 swizzle2D :: Expr (V2 a) -> Sw2D a
