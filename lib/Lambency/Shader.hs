@@ -18,10 +18,11 @@ import Lambency.Vertex
 import Lambency.Texture
 import Lambency.Types
 
-import qualified Lambency.Shader.Var as I
 import qualified Lambency.Shader.Expr as I
-import qualified Lambency.Shader.Program as I
+import qualified Lambency.Shader.Base as I
 import qualified Lambency.Shader.OpenGL as I
+import qualified Lambency.Shader.Program as I
+import qualified Lambency.Shader.Var as I
 
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLRaw

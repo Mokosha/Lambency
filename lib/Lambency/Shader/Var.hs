@@ -1,42 +1,10 @@
-{-# LANGUAGE EmptyDataDecls #-}
 module Lambency.Shader.Var where
 
 --------------------------------------------------------------------------------
+import Lambency.Shader.Base
+
 import Linear
 --------------------------------------------------------------------------------
-
-data Sampler1D
-data Sampler2D
-data Sampler3D
-
-data ShaderVarTyRep = Matrix2Ty
-                    | Matrix3Ty
-                    | Matrix4Ty
-                    | Matrix3ListTy
-                    | Matrix4ListTy
-                    | Vector2Ty
-                    | Vector3Ty
-                    | Vector4Ty
-                    | Vector2ListTy
-                    | Vector3ListTy
-                    | Vector4ListTy
-                    | IntTy
-                    | IntListTy
-                    | FloatTy
-                    | FloatListTy
-                    | Sampler1DTy
-                    | Sampler2DTy
-                    | Sampler3DTy
-                    deriving (Show, Read, Eq, Ord, Enum, Bounded)
-
-data ShaderVarRep = ShdrVarRep {
-  shdrVarName :: String,
-  shdrVarID :: Int,
-  shdrVarTy :: ShaderVarTyRep
-} deriving (Show, Eq)
-
-newtype ShaderVar a = ShaderVar ShaderVarRep
-newtype ShaderVarTy a = ShaderVarTy ShaderVarTyRep deriving (Show, Read, Eq, Ord, Bounded)
 
 matrix2Ty :: ShaderVarTy (M22 Float)
 matrix2Ty = ShaderVarTy Matrix2Ty

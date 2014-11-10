@@ -1,53 +1,23 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Lambency.Shader.Program where
 
 --------------------------------------------------------------------------------
-import Control.Applicative
 import Control.Monad.RWS.Strict
 
 import Data.List ((\\), intersect)
 
 import Lambency.Vertex
-import Lambency.Shader.Var
-import Lambency.Shader.Expr
+
+import Lambency.Shader.Base
 
 import Linear
 --------------------------------------------------------------------------------
-
-data DeclarationTy = AttributeDeclTy
-                   | UniformDeclTy
-                   | VaryingDeclTy
-                   | ConstDeclTy
-                   deriving (Show, Read, Eq, Ord, Enum, Bounded)
-
-data Declaration = Attribute ShaderVarRep
-                 | Uniform ShaderVarRep
-                 | Varying ShaderVarRep
-                 | ConstDecl ShaderVarRep ExprRep
-                 deriving (Eq, Show)
 
 getDeclType :: Declaration -> DeclarationTy
 getDeclType (Attribute _) = AttributeDeclTy
 getDeclType (Uniform _) = UniformDeclTy
 getDeclType (Varying _) = VaryingDeclTy
 getDeclType (ConstDecl _ _) = ConstDeclTy
-
-data SpecialVar = VertexPosition
-                | FragmentColor
-                deriving (Show, Read, Eq, Ord, Enum, Bounded)
-
-data Statement = LocalDecl ShaderVarRep (Maybe ExprRep)
-               | Assignment ShaderVarRep ExprRep
-               | SpecialAssignment SpecialVar ShaderVarRep
-               | IfThenElse ExprRep [Statement] [Statement]
-
-newtype ShaderInput i = ShaderInput { getInputVars :: [ShaderVarRep] }
-
-data ShaderOutputVar = CustomOutput ShaderVarRep
-                     | SpecialOutput SpecialVar ShaderVarRep
-
-newtype ShaderOutput o = ShaderOutput { getOutputVars :: [ShaderOutputVar] }
 
 addCustomOVar :: ShaderVar a -> ShaderOutput b -> ShaderOutput b
 addCustomOVar (ShaderVar v) (ShaderOutput vs) = ShaderOutput ((CustomOutput v):vs)
@@ -107,13 +77,6 @@ updateStmts stmts vars =
   let updateFor :: ShaderVarRep -> [Statement] -> [Statement]
       updateFor v = concat . map (updateStmt v)
   in foldl (flip updateFor) stmts (collectCustom vars) ++ (mkSpecialStmts vars)
-  
-newtype ShaderContext i a =
-  ShdrCtx { compileShdrCode :: RWS (ShaderInput i) ([Declaration], [Statement]) Int a }
-  deriving (Functor, Applicative, Monad, MonadReader (ShaderInput i),
-            MonadWriter ([Declaration], [Statement]), MonadState Int)
-
-newtype ShaderCode i o = ShdrCode (ShaderContext i (ShaderOutput o))
 
 newVar :: String -> ShaderVarTy a -> ShaderContext i (ShaderVar a)
 newVar name (ShaderVarTy ty) = do
@@ -137,11 +100,6 @@ setE ty (Expr e) = do
 
 assignE :: ShaderVar a -> Expr a -> ShaderContext i ()
 assignE (ShaderVar v) (Expr e) = tell (mempty, [Assignment v e])
-
-data ShaderProgram = ShaderProgram {
-  shaderDecls :: [Declaration],
-  shaderStmts :: [Statement]
-}
 
 emptyPrg :: ShaderProgram
 emptyPrg = ShaderProgram [] []

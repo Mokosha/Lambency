@@ -33,10 +33,11 @@ library
                        Lambency.Render
 
                        Lambency.Shader
-                       Lambency.Shader.Var
-                       Lambency.Shader.Program
+                       Lambency.Shader.Base
                        Lambency.Shader.Expr
                        Lambency.Shader.OpenGL
+                       Lambency.Shader.Program
+                       Lambency.Shader.Var
 
                        Lambency.Sprite
                        Lambency.Texture

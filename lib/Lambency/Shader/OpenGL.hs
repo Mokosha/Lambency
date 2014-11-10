@@ -11,8 +11,7 @@ import qualified Data.Map as Map
 
 import qualified Graphics.Rendering.OpenGL as GL
 
-import Lambency.Shader.Var
-import Lambency.Shader.Expr
+import Lambency.Shader.Base
 import Lambency.Shader.Program
 
 import qualified Lambency.Types as L

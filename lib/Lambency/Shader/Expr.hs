@@ -3,80 +3,10 @@
 module Lambency.Shader.Expr where
 
 --------------------------------------------------------------------------------
-import Lambency.Shader.Var
+import Lambency.Shader.Base
 
 import Linear
 --------------------------------------------------------------------------------
-
-data UnaryInfix = Negate
-                deriving(Show, Eq, Ord, Enum, Bounded)
-
-data UnaryFun = Floor
-              | Ceiling
-              | Fract
-              | Sine
-              | Cosine
-              | Normalize
-              | Length
-              | CastFloat
-              deriving(Show, Eq, Ord, Enum, Bounded)
-
-data UnaryOp = UnaryInfixOp UnaryInfix
-             | UnaryFunOp UnaryFun
-              deriving(Show, Eq, Ord)
-
-data BinaryInfix = Add
-                 | Sub
-                 | Mult
-                 | Div
-                 | GreaterThan
-                 | LessThan
-                 deriving(Show, Eq, Ord, Enum, Bounded)
-
-data BinaryFunction = Max
-                    | Min
-                    | Dot
-                    | Sample1D
-                    | Sample2D
-                    | Sample3D
-                    deriving(Show, Eq, Ord, Enum, Bounded)
-
-data BinaryOp = BinaryInfixOp BinaryInfix
-              | BinaryFunOp BinaryFunction
-              deriving(Show, Eq, Ord)
-
-data TernaryOp = Clamp
-               | Mix
-               deriving(Show, Eq, Ord, Enum, Bounded)
-
-data Constant = ConstMat2 (M22 Float)
-              | ConstMat3 (M33 Float)
-              | ConstMat4 (M44 Float)
-              | ConstVec2f (V2 Float)
-              | ConstVec3f (V3 Float)
-              | ConstVec4f (V4 Float)
-              | ConstVec2i (V2 Int)
-              | ConstVec3i (V3 Int)
-              | ConstVec4i (V4 Int)
-              | ConstFloat Float
-              | ConstInt Int
-                deriving (Show, Ord, Eq)
-
-data VecExpr = Vec2Expr ExprRep ExprRep
-             | Vec3Expr ExprRep ExprRep ExprRep
-             | Vec4Expr ExprRep ExprRep ExprRep ExprRep
-               deriving (Eq, Show)
-
-data ExprRep = VarExpr ShaderVarRep
-             | ConstExpr Constant
-             | SwizzleExpr ExprRep (SwizzleVar, Maybe SwizzleVar, Maybe SwizzleVar, Maybe SwizzleVar)
-             | Unary UnaryOp ExprRep
-             | Binary BinaryOp ExprRep ExprRep
-             | Ternary TernaryOp ExprRep ExprRep ExprRep
-             | NewVec VecExpr
-               deriving (Eq, Show)
-
-newtype Expr a = Expr ExprRep deriving (Eq, Show)
 
 mkConstMat2 :: M22 Float -> Expr (M22 Float)
 mkConstMat2 m = Expr $ ConstExpr $ ConstMat2 m
@@ -326,9 +256,6 @@ mkVec4f_13 x v =
 --   to
 --   let foo = Expr (V3 Float)
 --    in (finishSwizzleV . _z_ . _y_ . _x_ . startSwizzle) foo
-
-data SwizzleVar = SwizzleX | SwizzleY | SwizzleZ | SwizzleW
-                deriving(Show, Eq, Ord, Enum, Bounded)
 
 data Sw2D a = Sw2D (Expr (V2 a)) deriving (Eq, Show)
 data Sw3D a = Sw3D (Expr (V3 a)) deriving (Eq, Show)
