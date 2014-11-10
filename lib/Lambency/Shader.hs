@@ -290,8 +290,8 @@ fragSpotlight = I.ShdrCode $ do
                 I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D $
                 I.sample2D (I.mkVarExpr diffuseTex) (I.mkVarExpr uv)
 
-  dither3 finalColor uv >>= I.assignE finalColor
-  out_color <- I.setE I.vector4fTy $ I.mkVec4f_31 (I.mkVarExpr finalColor) (I.mkConstf 1)
+  ditheredColor <- dither3 finalColor uv
+  out_color <- I.setE I.vector4fTy $ I.mkVec4f_31 ditheredColor (I.mkConstf 1)
 
   return $ I.addFragmentColor out_color I.emptyO
   
