@@ -14,7 +14,6 @@ module Lambency.Shader (
 ) where
 
 --------------------------------------------------------------------------------
-
 import Lambency.Vertex
 import Lambency.Texture
 import Lambency.Types
@@ -24,23 +23,16 @@ import qualified Lambency.Shader.Expr as I
 import qualified Lambency.Shader.Program as I
 import qualified Lambency.Shader.OpenGL as I
 
-import Paths_lambency
-
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
 
 import qualified Data.Map as Map
-import qualified Data.ByteString as BS
-import qualified Control.Monad as M
 import Control.Applicative
 
-import Data.Maybe (catMaybes)
 import Linear.Matrix
 import Linear.V2
 import Linear.V3
-import Linear.V4
 
-import System.FilePath
 import Foreign.Marshal.Utils
 import Foreign.Ptr
 --------------------------------------------------------------------------------
@@ -89,68 +81,6 @@ setUniformVar (Uniform Vector3Ty loc) (Vector3Val (V3 x y z)) = do
 
 setUniformVar (Attribute _ _) _ = return ()
 setUniformVar (Uniform ty _) _ = ioError $ userError $ "Uniform not supported: " ++ (show ty)
-
-getShaderExt :: GL.ShaderType -> String
-getShaderExt GL.FragmentShader = ".frag"
-getShaderExt GL.VertexShader = ".vert"
-getShaderExt _ = ".glsl"
-
-getShaderForExt :: String -> Maybe GL.ShaderType
-getShaderForExt ".frag" = Just GL.FragmentShader
-getShaderForExt ".vert" = Just GL.VertexShader
-getShaderForExt _ = Nothing
-
-getShaderPath :: String -> GL.ShaderType -> IO(FilePath)
-getShaderPath name ty = getDataFileName $ "shaders" </> name <.> (getShaderExt ty)
-
-loadProgram :: [FilePath] -> IO(Maybe GL.Program)
-loadProgram paths = do
-  sids <- mapM compileShader paths
-  case (catMaybes sids) of
-    [] -> return Nothing
-    ids -> do
-      prg <- GL.createProgram
-      mapM_ (GL.attachShader prg) ids
-      GL.linkProgram prg
-      return $ Just prg
-  where
-    compileShader :: FilePath -> IO(Maybe GL.Shader)
-    compileShader fp = do
-      putStrLn $ "Compiling " ++ fp
-      fileSrc <- BS.readFile fp
-      msid <- case (getShaderForExt . takeExtension) fp of
-        Just shdrTy -> return . Just =<< GL.createShader shdrTy
-        Nothing -> return Nothing
-      case msid of
-        Just sid -> do
-          GL.shaderSourceBS sid GL.$= fileSrc
-          GL.compileShader sid
-          shaderLog <- GL.get $ GL.shaderInfoLog sid
-          M.unless (shaderLog == []) $ putStrLn shaderLog
-          return (Just sid)
-        Nothing -> return Nothing
-
-lookupShaderVar :: GL.Program -> ShaderVarTy -> String -> IO (String, Maybe ShaderVar)
-lookupShaderVar prg ty name = do
-  uloc <- GL.get $ GL.uniformLocation prg name
-  if uloc == (GL.UniformLocation (-1)) then do
-    aloc <- GL.get $ GL.attribLocation prg name
-    if aloc == (GL.AttribLocation (-1)) then
-      return (name, Nothing)
-      else
-      return $ (name, Just $ Attribute ty aloc)
-    else
-    return $ (name, Just $ Uniform ty uloc)
-
-extractVars :: [IO(String, Maybe ShaderVar)] -> IO ShaderVarMap
-extractVars iomvars = M.liftM constructMap $ sequence iomvars
-  where
-    constructMap :: [(String, Maybe ShaderVar)] -> ShaderVarMap
-    constructMap vs = Map.fromList (gatherValid vs)
-
-    gatherValid :: [(String, Maybe ShaderVar)] -> [(String, ShaderVar)]
-    gatherValid vs = catMaybes $ map (\(n, msv) -> case msv of Nothing -> Nothing
-                                                               Just sv -> Just (n, sv)) vs
 
 destroyShader :: Shader -> IO ()
 destroyShader (Shader prog _) = GL.deleteObjectName prog
