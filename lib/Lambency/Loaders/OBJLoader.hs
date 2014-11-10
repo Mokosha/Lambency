@@ -237,9 +237,9 @@ parseFile = let
   vert :: Parser Value
   vert = do
     v <- char 'v' >>
-         ((char ' ' >> vector3 >>= return . Position)
-          <|> (char 'n' >> vector3 >>= return . Normal)
-          <|> (char 't' >> vector2 >>= return . TexCoord))
+         ((char ' ' >> (Position <$> vector3))
+          <|> (char 'n' >> (Normal <$> vector3))
+          <|> (char 't' >> (TexCoord <$> vector2)))
     _ <- many (noneOf ['\n'])
     return v
 
@@ -257,8 +257,8 @@ parseFile = let
     skipMany (tab <|> char ' ')
     idx <- integer
     (tc, n) <- (do _ <- char '/'
-                   mtc <- option Nothing $ integer >>= (return . Just)
-                   mn <- (char '/' >> integer >>= (return.Just)) <|> (return Nothing)
+                   mtc <- option Nothing $ Just <$> integer
+                   mn <- (char '/' >> (Just <$> integer)) <|> (return Nothing)
                    return (mtc, mn))
                <|>
                (return (Nothing, Nothing))
@@ -292,13 +292,13 @@ parseFile = let
 
   constructGeometry :: [Value] -> OBJGeometry -> OBJGeometry
   constructGeometry (Normal n : rest) g =
-    constructGeometry rest $ (\og -> og { objNormals = (signorm n) : (objNormals g) }) g
+    constructGeometry rest $ g { objNormals = (signorm n) : (objNormals g) }
   constructGeometry (Position p : rest) g =
-    constructGeometry rest $ (\og -> og { objVerts = p : (objVerts g) }) g
+    constructGeometry rest $ g { objVerts = p : (objVerts g) }
   constructGeometry (TexCoord tc : rest) g =
-    constructGeometry rest $ (\og -> og { objTexCoords = tc : (objTexCoords g) }) g
+    constructGeometry rest $ g { objTexCoords = tc : (objTexCoords g) }
   constructGeometry (Face f : rest) g =
-    constructGeometry rest $ (\og -> og { objFaces = f : (objFaces g) }) g
+    constructGeometry rest $ g { objFaces = f : (objFaces g) }
   constructGeometry _ g = g
 
   in do
@@ -315,7 +315,7 @@ loadOBJ gen filepath = let
       Left x -> error $ show x
       Right y -> y
   in
-   readFile filepath >>= return . gen . parseOBJ
+   gen . parseOBJ <$> readFile filepath
 
 loadV3 :: FilePath -> IO (Mesh Vertex3)
 loadV3 = loadOBJ obj2V3Mesh
