@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Lambency.Camera (
   mkOrthoCamera,
   mkPerspCamera,
@@ -33,13 +34,8 @@ import qualified Control.Wire as W
 
 import FRP.Netwire.Input
 
-import Linear.Matrix
-import Linear.Metric
 import qualified Linear.Quaternion as Quat
-import Linear.Vector
-import Linear.V2
-import Linear.V3
-import Linear.V4
+import Linear
 --------------------------------------------------------------------------------
 
 mkXForm :: Vec3f -> Vec3f -> Vec3f -> XForm.Transform
@@ -161,28 +157,14 @@ getViewMatrix (Camera xf _ _) =
     te n sc = extendWith (pos `dot` n) (sc *^ n)
   in adjoint $ V4 (te r sx) (te u sy) (te f sz) (V4 0 0 0 1)
 
-getProjMatrix :: Camera -> Mat4f
-getProjMatrix (Camera _ (Ortho {top = t, bottom = b, left = l, right = r}) dist) = let
-  n = near dist
-  f = far dist
-  in
-   V4
-   (V4 (2.0 / (r - l)) 0 0 0)
-   (V4 0 (2.0 / (t - b)) 0 0)
-   (V4 0 0 ((-2.0) / (f - n)) 0)
-   (V4 (-(r+l)/(r-l)) (-(t+b)/(t-b)) (-(f+n)/(f-n)) 1)
+mkProjMatrix :: CameraType -> CameraViewDistance -> Mat4f
+mkProjMatrix (Ortho {..}) (CameraViewDistance{..}) =
+  transpose $ ortho left right bottom top near far
+mkProjMatrix (Persp {..}) (CameraViewDistance{..}) =
+  transpose $ perspective fovY aspect near far
 
-getProjMatrix (Camera _ (Persp {fovY = fovy, aspect = a}) dist) = let
-  n = near dist
-  f = far dist
-  t = n * (tan (fovy * 0.5))
-  r = t * a
-  in
-   V4
-   (V4 (n / r) 0 0 0)
-   (V4 0 (n / t) 0 0)
-   (V4 0 0 (-(f+n)/(f-n)) (-1))
-   (V4 0 0 (-(2*f*n)/(f-n)) 0)
+getProjMatrix :: Camera -> Mat4f
+getProjMatrix (Camera _ ty dist) = mkProjMatrix ty dist
 
 getViewProjMatrix :: Camera -> Mat4f
 getViewProjMatrix c = (getViewMatrix c) !*! (getProjMatrix c)
