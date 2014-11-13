@@ -37,7 +37,7 @@ mkOBJ objfile = do
   if not exists then error ("OBJ file " ++ objfile ++ " not found") else return ()
   tex <- L.createSolidTexture (67, 128, 67, 255)
   objInfo <- L.getOBJInfo objfile
-  if L.numNormals objInfo == 0 || L.numTexCoords info == 0
+  if L.numNormals objInfo == 0 || L.numTexCoords objInfo == 0
     then do
       error "OBJ file has no normals or texture coordinates!"
       mesh <- L.loadV3 objfile
