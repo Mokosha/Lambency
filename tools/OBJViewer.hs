@@ -37,12 +37,16 @@ mkOBJ objfile = do
   if not exists then error ("OBJ file " ++ objfile ++ " not found") else return ()
   tex <- L.createSolidTexture (67, 128, 67, 255)
   objInfo <- L.getOBJInfo objfile
-  if L.numNormals objInfo == 0
+  if L.numNormals objInfo == 0 || L.numTexCoords info == 0
     then do
+      error "OBJ file has no normals or texture coordinates!"
       mesh <- L.loadV3 objfile
       L.createRenderObject mesh (L.createTexturedMaterial tex)
     else do
-      mesh <- L.loadOV3 objfile
+      -- !FIXME! should be: mesh <- L.loadOV3 objfile
+      -- but then the vertices have no texture coordinates and the
+      -- shader crashes.
+      mesh <- L.loadOTV3 objfile
       L.createRenderObject mesh (L.createTexturedMaterial tex)
 
 controlWire :: L.RenderObject -> L.GameWire a a
@@ -80,10 +84,10 @@ loadGame objfile = do
   let lightPos = 10 *^ (V3 0 1 (-1))
   spotlight <- L.createSpotlight lightPos (negate lightPos) 0
   return $ L.Game { L.staticLights = [L.setAmbient (V3 0.5 0.5 0.5) spotlight],
-                     L.staticGeometry = [],
-                     L.mainCamera = cam,
-                     L.dynamicLights = [],
-                     L.gameLogic = controlWire obj W.>>> (L.quitWire GLFW.Key'Q) }
+                    L.staticGeometry = [],
+                    L.mainCamera = cam,
+                    L.dynamicLights = [],
+                    L.gameLogic = controlWire obj W.>>> (L.quitWire GLFW.Key'Q) }
 
 handleArgs :: [FilePath] -> Either String FilePath
 handleArgs [] = Left "Usage: lobjview OBJFILE"
@@ -92,7 +96,7 @@ handleArgs (_ : xs) = Left $ "Unrecognized arguments: " ++ (intercalate " " xs)
 
 main :: IO ()
 main = do
-  objfile <- pure handleArgs <*> getArgs
+  objfile <- handleArgs <$> getArgs
   case objfile of
     Right file -> L.runWindow 640 480 "OBJ Viewer" () (loadGame file)
     Left err -> putStrLn err
