@@ -18,6 +18,7 @@ import Data.Text (pack)
 
 import Data.Array.Unboxed (UArray, listArray, (!))
 
+import Control.Monad.State.Strict as State
 import Control.Applicative hiding (many, (<|>))
 
 import Text.Parsec
@@ -38,17 +39,9 @@ type OBJVertexList = [OBJVertex]
 type OBJTexCoord = Vec2f
 type OBJTexCoordList = [OBJTexCoord]
 
-emptyTexCoords :: OBJTexCoordList -> Bool
-emptyTexCoords [] = True
-emptyTexCoords _ = False
-
 -- type OBJNormal = Normal3
 type OBJNormal = Vec3f
 type OBJNormalList = [OBJNormal]
-
-emptyNormals :: OBJNormalList -> Bool
-emptyNormals [] = True
-emptyNormals _ = False
 
 type OBJIndex = (Int, Maybe Int, Maybe Int) -- derives Eq, Ord
 type OBJIndexList = [OBJIndex]
@@ -61,6 +54,28 @@ data OBJGeometry = OBJGeometry {
   objNormals :: OBJNormalList,
   objFaces :: OBJFaceList
 } deriving (Show)
+
+type OBJGeometryLength = (Int, Int, Int) -- nVerts, nTexCoords, nNormals
+
+convertNegativeFaces :: OBJGeometryLength -> OBJFace -> OBJFace
+convertNegativeFaces geomLen = map (convertNegativeIndex geomLen)
+  where
+    convert :: Int -> Int -> Int
+    convert len x
+      | x < 0 = len + x + 1
+      | otherwise = x
+    
+    convertNegativeIndex :: OBJGeometryLength -> OBJIndex -> OBJIndex
+    convertNegativeIndex (nVerts, nTexCoords, nNormals) (p, tc, n) =
+      (convert nVerts p, liftM (convert nTexCoords) tc, liftM (convert nNormals) n)
+
+reverseGeometry :: OBJGeometry -> OBJGeometry
+reverseGeometry geom = OBJGeometry {
+  objVerts = reverse $ objVerts geom,
+  objTexCoords = reverse $ objTexCoords geom,
+  objNormals = reverse $ objNormals geom,
+  objFaces = objFaces geom
+  }
 
 triangulate :: OBJFaceList -> OBJIndexList
 triangulate fs = let
@@ -82,32 +97,19 @@ simpleObj2Mesh verts faces = Mesh {
 
 mkVec2fLookup :: [Vec2f] -> (Int -> Vec2f)
 mkVec2fLookup vecs = let
-
-  l :: Int
-  l = length vecs
-  
   arr :: UArray Int Float
-  arr = listArray
-        (1, (l + 1) * 2)
-        (concat $ map (\(V2 x y) -> [x, y]) vecs)
+  arr = listArray (1, length vecs * 2) $
+        concat $ map (\(V2 x y) -> [x, y]) vecs
 
-  in (\i ->
-       let idx = if (i < 0) then (l + i + 1) else i
-       in V2 (arr ! (2*idx - 1)) (arr ! (2 * idx)))
+  in (\i -> V2 (arr ! (2*i - 1)) (arr ! (2 * i)))
 
 mkVec3fLookup :: [Vec3f] -> (Int -> Vec3f)
 mkVec3fLookup vecs = let
-  l :: Int
-  l = length vecs
-  
   arr :: UArray Int Float
-  arr = listArray
-        (1, (l + 1) * 3)
-        (concat $ map (\(V3 x y z) -> [x, y, z]) vecs)
+  arr = listArray (1, length vecs * 3) $
+        concat $ map (\(V3 x y z) -> [x, y, z]) vecs
 
-  in \i ->
-       let idx = if (i < 0) then (l + i + 1) else i
-        in V3 (arr ! (3*idx - 2)) (arr ! (3*idx - 1)) (arr ! (3 * idx))
+  in \i -> V3 (arr ! (3*i - 2)) (arr ! (3*i - 1)) (arr ! (3 * i))
 
 genIdxMap' :: Vertex a => (OBJIndex -> a) -> OBJIndexList -> Map.Map OBJIndex (Int, a) -> Int ->
              Map.Map OBJIndex (Int, a)
@@ -130,7 +132,6 @@ genMesh idxs f = let
 
 normalObj2Mesh :: OBJVertexList -> OBJNormalList -> OBJFaceList -> Mesh OVertex3
 normalObj2Mesh verts normals faces = let
-  -- ns = mkVec3fLookup $ map fromNormal normals
   ns = mkVec3fLookup normals
   vs = mkVec3fLookup verts
 
@@ -154,7 +155,6 @@ texturedObj2Mesh verts texcoords faces = let
 normTexturedObj2Mesh :: OBJVertexList -> OBJTexCoordList -> OBJNormalList -> OBJFaceList ->
                         Mesh OTVertex3
 normTexturedObj2Mesh verts texcoords normals faces = let
-  -- ns = mkVec3fLookup $ map fromNormal normals
   ns = mkVec3fLookup normals
   tcs = mkVec2fLookup texcoords
   vs = mkVec3fLookup verts
@@ -171,28 +171,28 @@ obj2V3Mesh (OBJGeometry {objVerts=vs, objTexCoords=_, objNormals=_, objFaces=fs}
 
 obj2OV3Mesh :: OBJGeometry -> Mesh OVertex3
 obj2OV3Mesh (OBJGeometry {objVerts=vs, objTexCoords=_, objNormals=ns, objFaces = fs})
-  | emptyNormals ns = normalObj2Mesh vs (repeat zero) fs
+  | null ns = normalObj2Mesh vs (repeat zero) fs
   | otherwise = normalObj2Mesh vs ns fs
 
 obj2TV3Mesh :: OBJGeometry -> Mesh TVertex3
 obj2TV3Mesh (OBJGeometry {objVerts=vs, objTexCoords=uvs, objNormals=_, objFaces = fs})
-  | emptyTexCoords uvs = texturedObj2Mesh vs (repeat zero) fs
+  | null uvs = texturedObj2Mesh vs (repeat zero) fs
   | otherwise = texturedObj2Mesh vs uvs fs
 
 obj2OTV3Mesh :: OBJGeometry -> Mesh OTVertex3
 obj2OTV3Mesh (OBJGeometry {objVerts=vs, objTexCoords=uvs, objNormals=ns, objFaces = fs})
-  | (emptyNormals ns) && (emptyTexCoords uvs) =
+  | (null ns) && (null uvs) =
     normTexturedObj2Mesh vs (repeat zero) (repeat zero) fs
   -- !FIXME! Do we want to generate normals here maybe?
-  | emptyNormals ns = normTexturedObj2Mesh vs uvs (repeat zero) fs
-  | emptyTexCoords uvs = normTexturedObj2Mesh vs (repeat zero) ns fs
+  | null ns = normTexturedObj2Mesh vs uvs (repeat zero) fs
+  | null uvs = normTexturedObj2Mesh vs (repeat zero) ns fs
   | otherwise = normTexturedObj2Mesh vs uvs ns fs
 
-data Value = Normal Vec3f
-           | Position Vec3f
-           | TexCoord Vec2f
-           | Face OBJFace
-             deriving (Show)
+data Command = Normal Vec3f
+             | Position Vec3f
+             | TexCoord Vec2f
+             | Face OBJFace
+             deriving (Show, Eq, Ord)
 
 parseFile :: Parser OBJGeometry
 parseFile = let
@@ -219,7 +219,7 @@ parseFile = let
   vector3 = V3 <$> float <*> float <*> float
 
   ignoreRestOfLine :: Parser ()
-  ignoreRestOfLine = many (noneOf ['\n']) >> newline >> return ()
+  ignoreRestOfLine = many (noneOf "\r\n") >> newline >> return ()
 
   comment :: Parser ()
   comment = char '#' >> ignoreRestOfLine
@@ -234,13 +234,13 @@ parseFile = let
   blankLine = (newline <|>
                (skipMany1 (tab <|> char ' ') >> newline)) >> return ()
 
-  vert :: Parser Value
+  vert :: Parser Command
   vert = do
     v <- char 'v' >>
-         ((char ' ' >> (Position <$> vector3))
+         ((many1 space >> (Position <$> vector3))
           <|> (char 'n' >> (Normal <$> vector3))
           <|> (char 't' >> (TexCoord <$> vector2)))
-    _ <- many (noneOf ['\n'])
+    _ <- many (noneOf "\r\n")
     return v
 
   integer :: Parser Int
@@ -265,21 +265,21 @@ parseFile = let
     skipMany (tab <|> char ' ')
     return (idx, tc, n)
 
-  face :: Parser Value
+  face :: Parser Command
   face = do
     idxs <- char 'f' >> (many1 index)
-    _ <- many (noneOf ['\n'])
+    _ <- many (noneOf "\r\n")
     return $ Face idxs
 
-  value :: Parser Value
-  value = vert <|> face
+  command :: Parser Command
+  command = vert <|> face
 
   ignorableLines :: Parser ()
   ignorableLines = many (errata <|> comment <|> blankLine) >> return ()
 
-  parseLine :: Parser Value
+  parseLine :: Parser Command
   parseLine = do
-    v <- value
+    v <- command
     ignorableLines
     return v
 
@@ -290,22 +290,34 @@ parseFile = let
     objFaces = []
     }
 
-  constructGeometry :: [Value] -> OBJGeometry -> OBJGeometry
-  constructGeometry (Normal n : rest) g =
-    constructGeometry rest $ g { objNormals = (signorm n) : (objNormals g) }
-  constructGeometry (Position p : rest) g =
-    constructGeometry rest $ g { objVerts = p : (objVerts g) }
-  constructGeometry (TexCoord tc : rest) g =
-    constructGeometry rest $ g { objTexCoords = tc : (objTexCoords g) }
-  constructGeometry (Face f : rest) g =
-    constructGeometry rest $ g { objFaces = f : (objFaces g) }
-  constructGeometry _ g = g
+  addCommand :: OBJGeometry -> Command -> State.State OBJGeometryLength OBJGeometry
+  addCommand g (Normal n) = do
+    (nVerts, nTexCoords, nNormals) <- State.get
+    State.put (nVerts, nTexCoords, nNormals + 1)
+    return $ g { objNormals = signorm n : (objNormals g) }
+
+  addCommand g (Position p) = do
+    (nVerts, nTexCoords, nNormals) <- State.get
+    State.put (nVerts + 1, nTexCoords, nNormals)
+    return $ g { objVerts = p : (objVerts g) }
+
+  addCommand g (TexCoord tc) = do
+    (nVerts, nTexCoords, nNormals) <- State.get
+    State.put (nVerts, nTexCoords + 1, nNormals)
+    return $ g { objTexCoords = tc : (objTexCoords g) }
+
+  addCommand g (Face f) = do
+    lengths <- State.get
+    return $ g { objFaces = convertNegativeFaces lengths f : (objFaces g) }
+
+  runCommands :: [Command] -> State.State OBJGeometryLength OBJGeometry
+  runCommands cmds = reverseGeometry <$> foldM addCommand initialGeom cmds
 
   in do
     ignorableLines
     vals <- many1 parseLine
     _ <- try (ignorableLines >> eof) >> return ()
-    return $ constructGeometry (reverse vals) initialGeom
+    return $ State.evalState (runCommands vals) (0, 0, 0)
 
 loadOBJ :: Vertex a => (OBJGeometry -> Mesh a) -> FilePath -> IO (Mesh a)
 loadOBJ gen filepath = let
