@@ -36,9 +36,14 @@ mkOBJ objfile = do
   exists <- doesFileExist objfile
   if not exists then error ("OBJ file " ++ objfile ++ " not found") else return ()
   tex <- L.createSolidTexture (67, 128, 67, 255)
-  mesh <- L.loadOV3 objfile
-  ro <- L.createRenderObject mesh (L.createTexturedMaterial tex)
-  return ro
+  objInfo <- L.getOBJInfo objfile
+  if L.numNormals objInfo == 0
+    then do
+      mesh <- L.loadV3 objfile
+      L.createRenderObject mesh (L.createTexturedMaterial tex)
+    else do
+      mesh <- L.loadOV3 objfile
+      L.createRenderObject mesh (L.createTexturedMaterial tex)
 
 controlWire :: L.RenderObject -> L.GameWire a a
 controlWire ro = L.mkObject ro (xForm L.identity)
