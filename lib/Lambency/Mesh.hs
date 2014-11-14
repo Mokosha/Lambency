@@ -1,5 +1,9 @@
 module Lambency.Mesh (
   Mesh(..),
+
+  genNormalsV3,
+  genNormalsTV3,
+
   triangle,
   cube,
   plane,
@@ -13,10 +17,9 @@ import Lambency.Vertex
 import Control.Applicative
 
 import Data.Int
+import qualified Data.Map as Map
 
-import Linear.V2
-import Linear.V3
-
+import Linear
 --------------------------------------------------------------------------------
 
 type Vec2f = V2 Float
@@ -115,3 +118,52 @@ quad = Mesh {
 
 instance Vertex a => Renderable (Mesh a) where
   createRenderObject m mat = createBasicRO (vertices m) (indices m) mat
+
+type Triangle = (Vec3f, Vec3f, Vec3f)
+
+mkTris :: Vertex a => (a -> Vec3f) -> Mesh a -> Map.Map a [Triangle]
+mkTris posFn mesh = mkTrisFn (indices mesh) Map.empty
+  where
+    vertMap = Map.fromList $ zip [0,1..] (vertices mesh)
+
+    mkTrisFn [] m = m
+    mkTrisFn (x : y : z : rest) m =
+      let xv = vertMap Map.! x
+          yv = vertMap Map.! y
+          zv = vertMap Map.! z
+          t = (posFn xv, posFn yv, posFn zv)
+          miniMap = Map.fromList $ zip [xv, yv, zv] $ repeat [t]
+      in mkTrisFn rest $ Map.unionWith (++) miniMap m
+
+    mkTrisFn _ _ = error "Not a list of triangle indices!"
+
+genNormals :: Map.Map a [Triangle] -> Map.Map a Vec3f
+genNormals = Map.map genNormal
+  where
+    triNormal :: Triangle -> Vec3f
+    triNormal (v1, v2, v3) =
+      let x = v2 ^-^ v1
+          y = v3 ^-^ v1
+      in signorm $ x `cross` y
+    
+    genNormal :: [Triangle] -> Vec3f
+    genNormal = signorm . foldl1 (^+^) . map triNormal
+
+genNormalsV3 :: Mesh Vertex3 -> Mesh OVertex3
+genNormalsV3 mesh =
+  let genOVertex :: Map.Map Vertex3 Vec3f -> Map.Map Vertex3 OVertex3
+      genOVertex = Map.mapWithKey addNormalV3
+
+      ovMap = genOVertex . genNormals . mkTris getVertex3Position $ mesh
+  in
+   mesh { vertices = map (ovMap Map.!) $ vertices mesh }
+
+genNormalsTV3 :: Mesh TVertex3 -> Mesh OTVertex3
+genNormalsTV3 mesh =
+  let genOTVertex :: Map.Map TVertex3 Vec3f -> Map.Map TVertex3 OTVertex3
+      genOTVertex = Map.mapWithKey addNormalTV3
+
+      otvMap = genOTVertex . genNormals . mkTris getTexVertex3Position $ mesh
+  in
+   mesh { vertices = map (otvMap Map.!) $ vertices mesh }
+  

@@ -5,6 +5,15 @@ module Lambency.Vertex (
   OVertex3,
   OTVertex3,
 
+  getVertex2Position,
+  getVertex3Position,
+  getTexVertex3Position,
+  getNormVertex3Position,
+  getNormTexVertex3Position,
+
+  addNormalV3,
+  addNormalTV3,
+
   Vertex(..),
   HasTextureCoordinates(..),
 
@@ -30,11 +39,11 @@ import Foreign.Ptr
 type Vec2f = V2 Float
 type Vec3f = V3 Float
 
-data Vertex2 = Vertex2 !Vec2f deriving (Show, Read)
-data Vertex3 = Vertex3 !Vec3f deriving (Show, Read)
-data TVertex3 = TVertex3 !Vec3f !Vec2f deriving (Show, Read)
-data OVertex3 = OVertex3 !Vec3f !Vec3f deriving (Show, Read)
-data OTVertex3 = OTVertex3 !Vec3f !Vec3f !Vec2f deriving (Show, Read)
+data Vertex2 = Vertex2 !Vec2f deriving (Show, Read, Eq, Ord)
+data Vertex3 = Vertex3 !Vec3f deriving (Show, Read, Eq, Ord)
+data TVertex3 = TVertex3 !Vec3f !Vec2f deriving (Show, Read, Eq, Ord)
+data OVertex3 = OVertex3 !Vec3f !Vec3f deriving (Show, Read, Eq, Ord)
+data OTVertex3 = OTVertex3 !Vec3f !Vec3f !Vec2f deriving (Show, Read, Eq, Ord)
 
 instance Storable Vertex2 where
   sizeOf _ = sizeOf (undefined :: Vec2f)
@@ -93,7 +102,7 @@ instance Storable OTVertex3 where
     poke (castPtr (ptr `plusPtr` 12)) n
     poke (castPtr (ptr `plusPtr` 24)) uv
 
-class Storable a => Vertex a where
+class (Eq a, Ord a, Storable a) => Vertex a where
   getOpenGLDescriptors :: a -> [GL.VertexArrayDescriptor Float]
   getAttribNames :: a -> [String]
 
@@ -134,6 +143,27 @@ instance HasTextureCoordinates TVertex3 where
 
 instance HasTextureCoordinates OTVertex3 where
   getTextureCoordinates (OTVertex3 _ _ uv) = uv
+
+addNormalV3 :: Vertex3 -> Vec3f -> OVertex3
+addNormalV3 (Vertex3 x) = OVertex3 x
+
+addNormalTV3 :: TVertex3 -> Vec3f -> OTVertex3
+addNormalTV3 (TVertex3 x uv) n = OTVertex3 x n uv
+
+getVertex3Position :: Vertex3 -> Vec3f
+getVertex3Position (Vertex3 x) = x
+
+getVertex2Position :: Vertex2 -> Vec2f
+getVertex2Position (Vertex2 x) = x
+
+getTexVertex3Position :: TVertex3 -> Vec3f
+getTexVertex3Position (TVertex3 x _) = x
+
+getNormVertex3Position :: OVertex3 -> Vec3f
+getNormVertex3Position (OVertex3 x _) = x
+
+getNormTexVertex3Position :: OTVertex3 -> Vec3f
+getNormTexVertex3Position (OTVertex3 x _ _) = x
 
 mkVertex3 :: Vec3f -> Vertex3
 mkVertex3 = Vertex3
