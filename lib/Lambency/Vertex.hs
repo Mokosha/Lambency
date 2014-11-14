@@ -14,6 +14,9 @@ module Lambency.Vertex (
   addNormalV3,
   addNormalTV3,
 
+  addTexCoordV3,
+  addTexCoordOV3,
+
   Vertex(..),
   HasTextureCoordinates(..),
 
@@ -149,6 +152,12 @@ addNormalV3 (Vertex3 x) = OVertex3 x
 
 addNormalTV3 :: TVertex3 -> Vec3f -> OTVertex3
 addNormalTV3 (TVertex3 x uv) n = OTVertex3 x n uv
+
+addTexCoordV3 :: Vertex3 -> Vec2f -> TVertex3
+addTexCoordV3 (Vertex3 x) = TVertex3 x
+
+addTexCoordOV3 :: OVertex3 -> Vec2f -> OTVertex3
+addTexCoordOV3 (OVertex3 x n) uv = OTVertex3 x n uv
 
 getVertex3Position :: Vertex3 -> Vec3f
 getVertex3Position (Vertex3 x) = x

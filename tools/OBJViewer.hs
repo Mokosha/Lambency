@@ -37,15 +37,17 @@ mkOBJ objfile = do
   if not exists then error ("OBJ file " ++ objfile ++ " not found") else return ()
   tex <- L.createSolidTexture (67, 128, 67, 255)
   objInfo <- L.getOBJInfo objfile
-  if L.numNormals objInfo == 0 || L.numTexCoords objInfo == 0
-    then do
-      error "OBJ file has no normals or texture coordinates!"
-      mesh <- L.loadV3 objfile
+  case objInfo of
+    (L.OBJInfo x 0 0 _) -> do
+      mesh <- L.genTexCoords . L.genNormalsV3 <$> L.loadV3 objfile
       L.createRenderObject mesh (L.createTexturedMaterial tex)
-    else do
-      -- !FIXME! should be: mesh <- L.loadOV3 objfile
-      -- but then the vertices have no texture coordinates and the
-      -- shader crashes.
+    (L.OBJInfo x _ 0 _) -> do
+      mesh <- L.genNormalsTV3 <$> L.loadTV3 objfile
+      L.createRenderObject mesh (L.createTexturedMaterial tex)
+    (L.OBJInfo x 0 _ _) -> do
+      mesh <- L.genTexCoords <$> L.loadOV3 objfile
+      L.createRenderObject mesh (L.createTexturedMaterial tex)
+    _ -> do
       mesh <- L.loadOTV3 objfile
       L.createRenderObject mesh (L.createTexturedMaterial tex)
 

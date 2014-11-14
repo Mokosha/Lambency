@@ -7,7 +7,13 @@ module Lambency (
   module Lambency.Light,
   module Lambency.Loaders,  
   module Lambency.Material,
-  Mesh, triangle, cube, plane, quad,
+
+  Mesh,
+  genNormalsV3,
+  genNormalsTV3,
+  genTexCoords,
+  triangle, cube, plane, quad,
+
   module Lambency.Render,
   module Lambency.Shader,
   module Lambency.Sprite,
