@@ -38,13 +38,13 @@ mkOBJ objfile = do
   tex <- L.createSolidTexture (67, 128, 67, 255)
   objInfo <- L.getOBJInfo objfile
   case objInfo of
-    (L.OBJInfo x 0 0 _) -> do
+    (L.OBJInfo _ 0 0 _) -> do
       mesh <- L.genTexCoords . L.genNormalsV3 <$> L.loadV3 objfile
       L.createRenderObject mesh (L.createTexturedMaterial tex)
-    (L.OBJInfo x _ 0 _) -> do
+    (L.OBJInfo _ _ 0 _) -> do
       mesh <- L.genNormalsTV3 <$> L.loadTV3 objfile
       L.createRenderObject mesh (L.createTexturedMaterial tex)
-    (L.OBJInfo x 0 _ _) -> do
+    (L.OBJInfo _ 0 _ _) -> do
       mesh <- L.genTexCoords <$> L.loadOV3 objfile
       L.createRenderObject mesh (L.createTexturedMaterial tex)
     _ -> do
