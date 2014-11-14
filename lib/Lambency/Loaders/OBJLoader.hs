@@ -1,4 +1,7 @@
 module Lambency.Loaders.OBJLoader (
+  OBJInfo(..),
+  getOBJInfo,
+
   loadV3,
   loadOV3,
   loadTV3,
@@ -55,9 +58,14 @@ data OBJGeometry = OBJGeometry {
   objFaces :: OBJFaceList
 } deriving (Show)
 
-type OBJGeometryLength = (Int, Int, Int) -- nVerts, nTexCoords, nNormals
+data OBJInfo = OBJInfo {
+  numVerts :: Int,
+  numTexCoords :: Int,
+  numNormals :: Int,
+  numFaces :: Int
+}
 
-convertNegativeFaces :: OBJGeometryLength -> OBJFace -> OBJFace
+convertNegativeFaces :: OBJInfo -> OBJFace -> OBJFace
 convertNegativeFaces geomLen = map (convertNegativeIndex geomLen)
   where
     convert :: Int -> Int -> Int
@@ -65,9 +73,11 @@ convertNegativeFaces geomLen = map (convertNegativeIndex geomLen)
       | x < 0 = len + x + 1
       | otherwise = x
     
-    convertNegativeIndex :: OBJGeometryLength -> OBJIndex -> OBJIndex
-    convertNegativeIndex (nVerts, nTexCoords, nNormals) (p, tc, n) =
-      (convert nVerts p, liftM (convert nTexCoords) tc, liftM (convert nNormals) n)
+    convertNegativeIndex :: OBJInfo -> OBJIndex -> OBJIndex
+    convertNegativeIndex info (p, tc, n) =
+      (convert (numVerts info) p,
+       liftM (convert . numTexCoords $ info) tc,
+       liftM (convert . numNormals $ info) n)
 
 reverseGeometry :: OBJGeometry -> OBJGeometry
 reverseGeometry geom = OBJGeometry {
@@ -194,7 +204,7 @@ data Command = Normal Vec3f
              | Face OBJFace
              deriving (Show, Eq, Ord)
 
-parseFile :: Parser OBJGeometry
+parseFile :: Parser (OBJGeometry, OBJInfo)
 parseFile = let
 
   float :: Parser Float
@@ -283,51 +293,47 @@ parseFile = let
     ignorableLines
     return v
 
-  initialGeom = OBJGeometry {
-    objVerts = [],
-    objTexCoords = [],
-    objNormals = [],
-    objFaces = []
-    }
+  initialGeom = OBJGeometry [] [] [] []
+  initialInfo = OBJInfo 0 0 0 0
 
-  addCommand :: OBJGeometry -> Command -> State.State OBJGeometryLength OBJGeometry
+  addCommand :: OBJGeometry -> Command -> State.State OBJInfo OBJGeometry
   addCommand g (Normal n) = do
-    (nVerts, nTexCoords, nNormals) <- State.get
-    State.put (nVerts, nTexCoords, nNormals + 1)
+    State.modify $ \info -> info { numNormals = numNormals info + 1 }
     return $ g { objNormals = signorm n : (objNormals g) }
 
   addCommand g (Position p) = do
-    (nVerts, nTexCoords, nNormals) <- State.get
-    State.put (nVerts + 1, nTexCoords, nNormals)
+    State.modify $ \info -> info { numVerts = numVerts info + 1 }
     return $ g { objVerts = p : (objVerts g) }
 
   addCommand g (TexCoord tc) = do
-    (nVerts, nTexCoords, nNormals) <- State.get
-    State.put (nVerts, nTexCoords + 1, nNormals)
+    State.modify $ \info -> info { numTexCoords = numTexCoords info + 1 }
     return $ g { objTexCoords = tc : (objTexCoords g) }
 
   addCommand g (Face f) = do
-    lengths <- State.get
-    return $ g { objFaces = convertNegativeFaces lengths f : (objFaces g) }
+    info <- State.get
+    return $ g { objFaces = convertNegativeFaces info f : (objFaces g) }
 
-  runCommands :: [Command] -> State.State OBJGeometryLength OBJGeometry
+  runCommands :: [Command] -> State.State OBJInfo OBJGeometry
   runCommands cmds = reverseGeometry <$> foldM addCommand initialGeom cmds
 
   in do
     ignorableLines
     vals <- many1 parseLine
     _ <- try (ignorableLines >> eof) >> return ()
-    return $ State.evalState (runCommands vals) (0, 0, 0)
+    return $ State.runState (runCommands vals) initialInfo
+
+parseOBJ :: ((OBJGeometry, OBJInfo) -> a) -> FilePath -> IO a
+parseOBJ fn filepath = do
+  s <- readFile filepath
+  case parse parseFile filepath (pack s) of
+    Left x -> error $ show x
+    Right x -> return $ fn x
+
+getOBJInfo :: FilePath -> IO (OBJInfo)
+getOBJInfo = parseOBJ snd
 
 loadOBJ :: Vertex a => (OBJGeometry -> Mesh a) -> FilePath -> IO (Mesh a)
-loadOBJ gen filepath = let
-  parseOBJ :: String -> OBJGeometry
-  parseOBJ s =
-    case parse parseFile filepath (pack s) of
-      Left x -> error $ show x
-      Right y -> y
-  in
-   gen . parseOBJ <$> readFile filepath
+loadOBJ gen = liftM gen . parseOBJ fst
 
 loadV3 :: FilePath -> IO (Mesh Vertex3)
 loadV3 = loadOBJ obj2V3Mesh

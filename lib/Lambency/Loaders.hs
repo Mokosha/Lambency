@@ -1,4 +1,7 @@
 module Lambency.Loaders (
+  OBJ.OBJInfo(..),
+  OBJ.getOBJInfo,
+
   loadV3,
   loadOV3,
   loadTV3,
