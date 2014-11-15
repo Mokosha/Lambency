@@ -204,13 +204,35 @@ mkViewerCam initialCam =
             camDir = getCamDir c
         in setCamPos c $ camPos ^+^ (double2Float sy *^ camDir)
 
-      pressedMickies =
-        (mousePressed GLFW.MouseButton'1 W.>>> mouseDelta) W.<|> (W.pure (0, 0))
+      mouseDeltas :: GameWire a (Float, Float)
+      mouseDeltas = whilePressed
+        where
+          whilePressed :: GameWire a (Float, Float)
+          whilePressed = (mousePressed GLFW.MouseButton'1 W.>>> getDelta) W.--> whileNotPressed
+
+          whileNotPressed :: GameWire a (Float, Float)
+          whileNotPressed =
+            W.dSwitch $
+            W.pure (0, 0) W.&&& ((mousePressed GLFW.MouseButton'1 W.>>>
+                                  W.pure whilePressed W.>>> W.now)
+                                 W.<|> W.never)
+
+          delayM :: Monad m => m a -> W.Wire s e m a a
+          delayM x' = W.mkGenN $ \x -> do
+            r <- x'
+            return (Right r, delayM $ return x)
+
+          delayCursor :: GameWire (Float, Float) (Float, Float)
+          delayCursor = delayM cursor
+
+          getDelta :: GameWire a (Float, Float)
+          getDelta =
+            W.loop $ (mouseCursor W.*** delayCursor) W.>>>
+            (W.arr $ \((x, y), (x', y')) -> ((x - x', y - y'), (x, y)))
   in
    W.loop $ W.second (
      W.delay initialCam W.>>>
-     (pressedMickies W.&&& W.mkId) W.>>>
-     (W.arr $ finalXForm) W.>>>
+     (mouseDeltas W.&&& W.mkId) W.>>> (W.arr $ finalXForm) W.>>>
      ((W.mkId W.&&& mouseScroll) W.>>> W.arr handleScroll))
    W.>>> (W.arr $ \(_, cam) -> (cam, cam))
 
