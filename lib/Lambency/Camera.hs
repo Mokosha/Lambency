@@ -198,8 +198,8 @@ mkViewerCam initialCam =
                        Quat.axisAngle (XForm.up xform) (-asin mx),
                        Quat.axisAngle (XForm.right xform) (-asin my)]
 
-      handleScroll :: (Camera, (Double, Double)) -> Camera
-      handleScroll (c, (_, sy)) =
+      handleScroll :: ((Double, Double), Camera) -> Camera
+      handleScroll ((_, sy), c) =
         let camPos = getCamPos c
             camDir = getCamDir c
         in setCamPos c $ camPos ^+^ (double2Float sy *^ camDir)
@@ -233,7 +233,7 @@ mkViewerCam initialCam =
    W.loop $ W.second (
      W.delay initialCam W.>>>
      (mouseDeltas W.&&& W.mkId) W.>>> (W.arr $ finalXForm) W.>>>
-     ((W.mkId W.&&& mouseScroll) W.>>> W.arr handleScroll))
+     (mouseScroll W.&&& W.mkId) W.>>> (W.arr handleScroll))
    W.>>> (W.arr $ \(_, cam) -> (cam, cam))
 
 mkDebugCam :: Camera -> GameWire a Camera
