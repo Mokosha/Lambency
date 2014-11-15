@@ -19,21 +19,20 @@ module Lambency.Camera (
   getCamFar,
   setCamFar,
 
+  camLookAt,
+
   mkFixedCam,
   mkViewerCam,
   mkDebugCam,
   mk2DCam,
 ) where
 --------------------------------------------------------------------------------
+import qualified Control.Wire as W
 import qualified Graphics.UI.GLFW as GLFW
-
+import FRP.Netwire.Input
+import GHC.Float
 import Lambency.Types
 import qualified Lambency.Transform as XForm
-
-import qualified Control.Wire as W
-
-import FRP.Netwire.Input
-
 import qualified Linear.Quaternion as Quat
 import Linear
 --------------------------------------------------------------------------------
@@ -143,6 +142,15 @@ setCamFar c f = let
   in
    setCamDist c $ (\d -> d { far = f }) dist
 
+camLookAt :: Vec3f -> Camera -> Camera
+camLookAt focus (Camera xf ty dist)
+   | focus == pos = Camera xf ty dist
+   | otherwise = Camera (mkXForm pos dir up) ty dist
+  where
+    pos = XForm.position xf
+    dir = signorm $ focus - pos
+    up = XForm.up xf
+
 getViewMatrix :: Camera -> Mat4f
 getViewMatrix (Camera xf _ _) =
   let
@@ -175,24 +183,36 @@ mkFixedCam :: Monad m => Camera -> W.Wire s e m a Camera
 mkFixedCam cam = W.mkConst $ Right cam
 
 mkViewerCam :: Camera -> GameWire a Camera
-mkViewerCam cam@(Camera xform camTy camSz) = let
-  finalXForm :: (Float, Float) -> XForm.Transform
-  finalXForm (0, 0) = XForm.identity
-  finalXForm (mx, my) = mkXForm newPos (signorm $ negate newPos) (XForm.up xform)
-    where
-      newPos :: Vec3f
-      newPos = XForm.transformPoint rotation $ getCamPos cam
+mkViewerCam initialCam =
+  let finalXForm :: ((Float, Float), Camera) -> Camera
+      finalXForm ((0, 0), c) = c
+      finalXForm ((mx, my), c@(Camera xform _ _)) =
+        setCamPos (setCamDir c (signorm $ negate newPos)) newPos
         where
+          newPos :: Vec3f
+          newPos = XForm.transformPoint rotation $ getCamPos c
+
           rotation :: XForm.Transform
-          rotation = flip XForm.rotateWorld XForm.identity $
+          rotation = flip XForm.rotate XForm.identity $
                      foldl1 (*) [
                        Quat.axisAngle (XForm.up xform) (-asin mx),
                        Quat.axisAngle (XForm.right xform) (-asin my)]
+
+      handleScroll :: (Camera, (Double, Double)) -> Camera
+      handleScroll (c, (_, sy)) =
+        let camPos = getCamPos c
+            camDir = getCamDir c
+        in setCamPos c $ camPos ^+^ (double2Float sy *^ camDir)
+
+      pressedMickies =
+        (mousePressed GLFW.MouseButton'1 W.>>> mouseDelta) W.<|> (W.pure (0, 0))
   in
-   ((mouseMickies W.>>> (mousePressed GLFW.MouseButton'1)) W.<|> (W.pure (0, 0))) W.>>>
-   (W.mkGenN $ \pos -> do
-       let newcam = Camera (finalXForm pos) camTy camSz
-       return (Right newcam, mkViewerCam newcam))
+   W.loop $ W.second (
+     W.delay initialCam W.>>>
+     (pressedMickies W.&&& W.mkId) W.>>>
+     (W.arr $ finalXForm) W.>>>
+     ((W.mkId W.&&& mouseScroll) W.>>> W.arr handleScroll))
+   W.>>> (W.arr $ \(_, cam) -> (cam, cam))
 
 mkDebugCam :: Camera -> GameWire a Camera
 mkDebugCam initCam = W.loop ((W.second (W.delay initCam W.>>> updCam)) W.>>> feedback)

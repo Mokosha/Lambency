@@ -59,14 +59,18 @@ library
                        stm >= 2.4,
                        mtl >= 2.1.2,
                        netwire >= 5.0.0,
-                       netwire-input, netwire-input-glfw,
-                       OpenAL, HCodecs,
+                       netwire-input >= 0.0.3,
+                       netwire-input-glfw,
+                       OpenAL,
+                       HCodecs,
                        freetype2,
                        time,
                        containers,
                        bytestring,
-                       array, vector,
-                       filepath, comonad,
+                       array,
+                       vector,
+                       filepath,
+                       comonad,
                        -- Eventually replace these...
                        directory
 

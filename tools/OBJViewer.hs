@@ -13,8 +13,7 @@ import FRP.Netwire.Input
 import qualified Lambency as L
 
 import qualified Linear.Quaternion as Quat
-import Linear.Vector
-import Linear.V3
+import Linear
 
 import System.Directory (doesFileExist)
 import System.Environment
@@ -29,7 +28,7 @@ initialCam = L.mkPerspCamera
              0.1 1000.0
 
 cam :: L.GameWire () L.Camera
-cam = L.mkFixedCam initialCam
+cam = L.mkViewerCam initialCam
 
 mkOBJ :: FilePath -> IO (L.RenderObject)
 mkOBJ objfile = do
@@ -52,8 +51,8 @@ mkOBJ objfile = do
       L.createRenderObject mesh (L.createTexturedMaterial tex)
 
 controlWire :: L.RenderObject -> L.GameWire a a
-controlWire ro = L.mkObject ro (xForm L.identity)
-  where
+controlWire ro = L.mkObject ro (pure L.identity)
+{--  where
     feedback :: L.GameWire (a, b) (b, b)
     feedback = W.arr $ \(_, x) -> (x, x)
 
@@ -79,7 +78,7 @@ controlWire ro = L.mkObject ro (xForm L.identity)
                 handleQuat W.>>>
                 (W.delay initialXF)) W.>>> feedback
       where
-
+--}
 loadGame :: FilePath -> IO (L.Game ())
 loadGame objfile = do
   obj <- mkOBJ objfile
