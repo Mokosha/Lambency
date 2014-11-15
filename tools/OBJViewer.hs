@@ -8,11 +8,7 @@ import Data.List (intercalate)
 
 import qualified Graphics.UI.GLFW as GLFW
 
-import FRP.Netwire.Input
-
 import qualified Lambency as L
-
-import qualified Linear.Quaternion as Quat
 import Linear
 
 import System.Directory (doesFileExist)
@@ -28,7 +24,7 @@ initialCam = L.mkPerspCamera
              0.1 1000.0
 
 cam :: L.GameWire () L.Camera
-cam = L.mkViewerCam initialCam
+cam = L.mkViewerCam initialCam zero
 
 mkOBJ :: FilePath -> IO (L.RenderObject)
 mkOBJ objfile = do
@@ -52,33 +48,7 @@ mkOBJ objfile = do
 
 controlWire :: L.RenderObject -> L.GameWire a a
 controlWire ro = L.mkObject ro (pure L.identity)
-{--  where
-    feedback :: L.GameWire (a, b) (b, b)
-    feedback = W.arr $ \(_, x) -> (x, x)
 
-    inputWire :: L.GameWire a (Float, Float)
-    inputWire = (mousePressed GLFW.MouseButton'1 W.>>> mouseMickies) W.<|> (pure (0, 0))
-
-    rotationFn :: (Float, Float) -> Quat.Quaternion Float
-    rotationFn (0, 0) = Quat.axisAngle L.localRight 0
-    rotationFn (mx, my) =
-      foldl1 (*) [
-        Quat.axisAngle L.localUp (-asin mx),
-        Quat.axisAngle L.localRight $ asin my]
-
-    rotation :: L.GameWire (Float, Float) (Quat.Quaternion Float)
-    rotation = W.arr rotationFn
-
-    handleQuat :: L.GameWire (Quat.Quaternion Float, L.Transform) L.Transform
-    handleQuat = W.arr $ uncurry L.rotateWorld
-
-    xForm :: L.Transform -> L.GameWire a L.Transform
-    xForm initialXF =
-      W.loop $ (W.second $ (inputWire W.>>> rotation) W.&&& W.mkId W.>>>
-                handleQuat W.>>>
-                (W.delay initialXF)) W.>>> feedback
-      where
---}
 loadGame :: FilePath -> IO (L.Game ())
 loadGame objfile = do
   obj <- mkOBJ objfile
