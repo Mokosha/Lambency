@@ -180,14 +180,12 @@ handleScore :: L.Font -> L.GameWire (Int, Ball) (Int, Ball)
 handleScore f = scoreWire 0 0
   where
     handleBall :: Ball -> (Ball, Int)
-    handleBall b@(Ball p _) =
-      let bx = p ^._x
-      in
-       if bx < 0
-       then (startBall, 1)
-       else if bx > (fromIntegral screenWidth)
-            then (startBall, -1)
-            else (b, 0)
+    handleBall b@(Ball p _)
+      | bx < 0 = (startBall, 1)
+      | bx > (fromIntegral screenWidth) = (startBall, -1)
+      | otherwise = (b, 0)
+      where
+        bx = p ^._x
     
     scoreWire :: Int -> Int -> L.GameWire (Int, Ball) (Int, Ball)
     scoreWire p1 p2 = mkGenN scoreBall
