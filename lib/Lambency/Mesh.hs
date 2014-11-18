@@ -21,14 +21,14 @@ import Control.Applicative
 import Data.Int
 import qualified Data.Map as Map
 
-import Linear
+import Linear hiding (trace)
 --------------------------------------------------------------------------------
 
 type Vec2f = V2 Float
 type Vec3f = V3 Float
 
 data Mesh a = Mesh { vertices :: [a],
-                     indices :: [Int16] }
+                     indices :: [Int32] }
               deriving (Show)
 
 mkV3 :: (Float, Float, Float) -> V3 Float
