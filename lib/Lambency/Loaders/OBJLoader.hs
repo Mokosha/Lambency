@@ -70,7 +70,7 @@ convertNegativeFaces geomLen = map (convertNegativeIndex geomLen)
   where
     convert :: Int -> Int -> Int
     convert len x
-      | x < 0 = len + x
+      | x < 0 = len + x + 1
       | otherwise = x
     
     convertNegativeIndex :: OBJInfo -> OBJIndex -> OBJIndex
