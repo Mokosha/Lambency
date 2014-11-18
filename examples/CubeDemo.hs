@@ -7,7 +7,7 @@ import qualified Graphics.UI.GLFW as GLFW
 import qualified Lambency as L
 
 import System.FilePath
-import Paths_lambency_examples
+import Paths_lambency
 
 import Linear.Vector
 import Linear.V2
@@ -41,7 +41,7 @@ mkPlane = do
 mkBunny:: IO (L.Transform, L.RenderObject)
 mkBunny = do
   tex <- L.createSolidTexture (67, 128, 67, 255)
-  mesh <- getDataFileName ("bunnyN" <.> "obj") >>= L.loadOTV3
+  mesh <- getDataFileName ("examples" </> "bunnyN" <.> "obj") >>= L.loadOTV3
   ro <- L.createRenderObject mesh (L.createTexturedMaterial tex)
   return (xform, ro)
   where xform = L.rotate (Quat.axisAngle (V3 0 1 0) pi) $
@@ -50,9 +50,9 @@ mkBunny = do
 
 cubeWire :: IO (L.GameWire () ())
 cubeWire = do
-  sound <- getDataFileName ("stereol" <.> "wav") >>= L.loadSound
-  (Just tex) <- getDataFileName ("crate" <.> "png") >>= L.loadTexture
-  mesh <- getDataFileName ("cube" <.> "obj") >>= L.loadOTV3
+  sound <- getDataFileName ("examples" </> "stereol" <.> "wav") >>= L.loadSound
+  (Just tex) <- getDataFileName ("examples" </> "crate" <.> "png") >>= L.loadTexture
+  mesh <- getDataFileName ("examples" </> "cube" <.> "obj") >>= L.loadOTV3
   ro <- L.createRenderObject mesh (L.createTexturedMaterial tex)
   return $ playSound sound 3.0 W.>>> (L.mkObject ro (rotate initial))
   where
@@ -87,7 +87,7 @@ frameWire font = (W.mkId W.&&& (lastRenderTime W.>>> sAvg 5)) W.>>> renderWire
 
 loadGame :: IO (L.Game ())
 loadGame = do
-  sysFont <- getDataFileName ("kenpixel" <.> "ttf") >>= L.loadTTFont 18 (V3 1 0 0)
+  sysFont <- getDataFileName ("examples" </> "kenpixel" <.> "ttf") >>= L.loadTTFont 18 (V3 1 0 0)
   plane <- mkPlane
   bunny <- mkBunny
   cube <- cubeWire

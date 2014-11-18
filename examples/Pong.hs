@@ -9,7 +9,8 @@ import FRP.Netwire.Move
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Lambency as L
 
-import Paths_lambency_examples
+import System.FilePath
+import Paths_lambency
 
 import Control.Lens
 import Linear
@@ -202,8 +203,8 @@ handleScore f = scoreWire 0 0
 
 gameFeedback :: L.RenderObject -> L.RenderObject -> IO (L.GameWire (Int, Ball) (Int, Ball))
 gameFeedback quad circle = do
-  sysFont <- getDataFileName ("kenpixel.ttf") >>= L.loadTTFont 36 (V3 1 1 1)
-  sound <- getDataFileName ("pong-bloop.wav") >>= L.loadSound
+  sysFont <- getDataFileName ("examples" </> "kenpixel.ttf") >>= L.loadTTFont 36 (V3 1 1 1)
+  sound <- getDataFileName ("examples" </> "pong-bloop.wav") >>= L.loadSound
   return $ (second $
             (collideWith True sound keyHandler) >>>
             (collideWith False sound aiHandler) >>>

@@ -23,7 +23,15 @@ data-files:          shaders/simple.vert
                      shaders/minimal.vert
                      shaders/minimal.frag
                      font.png
+                     examples/*.obj
+                     examples/*.png
+                     examples/*.wav
+                     examples/*.ttf
 data-dir:            assets
+
+flag                 examples
+  description:       Build examples
+  default:           False
 
 library
   hs-source-dirs:      lib
@@ -74,6 +82,12 @@ library
                        -- Eventually replace these...
                        directory
 
+--------------------------------------------------------------------------------
+--
+-- Tools
+--
+--------------------------------------------------------------------------------
+
 executable lobjview
   main-is:        OBJViewer.hs
   hs-source-dirs: tools
@@ -86,3 +100,65 @@ executable lobjview
                   netwire-input,
                   mtl >= 2.1.2,
                   directory
+
+--------------------------------------------------------------------------------
+--
+-- Examples
+--
+--------------------------------------------------------------------------------
+
+executable lambcubedemo
+  main-is:        CubeDemo.hs
+  hs-source-dirs: examples
+  ghc-options:    -Wall -rtsopts -O3
+
+  if flag(examples)
+    build-depends:  base > 4.5,
+                    netwire >= 5,
+                    GLFW-b,
+                    lambency,
+                    linear,
+                    mtl,
+                    containers,
+                    directory,
+                    filepath
+  else
+    buildable:      False
+
+executable lambpong
+  main-is:        Pong.hs
+  hs-source-dirs: examples
+  ghc-options:    -Wall -rtsopts -O3
+
+  if flag(examples)
+    build-depends:  base > 4.5,
+                    netwire >= 5,
+                    netwire-input >= 0.0.3,
+                    GLFW-b,
+                    lambency,
+                    linear, lens,
+                    mtl,
+                    containers,
+                    directory,
+                    filepath
+  else
+    buildable:      False
+
+executable lambshooter
+  main-is:        Shooter.hs
+  hs-source-dirs: examples
+  ghc-options:    -Wall -rtsopts -O3
+
+  if flag(examples)
+    build-depends:  base > 4.5,
+                    netwire >= 5,
+                    netwire-input >= 0.0.3,
+                    GLFW-b,
+                    lambency,
+                    linear,
+                    mtl,
+                    containers,
+                    directory,
+                    filepath
+  else
+    buildable:      False
