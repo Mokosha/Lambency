@@ -15,13 +15,12 @@ Major Dependencies
 - [Linear](http://hackage.haskell.org/package/linear) -- [github](https://github.com/ekmett/linear)
 - [FreeType](https://hackage.haskell.org/package/freetype2) -- [github](https://github.com/dagit/freetype2)
 
-Try the Example:
+Try the examples:
 --------
 
 From the source directory:
 
-    cd examples
     cabal sandbox init
-    cabal install .. --only-dependencies
-    cabal configure
+    cabal install . --only-dependencies
+    cabal configure -fexamples
     cabal build
