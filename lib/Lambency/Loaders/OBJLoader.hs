@@ -102,7 +102,7 @@ triangulate fs = let
 simpleObj2Mesh :: OBJVertexList -> OBJFaceList -> Mesh Vertex3
 simpleObj2Mesh verts faces = Mesh {
   vertices = map mkVertex3 verts,
-  indices = map (\(x, _, _) -> fromIntegral x) $ triangulate faces
+  indices = map (\(x, _, _) -> fromIntegral (x - 1)) $ triangulate faces
 }
 
 mkVec2fLookup :: [Vec2f] -> (Int -> Vec2f)
