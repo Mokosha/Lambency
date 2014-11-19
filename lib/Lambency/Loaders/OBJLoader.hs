@@ -311,6 +311,7 @@ parseFile = let
 
   addCommand g (Face f) = do
     info <- State.get
+    put $ info { numFaces = numFaces info + 1 }
     return $ g { objFaces = convertNegativeFaces info f : (objFaces g) }
 
   runCommands :: [Command] -> State.State OBJInfo OBJGeometry
