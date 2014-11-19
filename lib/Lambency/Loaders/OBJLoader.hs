@@ -63,7 +63,7 @@ data OBJInfo = OBJInfo {
   numTexCoords :: Int,
   numNormals :: Int,
   numFaces :: Int
-}
+} deriving (Show, Ord, Eq)
 
 convertNegativeFaces :: OBJInfo -> OBJFace -> OBJFace
 convertNegativeFaces geomLen = map (convertNegativeIndex geomLen)
