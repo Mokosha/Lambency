@@ -124,7 +124,11 @@ renderBallWire ro = mkGen_ $ \b -> renderBall ro b >> return (Right b)
 -- Game logic
 
 paddleFeedback :: L.GameWire (a, Float) Float -> L.GameWire (a, Float) (Float, Float)
-paddleFeedback handler = handler >>> integral paddleStartY >>> (mkId &&& mkId)
+paddleFeedback handler =
+  ((when ((>= paddleMaxY) . snd) >>> handler >>> (when (< 0) <|> pure 0)) <|> -- Paddle is against top wall
+   (when ((<= paddleMinY) . snd) >>> handler >>> (when (> 0) <|> pure 0)) <|> -- Paddle is against bottom wall
+   handler
+  ) >>> integral paddleStartY >>> (mkId &&& mkId)
 
 paddleWire :: Bool -> L.RenderObject ->  L.GameWire (a, Float) Float -> L.GameWire a Float
 paddleWire playerOne ro handler =
@@ -139,9 +143,9 @@ ballWire ro = integrateBall >>> renderBallWire ro
       in (Ball (p ^+^ (dt *^ v)) v, integrateBall)
 
 keyHandler :: L.GameWire (a, Float) Float
-keyHandler = 
-  (when ((< paddleMaxY) . snd) >>> keyPressed GLFW.Key'Up >>> pure paddleSpeed) <|>
-  (when ((> paddleMinY) . snd) >>> keyPressed GLFW.Key'Down >>> pure (-paddleSpeed)) <|>
+keyHandler =
+  (keyPressed GLFW.Key'Up >>> pure paddleSpeed) <|>
+  (keyPressed GLFW.Key'Down >>> pure (-paddleSpeed)) <|>
   pure 0
 
 collidePaddle :: Bool -> L.Sound -> L.GameWire (Ball, Float) Ball
@@ -173,9 +177,7 @@ collideWall = mkSF_ collide
 aiHandler :: L.GameWire (Ball, Float) Float
 aiHandler = mkSF_ trackBall
   where
-    trackBall (Ball p _, h) =
-      let diffY = (p ^._y) - h
-      in L.clamp diffY (-paddleSpeed) paddleSpeed
+    trackBall (Ball p _, h) = L.clamp ((p ^. _y) - h) (-paddleSpeed) paddleSpeed
 
 handleScore :: L.Font -> L.GameWire (Int, Ball) (Int, Ball)
 handleScore f = scoreWire 0 0
