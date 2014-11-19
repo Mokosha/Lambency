@@ -15,7 +15,15 @@ category:            Graphics
 build-type:          Simple
 cabal-version:       >=1.8
 data-files:          font.png
+                     examples/*.obj
+                     examples/*.png
+                     examples/*.wav
+                     examples/*.ttf
 data-dir:            assets
+
+flag                 examples
+  description:       Build examples
+  default:           False
 
 library
   hs-source-dirs:      lib
@@ -52,22 +60,32 @@ library
                        OpenGL >=2.9.2.0,
                        OpenGLRaw,
                        JuicyPixels,
-                       linear,
+                       linear >= 1.13 && < 1.15,
                        parsec >= 3.1.2,
                        text,
                        stm >= 2.4,
                        mtl >= 2.1.2,
                        netwire >= 5.0.0,
-                       netwire-input, netwire-input-glfw,
-                       OpenAL, HCodecs,
+                       netwire-input >= 0.0.3,
+                       netwire-input-glfw,
+                       OpenAL,
+                       HCodecs,
                        freetype2,
                        time,
                        containers,
                        bytestring,
-                       array, vector,
-                       filepath, comonad,
+                       array,
+                       vector,
+                       filepath,
+                       comonad,
                        -- Eventually replace these...
                        directory
+
+--------------------------------------------------------------------------------
+--
+-- Tools
+--
+--------------------------------------------------------------------------------
 
 executable lobjview
   main-is:        OBJViewer.hs
@@ -81,3 +99,66 @@ executable lobjview
                   netwire-input,
                   mtl >= 2.1.2,
                   directory
+
+--------------------------------------------------------------------------------
+--
+-- Examples
+--
+--------------------------------------------------------------------------------
+
+executable lambcubedemo
+  main-is:        CubeDemo.hs
+  hs-source-dirs: examples
+  ghc-options:    -Wall -rtsopts -O3
+
+  if flag(examples)
+    build-depends:  base > 4.5,
+                    netwire >= 5,
+                    GLFW-b,
+                    lambency,
+                    linear >= 1.13 && < 1.15,
+                    mtl,
+                    containers,
+                    directory,
+                    filepath
+  else
+    buildable:      False
+
+executable lambpong
+  main-is:        Pong.hs
+  hs-source-dirs: examples
+  ghc-options:    -Wall -rtsopts -O3
+
+  if flag(examples)
+    build-depends:  base > 4.5,
+                    netwire >= 5,
+                    netwire-input >= 0.0.3,
+                    GLFW-b,
+                    lambency,
+                    linear >= 1.13 && < 1.15,
+                    lens,
+                    mtl,
+                    containers,
+                    directory,
+                    filepath
+  else
+    buildable:      False
+
+executable lambshooter
+  main-is:        Shooter.hs
+  hs-source-dirs: examples
+  ghc-options:    -Wall -rtsopts -O3
+
+  if flag(examples)
+    build-depends:  base > 4.5,
+                    netwire >= 5,
+                    netwire-input >= 0.0.3,
+                    GLFW-b,
+                    lambency,
+                    linear >= 1.13 && < 1.15,
+                    mtl,
+                    containers,
+                    directory,
+                    filepath
+  else
+    buildable:      False

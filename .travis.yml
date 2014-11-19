@@ -4,7 +4,7 @@ ghc:
   - 7.6
 
 script:
-  - cabal configure && cabal build
+  - cabal configure -fexamples && cabal build
 
 before_install:
   - sudo apt-get update -qq

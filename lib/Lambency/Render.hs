@@ -78,7 +78,7 @@ setupBuffer tgt xs = do
   withStorableArray varr (\ptr -> GL.bufferData tgt GL.$= (ptrsize xs, ptr, GL.StaticDraw))
   return buf
 
-createBasicRO :: (Vertex a) => [a] -> [Int16] -> Material -> IO (RenderObject)
+createBasicRO :: (Vertex a) => [a] -> [Int32] -> Material -> IO (RenderObject)
 
 -- If there's no vertices, then there's nothing to render...
 createBasicRO [] _ _ = do
@@ -95,10 +95,8 @@ createBasicRO verts@(v:_) idxs mat =
 
       -- Lookup the location for the given attribute name in the shader program
       lu :: String -> GL.AttribLocation
-      lu name = let
-        svs = getShaderVars shdr
-        in
-         case Map.lookup name svs of
+      lu name =
+        case Map.lookup name (getShaderVars shdr) of
            Nothing -> GL.AttribLocation (-1)
            Just var -> case var of
              Uniform _ _ -> GL.AttribLocation (-1)
@@ -126,7 +124,7 @@ createBasicRO verts@(v:_) idxs mat =
         GL.bindBuffer GL.ElementArrayBuffer GL.$= Just ibo
 
         -- Render
-        GL.drawElements GL.Triangles nIndices GL.UnsignedShort nullPtr)
+        GL.drawElements GL.Triangles nIndices GL.UnsignedInt nullPtr)
 
   in do
     vbo <- setupBuffer GL.ArrayBuffer verts

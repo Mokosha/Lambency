@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Lambency.Camera (
   mkOrthoCamera,
   mkPerspCamera,
@@ -18,28 +19,22 @@ module Lambency.Camera (
   getCamFar,
   setCamFar,
 
+  camLookAt,
+
   mkFixedCam,
   mkViewerCam,
   mkDebugCam,
   mk2DCam,
 ) where
 --------------------------------------------------------------------------------
+import qualified Control.Wire as W
 import qualified Graphics.UI.GLFW as GLFW
-
+import FRP.Netwire.Input
+import GHC.Float
 import Lambency.Types
 import qualified Lambency.Transform as XForm
-
-import qualified Control.Wire as W
-
-import FRP.Netwire.Input
-
-import Linear.Matrix
-import Linear.Metric
 import qualified Linear.Quaternion as Quat
-import Linear.Vector
-import Linear.V2
-import Linear.V3
-import Linear.V4
+import Linear
 --------------------------------------------------------------------------------
 
 mkXForm :: Vec3f -> Vec3f -> Vec3f -> XForm.Transform
@@ -147,6 +142,15 @@ setCamFar c f = let
   in
    setCamDist c $ (\d -> d { far = f }) dist
 
+camLookAt :: Vec3f -> Camera -> Camera
+camLookAt focus (Camera xf ty dist)
+   | focus == pos = Camera xf ty dist
+   | otherwise = Camera (mkXForm pos dir up) ty dist
+  where
+    pos = XForm.position xf
+    dir = signorm $ focus - pos
+    up = XForm.up xf
+
 getViewMatrix :: Camera -> Mat4f
 getViewMatrix (Camera xf _ _) =
   let
@@ -161,28 +165,14 @@ getViewMatrix (Camera xf _ _) =
     te n sc = extendWith (pos `dot` n) (sc *^ n)
   in adjoint $ V4 (te r sx) (te u sy) (te f sz) (V4 0 0 0 1)
 
-getProjMatrix :: Camera -> Mat4f
-getProjMatrix (Camera _ (Ortho {top = t, bottom = b, left = l, right = r}) dist) = let
-  n = near dist
-  f = far dist
-  in
-   V4
-   (V4 (2.0 / (r - l)) 0 0 0)
-   (V4 0 (2.0 / (t - b)) 0 0)
-   (V4 0 0 ((-2.0) / (f - n)) 0)
-   (V4 (-(r+l)/(r-l)) (-(t+b)/(t-b)) (-(f+n)/(f-n)) 1)
+mkProjMatrix :: CameraType -> CameraViewDistance -> Mat4f
+mkProjMatrix (Ortho {..}) (CameraViewDistance{..}) =
+  transpose $ ortho left right bottom top near far
+mkProjMatrix (Persp {..}) (CameraViewDistance{..}) =
+  transpose $ perspective fovY aspect near far
 
-getProjMatrix (Camera _ (Persp {fovY = fovy, aspect = a}) dist) = let
-  n = near dist
-  f = far dist
-  t = n * (tan (fovy * 0.5))
-  r = t * a
-  in
-   V4
-   (V4 (n / r) 0 0 0)
-   (V4 0 (n / t) 0 0)
-   (V4 0 0 (-(f+n)/(f-n)) (-1))
-   (V4 0 0 (-(2*f*n)/(f-n)) 0)
+getProjMatrix :: Camera -> Mat4f
+getProjMatrix (Camera _ ty dist) = mkProjMatrix ty dist
 
 getViewProjMatrix :: Camera -> Mat4f
 getViewProjMatrix c = (getViewMatrix c) !*! (getProjMatrix c)
@@ -192,25 +182,87 @@ getViewProjMatrix c = (getViewMatrix c) !*! (getProjMatrix c)
 mkFixedCam :: Monad m => Camera -> W.Wire s e m a Camera
 mkFixedCam cam = W.mkConst $ Right cam
 
-mkViewerCam :: Camera -> GameWire a Camera
-mkViewerCam cam@(Camera xform camTy camSz) = let
-  finalXForm :: (Float, Float) -> XForm.Transform
-  finalXForm (0, 0) = XForm.identity
-  finalXForm (mx, my) = mkXForm newPos (signorm $ negate newPos) (XForm.up xform)
-    where
-      newPos :: Vec3f
-      newPos = XForm.transformPoint rotation $ getCamPos cam
+type ViewCam = (Camera, Vec3f)
+
+mkViewerCam :: Camera -> Vec3f -> GameWire a Camera
+mkViewerCam initialCam initialFocus =
+  let handleRotation :: ((Float, Float), ViewCam) -> ViewCam
+      handleRotation ((0, 0), c) = c
+      handleRotation ((mx, my), (c@(Camera xform _ _), focus)) =
+        (setCamPos (setCamDir c (signorm $ negate newPos)) (newPos ^+^ focus), focus)
         where
+          oldPos :: Vec3f
+          oldPos = XForm.position xform ^-^ focus
+
+          newPos :: Vec3f
+          newPos = XForm.transformPoint rotation oldPos
+
           rotation :: XForm.Transform
-          rotation = flip XForm.rotateWorld XForm.identity $
+          rotation = flip XForm.rotate XForm.identity $
                      foldl1 (*) [
                        Quat.axisAngle (XForm.up xform) (-asin mx),
                        Quat.axisAngle (XForm.right xform) (-asin my)]
+
+      dxScale :: Vec3f -> Vec3f -> Float
+      dxScale pos focus = (0.4 *) $ distance pos focus
+
+      handleScroll :: ((Double, Double), ViewCam) -> ViewCam
+      handleScroll ((_, sy), (c, x)) =
+        let camPos = getCamPos c
+            camDir = getCamDir c
+            dx = (dxScale camPos x * double2Float sy) *^ camDir
+        -- !FIXME! We should really do mouse picking here to keep the focus
+        -- on whatever point we're intersecting with the mesh... for right now
+        -- just don't move the focus.
+        -- in (setCamPos c $ camPos ^+^ dx, x ^+^ dx)
+        in (setCamPos c $ camPos ^+^ dx, x)
+
+      handlePanning :: ((Float, Float), ViewCam) -> ViewCam
+      handlePanning ((0, 0), c) = c
+      handlePanning ((mx, my), (c@(Camera xform _ _), focus)) =
+        (setCamPos c (oldPos ^+^ dx), focus ^+^ dx)
+        where
+          oldPos = XForm.position xform
+          dx = (dxScale oldPos focus *^) $ (-mx *^ (XForm.right xform)) ^+^ (my *^ (XForm.up xform))
+
+      {-- !TODO! This might be good to add to netwire-input --}
+      mouseIfThen :: GLFW.MouseButton -> GameWire a b -> GameWire a b -> GameWire a b
+      mouseIfThen mb ifPressed elsePressed = whilePressed
+        where
+          whilePressed = (mousePressed mb W.>>> ifPressed) W.--> whileNotPressed
+          whileNotPressed = W.switch $
+                            elsePressed W.&&& ((mousePressed mb W.>>>
+                                                W.pure whilePressed W.>>> W.now)
+                                               W.<|> W.never)
+
+      mouseDeltas :: GLFW.MouseButton -> GameWire a (Float, Float)
+      mouseDeltas mb = mouseIfThen mb getDelta $ W.pure (0, 0)
+        where
+          delayM :: Monad m => m a -> W.Wire s e m a a
+          delayM x' = W.mkGenN $ \x -> do
+            r <- x'
+            return (Right r, delayM $ return x)
+
+          delayCursor :: GameWire (Float, Float) (Float, Float)
+          delayCursor = delayM cursor
+
+          getDelta :: GameWire a (Float, Float)
+          getDelta =
+            W.loop $ (mouseCursor W.*** delayCursor) W.>>>
+            (W.arr $ \((x, y), (x', y')) -> ((x - x', y - y'), (x, y)))
+
+      rotationalDeltas :: GameWire a (Float, Float)
+      rotationalDeltas = mouseDeltas GLFW.MouseButton'1
+
+      panningDeltas :: GameWire a (Float, Float)
+      panningDeltas = mouseDeltas GLFW.MouseButton'3
   in
-   ((mouseMickies W.>>> (mousePressed GLFW.MouseButton'1)) W.<|> (W.pure (0, 0))) W.>>>
-   (W.mkGenN $ \pos -> do
-       let newcam = Camera (finalXForm pos) camTy camSz
-       return (Right newcam, mkViewerCam newcam))
+   W.loop $ W.second (
+     W.delay (initialCam, initialFocus) W.>>>
+     (rotationalDeltas W.&&& W.mkId) W.>>> (W.arr handleRotation) W.>>>
+     (panningDeltas W.&&& W.mkId) W.>>> (W.arr handlePanning) W.>>>
+     (mouseScroll W.&&& W.mkId) W.>>> (W.arr handleScroll))
+   W.>>> (W.arr $ \(_, c@(cam, _)) -> (cam, c))
 
 mkDebugCam :: Camera -> GameWire a Camera
 mkDebugCam initCam = W.loop ((W.second (W.delay initCam W.>>> updCam)) W.>>> feedback)
