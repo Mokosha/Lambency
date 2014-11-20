@@ -7,12 +7,6 @@ module Lambency.Vertex (
 
   VertexTy,
 
-  vertex2Ty,
-  vertex3Ty,
-  texVertex3Ty,
-  normVertex3Ty,
-  normTexVertex3Ty,
-
   getVertex2Position,
   getVertex3Position,
   getTexVertex3Position,
@@ -88,21 +82,6 @@ data VertexTyRep = Vertex2Ty
 
 newtype VertexTy a = VertexTy VertexTyRep
 
-vertex2Ty :: VertexTy Vertex2
-vertex2Ty = VertexTy Vertex2Ty
-
-vertex3Ty :: VertexTy Vertex3
-vertex3Ty = VertexTy Vertex3Ty
-
-texVertex3Ty :: VertexTy TVertex3
-texVertex3Ty = VertexTy TVertex3Ty
-
-normVertex3Ty :: VertexTy OVertex3
-normVertex3Ty = VertexTy OVertex3Ty
-
-normTexVertex3Ty :: VertexTy OTVertex3
-normTexVertex3Ty = VertexTy OTVertex3Ty
-
 instance Storable Vertex2 where
   sizeOf _ = sizeOf (undefined :: Vec2f)
   alignment _ = alignment (undefined :: Vec2f)
@@ -161,32 +140,38 @@ instance Storable OTVertex3 where
     poke (castPtr (ptr `plusPtr` 24)) uv
 
 class (Show a, Eq a, Ord a, Storable a) => Vertex a where
+  getVertexTy :: a -> VertexTy a
   getVertexAttributes :: a -> [VertexAttribute]
   getAttribNames :: a -> [String]
 
 instance Vertex Vertex2 where
+  getVertexTy _ = VertexTy Vertex2Ty
   getVertexAttributes _ = [
     VertexAttribute 2 FloatAttribTy]
   getAttribNames _ = ["position"]
 
 instance Vertex Vertex3 where
+  getVertexTy _ = VertexTy Vertex3Ty
   getVertexAttributes _ = [
     VertexAttribute 3 FloatAttribTy]
   getAttribNames _ = ["position"]
 
 instance Vertex TVertex3 where
+  getVertexTy _ = VertexTy TVertex3Ty
   getVertexAttributes _ = [
     VertexAttribute 3 FloatAttribTy,
     VertexAttribute 2 FloatAttribTy]
   getAttribNames _ = ["position", "texCoord"]
 
 instance Vertex OVertex3 where
+  getVertexTy _ = VertexTy OVertex3Ty
   getVertexAttributes _ = [
     VertexAttribute 3 FloatAttribTy,
     VertexAttribute 3 FloatAttribTy]
   getAttribNames _ = ["position", "normal"]
 
 instance Vertex OTVertex3 where
+  getVertexTy _ = VertexTy OTVertex3Ty
   getVertexAttributes _ = [
     VertexAttribute 3 FloatAttribTy,
     VertexAttribute 3 FloatAttribTy,

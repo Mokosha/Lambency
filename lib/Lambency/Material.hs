@@ -378,8 +378,8 @@ genShadowedFragShader lightTy mat = I.ShdrCode $ do
 
   return $ I.addFragmentColor outColor I.emptyO
 
-compileMaterial :: Material -> IO (CompiledMaterial)
-compileMaterial mat =
+compileMaterial :: Vertex a => Mesh a -> Material -> IO (CompiledMaterial)
+compileMaterial mesh mat =
   let lightCombos = [(x, y) | x <- ([minBound..maxBound] :: [LightEnum]), y <- [True, False]]
       genLightShdr p@(ty, True) =
         let vshdr = genLitVertexShader mat
