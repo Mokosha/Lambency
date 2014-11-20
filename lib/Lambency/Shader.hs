@@ -114,7 +114,7 @@ afterRender shdr = do
 
 vertMinimal :: I.ShaderCode Vertex3 ()
 vertMinimal = I.ShdrCode $ do
-  position <- I.getInput3f 0
+  position <- I.getInput3f "position"
   mvpMatrix <- I.newUniformVar "mvpMatrix" I.matrix4Ty
   out_pos <- I.setE I.vector4fTy $
              I.xform4f (I.mkVarExpr mvpMatrix) $
@@ -123,8 +123,8 @@ vertMinimal = I.ShdrCode $ do
 
 vertSimple :: I.ShaderCode TVertex3 Vertex2
 vertSimple = I.ShdrCode $ do
-  position <- I.getInput3f 0
-  texCoord <- I.getInput2f 1
+  position <- I.getInput3f "position"
+  texCoord <- I.getInput2f "texCoord"
 
   mvpMatrix <- I.newUniformVar "mvpMatrix" I.matrix4Ty
   texCoordMatrix <- I.newUniformVar "texCoordMatrix" I.matrix3Ty
@@ -142,15 +142,15 @@ vertSimple = I.ShdrCode $ do
              I.mkVec4f_31 (I.mkVarExpr position) (I.mkConstf 1)
 
   let output = I.addVertexPosition out_pos $
-               I.addCustomOVar uv I.emptyO
+               I.addCustomOVar "uv" uv I.emptyO
 
   return output
   
 vertStandard :: I.ShaderCode OTVertex3 OTVertex3
 vertStandard = I.ShdrCode $ do
-  position <- I.getInput3f 0
-  normal <- I.getInput3f 1
-  texCoord <- I.getInput2f 2
+  position <- I.getInput3f "position"
+  normal <- I.getInput3f "normal"
+  texCoord <- I.getInput2f "texCoord"
 
   mvpMatrix <- I.newUniformVar "mvpMatrix" I.matrix4Ty
   m2wMatrix <- I.newUniformVar "m2wMatrix" I.matrix4Ty
@@ -171,9 +171,9 @@ vertStandard = I.ShdrCode $ do
              I.mkVec4f_31 (I.mkVarExpr position) (I.mkConstf 1)
 
   let output = I.addVertexPosition out_pos $
-               I.addCustomOVar pos $
-               I.addCustomOVar norm $
-               I.addCustomOVar texCoord I.emptyO
+               I.addCustomOVar "position" pos $
+               I.addCustomOVar "normal" norm $
+               I.addCustomOVar "uv" texCoord I.emptyO
 
   return output
   
@@ -184,14 +184,14 @@ fragMinimal = I.ShdrCode $ return I.emptyO
 
 fragSimple :: I.ShaderCode Vertex2 ()
 fragSimple = I.ShdrCode $ do
-  uv <- I.getInput2f 0
+  uv <- I.getInput2f "uv"
   diffuseTex <- I.newUniformVar "diffuseTex" I.sampler2DTy
   out_color <- I.setE I.vector4fTy $ I.sample2D (I.mkVarExpr diffuseTex) (I.mkVarExpr uv)
   return $ I.addFragmentColor out_color I.emptyO
 
 fragSimpleTrans :: I.ShaderCode Vertex2 ()
 fragSimpleTrans = I.ShdrCode $ do
-  uv <- I.getInput2f 0
+  uv <- I.getInput2f "uv"
 
   diffuseTex <- I.newUniformVar "diffuseTex" I.sampler2DTy
   alpha <- I.newUniformVar "alpha" I.floatTy
@@ -206,7 +206,7 @@ fragSimpleTrans = I.ShdrCode $ do
 
 fragFont :: I.ShaderCode Vertex2 ()
 fragFont = I.ShdrCode $ do
-  uv <- I.getInput2f 0
+  uv <- I.getInput2f "uv"
 
   maskTex <- I.newUniformVar "maskTex" I.sampler2DTy
   alpha <- I.newUniformVar "alpha" I.floatTy
@@ -223,9 +223,9 @@ fragFont = I.ShdrCode $ do
 
 fragSpotlight :: I.ShaderCode OTVertex3 ()
 fragSpotlight = I.ShdrCode $ do
-  pos <- I.getInput3f 0
-  norm <- I.getInput3f 1
-  uv <- I.getInput2f 2
+  pos <- I.getInput3f "position"
+  norm <- I.getInput3f "normal"
+  uv <- I.getInput2f "uv"
 
   diffuseTex <- I.newUniformVar "diffuseTex" I.sampler2DTy
 
@@ -269,24 +269,24 @@ fragSpotlight = I.ShdrCode $ do
   spot <- I.setE I.floatTy $ I.clampf (I.mkVarExpr cosToPoint) (I.mkVarExpr lightCosCutoff) (I.mkConstf 1)
 
   let color = I.mkConstVec3f (V3 1 1 1)
-  lightColor <- I.setE I.vector3fTy $ I.mkConstVec3f (V3 0 0 0)
+  lColor <- I.setE I.vector3fTy $ I.mkConstVec3f (V3 0 0 0)
 
-  let modLight = I.assignE lightColor $
-                 I.add3f (I.mkVarExpr lightColor) $
+  let modLight = I.assignE lColor $
+                 I.add3f (I.mkVarExpr lColor) $
                  I.scale3f color $
                  I.divf (I.mkVarExpr spot) $
                  I.multf (I.mkConstf 0.1) (I.mkVarExpr distToLight)
 
   I.ifThen (I.gtf (I.mkVarExpr spot) (I.mkConstf 0)) modLight (return ())
 
-  I.assignE lightColor $
-    I.scale3f (I.mkVarExpr lightColor) $
+  I.assignE lColor $
+    I.scale3f (I.mkVarExpr lColor) $
     I.multf (I.maxf (I.mkConstf 0) (I.dot3f (I.neg3f (I.mkVarExpr lightDir)) (I.mkVarExpr norm))) $
     I.subf (I.mkConstf 1) (I.multf (I.mkConstf 0.5) (I.mkVarExpr shadow))
 
-  I.assignE lightColor $ I.add3f (I.mkVarExpr lightColor) (I.mkVarExpr ambient)
+  I.assignE lColor $ I.add3f (I.mkVarExpr lColor) (I.mkVarExpr ambient)
   finalColor <- I.setE I.vector3fTy $
-                I.mult3f (I.mkVarExpr lightColor) $
+                I.mult3f (I.mkVarExpr lColor) $
                 I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D $
                 I.sample2D (I.mkVarExpr diffuseTex) (I.mkVarExpr uv)
 

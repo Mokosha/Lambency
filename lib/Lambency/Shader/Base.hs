@@ -77,6 +77,7 @@ data BinaryInfix = Add
 data BinaryFunction = Max
                     | Min
                     | Dot
+                    | Pow
                     | Sample1D
                     | Sample2D
                     | Sample3D
@@ -148,14 +149,19 @@ data Statement = LocalDecl ShaderVarRep (Maybe ExprRep)
 
 newtype ShaderInput i = ShaderInput { getInputVars :: [ShaderVarRep] }
 
-data ShaderOutputVar = CustomOutput ShaderVarRep
+data ShaderOutputVar = CustomOutput String ShaderVarRep
                      | SpecialOutput SpecialVar ShaderVarRep
 
 newtype ShaderOutput o = ShaderOutput { getOutputVars :: [ShaderOutputVar] }
 
+data ShaderType
+  = VertexShaderTy
+  | FragmentShaderTy
+  deriving (Show, Read, Eq, Ord, Enum, Bounded)
+
 newtype ShaderContext i a =
-  ShdrCtx { compileShdrCode :: RWS (ShaderInput i) ([Declaration], [Statement]) Int a }
-  deriving (Functor, Applicative, Monad, MonadReader (ShaderInput i),
+  ShdrCtx { compileShdrCode :: RWS (ShaderInput i, ShaderType) ([Declaration], [Statement]) Int a }
+  deriving (Functor, Applicative, Monad, MonadReader (ShaderInput i, ShaderType),
             MonadWriter ([Declaration], [Statement]), MonadState Int)
 
 newtype ShaderCode i o = ShdrCode (ShaderContext i (ShaderOutput o))

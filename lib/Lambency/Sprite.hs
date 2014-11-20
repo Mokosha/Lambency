@@ -46,14 +46,14 @@ newtype Sprite = Sprite { getFrames :: CyclicList SpriteFrame }
 curFrameOffset :: Sprite -> V2 Float
 curFrameOffset = offset . extract . getFrames
 
-updateScale :: V2 Float -> V2 Float -> Material -> Material
+updateScale :: V2 Float -> V2 Float -> ShaderMap -> ShaderMap
 updateScale (V2 sx sy) (V2 tx ty) =
   Map.insert "texCoordMatrix" (Matrix3Val $
                                V3 (V3 sx 0 0) (V3 0 sy 0) (V3 tx ty 1))
 
 -- !FIXME! This function shouldn't be here and we should really be using lenses
-mapROMaterial :: (Material -> Material) -> RenderObject -> RenderObject
-mapROMaterial fn ro = ro { material = fn (material ro) }
+mapROMaterialVars :: (ShaderMap -> ShaderMap) -> RenderObject -> RenderObject
+mapROMaterialVars fn ro = ro { materialVars = fn (materialVars ro) }
 
 mapFrameRO :: (RenderObject -> RenderObject) -> SpriteFrame -> SpriteFrame
 mapFrameRO fn sf = sf { frameRO = fn (frameRO sf) }
@@ -62,7 +62,7 @@ addTextFlag :: SpriteFrame -> SpriteFrame
 addTextFlag = mapFrameRO $ \ro -> ro { flags = [Text, Transparent] }
 
 changeSpriteColor :: V3 Float -> Sprite -> Sprite
-changeSpriteColor c = Sprite . fmap (mapFrameRO $ mapROMaterial $ setMaterialColor c) . getFrames
+changeSpriteColor c = Sprite . fmap (mapFrameRO $ mapROMaterialVars $ Map.insert "color" (Vector3Val c)) . getFrames
 
 initStaticSprite :: Bool -> Texture -> IO (Sprite)
 initStaticSprite isMask tex = do
@@ -86,7 +86,7 @@ initAnimatedSprite isMask frameSzs offsets tex = do
       in SpriteFrame {
         offset = texOff,
         spriteSize = sz,
-        frameRO = ro { material = updateScale (changeRange sz) texOff (material ro)}
+        frameRO = ro { materialVars = updateScale (changeRange sz) texOff (materialVars ro)}
         }
 
     changeRange :: V2 Int -> V2 Float
@@ -147,7 +147,7 @@ renderSprite s = renderFrameAt $ frameRO $ extract . getFrames $ s
 renderSpriteWithAlpha :: Sprite -> Float -> V2 Int -> Float -> V2 Float -> GameMonad ()
 renderSpriteWithAlpha s a = renderFrameAt (setAlpha $ frameRO $ extract . getFrames $ s)
   where
-    setAlpha ro = ro { material = Map.insert "alpha" (FloatVal a) (material ro),
+    setAlpha ro = ro { materialVars = Map.insert "alpha" (FloatVal a) (materialVars ro),
                        flags = (Transparent : (flags ro)) }
 
 data SpriteAnimationType

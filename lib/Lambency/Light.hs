@@ -19,24 +19,26 @@ import Linear.V3
 
 --------------------------------------------------------------------------------
 
-createSpotlight :: Vec3f -> Vec3f -> Float -> IO (Light)
-createSpotlight pos dirvec ang = do
-  shdr <- createSpotlightShader
+mkLightParams :: Vec3f -> Vec3f -> Float -> LightParams
+mkLightParams = LightParams
+
+spotlight :: LightParams -> Vec3f -> Vec3f -> Float -> Light
+spotlight params pos dir ang =
+  Light {
+    lightParams = params,
+    lightType = SpotLight dir pos ang,
+    lightShadowMap = Nothing
+  }
+
+addShadowMap :: Light -> IO (Light)
+addShadowMap l = do
   depthTex <- createDepthTexture
   minShdr <- createMinimalShader
-  -- !FIXME! The camera fovy should depend on the cosoffset
-  let dir = signorm dirvec
-      shdrMap = Map.fromList [
-        ("shadowMap", TextureVal depthTex),
-        ("lightDir", Vector3Val dir),
-        ("lightPos", Vector3Val pos),
-        ("lightCosCutoff", FloatVal ang),
-        ("ambient", Vector3Val $ V3 0.15 0.15 0.15)]
-  return $ Light shdr shdrMap (Just $ Shadow minShdr depthTex)
-
+  return $ l { lightShadowMap = (Just $ ShadowMap minShdr depthTex) }
+{--
 setAmbient :: Vec3f -> Light -> Light
-setAmbient color (Light shdr shdrMap shadow) =
-  Light shdr (Map.insert "ambient" (Vector3Val color) shdrMap) shadow
+setAmbient color (Light params lightTy shadow) =
+  Light ( (Map.insert "ambient" (Vector3Val color) shdrMap) shadow
 
 createNoLight :: IO (Light)
 createNoLight = let
@@ -56,3 +58,4 @@ createFontLight = let
   in do
     shdr <- createFontShader
     return $ Light shdr shdrMap Nothing  
+--}

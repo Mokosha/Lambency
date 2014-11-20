@@ -93,6 +93,9 @@ maxf = binaryExpr (BinaryFunOp Max)
 minf :: Expr Float -> Expr Float -> Expr Float
 minf = binaryExpr (BinaryFunOp Min)
 
+powf :: Expr Float -> Expr Float -> Expr Float
+powf = binaryExpr (BinaryFunOp Pow)
+
 addf :: Expr Float -> Expr Float -> Expr Float
 addf = binaryExpr (BinaryInfixOp Add)
 

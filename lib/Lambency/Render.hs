@@ -18,7 +18,6 @@ module Lambency.Render (
 
 import Lambency.Camera
 import Lambency.Light
-import Lambency.Material
 import Lambency.Shader
 import Lambency.Texture
 import Lambency.Transform
@@ -78,12 +77,15 @@ setupBuffer tgt xs = do
   withStorableArray varr (\ptr -> GL.bufferData tgt GL.$= (ptrsize xs, ptr, GL.StaticDraw))
   return buf
 
+shaderCache :: TVar (Data.Map Int Shader)
+shaderCache = unsafeIO $ newTVarIO (Map.empty)
+
 createBasicRO :: (Vertex a) => [a] -> [Int32] -> Material -> IO (RenderObject)
 
 -- If there's no vertices, then there's nothing to render...
 createBasicRO [] _ _ = do
   return $ RenderObject {
-    material = Map.empty,
+    materialVars = Map.empty,
     render = \_ _ -> return (),
     flags = []
   }
@@ -130,16 +132,16 @@ createBasicRO verts@(v:_) idxs mat =
     vbo <- setupBuffer GL.ArrayBuffer verts
     ibo <- setupBuffer GL.ElementArrayBuffer idxs
     return $ RenderObject {
-      material = mat,
+      -- materialVars = mat,
+      -- !FIXME! These should be the variables extracted from the
+      -- material after being compiled into shader code...
+      materialVars = Map.empty,
       render = createRenderFunc vbo ibo $ fromIntegral (length idxs),
       flags = []
     }
 
 class Renderable a where
   createRenderObject :: a -> Material -> IO (RenderObject)
-
-  defaultRenderObject :: a -> IO (RenderObject)
-  defaultRenderObject m = createRenderObject m =<< createSimpleMaterial
 
 updateMatrices :: String -> ShaderValue -> ShaderValue -> ShaderValue
 updateMatrices "mvpMatrix" (Matrix4Val m1) (Matrix4Val m2) = Matrix4Val $ m1 !*! m2
@@ -151,12 +153,12 @@ place cam ro = let
   sm :: ShaderMap
   sm = Map.singleton "mvpMatrix" (Matrix4Val $ getViewProjMatrix cam)
   in
-   ro { material = Map.unionWithKey updateMatrices (material ro) sm }
+   ro { materialVars = Map.unionWithKey updateMatrices (materialVars ro) sm }
 
 renderROs :: [RenderObject] -> Shader -> ShaderMap -> IO ()
 renderROs ros shdr shdrmap = do
   beforeRender shdr
-  flip mapM_ ros $ \ro -> (render ro) shdr $ Map.union (material ro) shdrmap
+  flip mapM_ ros $ \ro -> (render ro) shdr $ Map.union (materialVars ro) shdrmap
   afterRender shdr
 
 appendXform :: Transform -> ShaderMap -> ShaderMap
@@ -182,7 +184,7 @@ divideAndRenderROs ros cam (Light shdr shdrmap _) = let
   camDist ro = z
     where 
       (Matrix4Val (V4 _ _ (V4 _ _ _ z) _)) =
-        case Map.lookup "mvpMatrix" (material ro)
+        case Map.lookup "mvpMatrix" (materialVars ro)
         of Nothing -> Matrix4Val eye4
            Just x -> x
 

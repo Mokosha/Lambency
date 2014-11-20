@@ -4,6 +4,7 @@ module Lambency.Shader.Program where
 --------------------------------------------------------------------------------
 import Control.Monad.RWS.Strict
 
+import qualified Data.Map as Map
 import Data.List ((\\), intersect)
 
 import Lambency.Vertex
@@ -19,8 +20,8 @@ getDeclType (Uniform _) = UniformDeclTy
 getDeclType (Varying _) = VaryingDeclTy
 getDeclType (ConstDecl _ _) = ConstDeclTy
 
-addCustomOVar :: ShaderVar a -> ShaderOutput b -> ShaderOutput b
-addCustomOVar (ShaderVar v) (ShaderOutput vs) = ShaderOutput ((CustomOutput v):vs)
+addCustomOVar :: String -> ShaderVar a -> ShaderOutput b -> ShaderOutput b
+addCustomOVar name (ShaderVar v) (ShaderOutput vs) = ShaderOutput ((CustomOutput name v):vs)
 
 addVertexPosition :: ShaderVar (V4 Float) -> ShaderOutput b -> ShaderOutput b
 addVertexPosition (ShaderVar v) (ShaderOutput vs) =
@@ -33,8 +34,12 @@ addFragmentColor (ShaderVar v) (ShaderOutput vs) =
 emptyO :: ShaderOutput a
 emptyO = ShaderOutput []
 
+varyingPrefix :: String
+varyingPrefix = "__varying_"
+
 getOutputVar :: ShaderOutputVar -> ShaderVarRep
-getOutputVar (CustomOutput v) = v
+getOutputVar (CustomOutput "" v) = v
+getOutputVar (CustomOutput name (ShdrVarRep _ i ty)) = ShdrVarRep (varyingPrefix ++ name) i ty
 getOutputVar (SpecialOutput _ v) = v
 
 collectOutput :: (ShaderOutputVar -> Bool) -> ShaderOutput a -> [ShaderVarRep]
@@ -43,7 +48,7 @@ collectOutput fn = map getOutputVar . filter fn . getOutputVars
 collectCustom :: ShaderOutput a -> [ShaderVarRep]
 collectCustom = collectOutput isCustom
   where
-    isCustom (CustomOutput _) = True
+    isCustom (CustomOutput _ _) = True
     isCustom _ = False
 
 collectSpecial :: ShaderOutput a -> [ShaderVarRep]
@@ -69,7 +74,7 @@ updateStmt v1 s@(LocalDecl v2 (Just e))
 updateStmt _ s@(Assignment _ _) = [s]
 updateStmt _ s@(SpecialAssignment _ _) = [s]
 updateStmt v (IfThenElse e s1 s2) =
-  let output = ShaderOutput [CustomOutput v]
+  let output = ShaderOutput [CustomOutput "" v]
   in [IfThenElse e (updateStmts s1 output) (updateStmts s2 output)]
 
 updateStmts :: [Statement] -> ShaderOutput a -> [Statement]
@@ -131,28 +136,35 @@ mkAttributes _ =
   in
    ShaderInput $ zipWith mkVar (zip names [0,1..]) attribs
 
-getInput :: ShaderVarTy a -> Int -> ShaderContext i (ShaderVar a)
-getInput (ShaderVarTy expected) idx = do
-  (ShaderInput vars) <- ask
-  let v@(ShdrVarRep _ _ ty) = vars !! idx
-  if expected == ty
-    then return (ShaderVar v)
-    else error $ concat ["Type mismatch for attribute ", show idx,
-                         ": Expected ", show expected, " got ", show ty]
+getInput :: ShaderVarTy a -> String -> ShaderContext i (ShaderVar a)
+getInput (ShaderVarTy expected) name = do
+  (ShaderInput vars, shaderTy) <- ask
+  let varMap = Map.fromList $ map (\v@(ShdrVarRep n _ _) -> (n, v)) vars
+      varName =
+        case shaderTy of
+          VertexShaderTy -> Map.lookup name varMap
+          FragmentShaderTy -> Map.lookup (varyingPrefix ++ name) varMap
+  case varName
+    of Nothing -> error $ "Unknown shader attribute: " ++ name
+       (Just v@(ShdrVarRep _ _ ty))
+         | ty == expected -> return (ShaderVar v)
+         | otherwise -> error $
+                        concat ["Type mismatch for attribute ", show name,
+                                ": Expected ", show expected, " got ", show ty]
 
-getInputi :: Int -> ShaderContext i (ShaderVar Int)
+getInputi :: String -> ShaderContext i (ShaderVar Int)
 getInputi = getInput (ShaderVarTy IntTy)
 
-getInputf :: Int -> ShaderContext i (ShaderVar Float)
+getInputf :: String -> ShaderContext i (ShaderVar Float)
 getInputf = getInput (ShaderVarTy FloatTy)
 
-getInput2f :: Int -> ShaderContext i (ShaderVar (V2 Float))
+getInput2f :: String -> ShaderContext i (ShaderVar (V2 Float))
 getInput2f = getInput (ShaderVarTy Vector2Ty)
 
-getInput3f :: Int -> ShaderContext i (ShaderVar (V3 Float))
+getInput3f :: String -> ShaderContext i (ShaderVar (V3 Float))
 getInput3f = getInput (ShaderVarTy Vector3Ty)
 
-getInput4f :: Int -> ShaderContext i (ShaderVar (V4 Float))
+getInput4f :: String -> ShaderContext i (ShaderVar (V4 Float))
 getInput4f = getInput (ShaderVarTy Vector4Ty)
 
 copyShdrVars :: Int -> [ShaderVarRep] -> [ShaderVarRep]
@@ -169,21 +181,22 @@ compileProgram :: Vertex v => VertexTy v -> ShaderCode v o -> ShaderCode o f -> 
 compileProgram iptTy (ShdrCode vertexPrg) (ShdrCode fragmentPrg) =
   let vs_input@(ShaderInput vs_input_vars) = mkAttributes iptTy
       (vs_output, varID, (vs_decls, vs_stmts')) =
-        runRWS (compileShdrCode vertexPrg) vs_input (length vs_input_vars)
+        runRWS (compileShdrCode vertexPrg) (vs_input, VertexShaderTy) (length vs_input_vars)
 
       vs_output_vars = collectCustom vs_output
       (fs_input_vars, vs_stmts) =
         case vs_output_vars `intersect` vs_input_vars of
           [] -> (vs_output_vars, updateStmts vs_stmts' vs_output)
-          bothIO -> 
-            let newVars = copyShdrVars (varID + 1) bothIO
+          bothIO -> error "Shader.Program (compileProgram): This shouldn't happen"
+{--         let newVars = copyShdrVars (varID + 1) bothIO
             in
              ((vs_output_vars \\ bothIO) ++ newVars, 
               updateStmts vs_stmts' vs_output ++ (addVertexOutputs newVars bothIO))
+--}
 
       fs_input = ShaderInput fs_input_vars
       (fs_output, _, (fs_decls, fs_stmts)) =
-        runRWS (compileShdrCode fragmentPrg) fs_input (varID + length fs_input_vars)
+        runRWS (compileShdrCode fragmentPrg) (fs_input, FragmentShaderTy) (varID + length fs_input_vars)
 
       varyingDecls = map Varying fs_input_vars
       attribDecls = map Attribute vs_input_vars

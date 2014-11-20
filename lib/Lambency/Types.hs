@@ -1,10 +1,10 @@
 module Lambency.Types (
   Vec2f, Vec3f, Vec4f, Quatf, Mat2f, Mat3f, Mat4f,
   Camera(..), CameraType(..), CameraViewDistance(..),
-  LightType(..), Light(..), Shadow(..),
+  LightEnum(..), LightParams(..), LightType(..), Light(..), ShadowMap(..),
   Shader(..), ShaderVarTy(..), ShaderValue(..), ShaderVar(..), ShaderMap,
   Texture(..), TextureSize(..), TextureFormat(..), FBOHandle, TextureHandle(..),
-  Material,
+  MaterialVar(..), NormalModulation(..), ReflectionInfo(..), Material(..), CompiledMaterial(..),
   RenderFlag(..), RenderObject(..), RenderAction(..), RenderActions(..),
   OutputAction(..),
   TimeStep,
@@ -21,6 +21,7 @@ import Lambency.Sound
 
 import qualified Lambency.Transform as XForm
 
+import Data.Hashable
 import Data.Time.Clock
 
 import qualified Data.Map as Map
@@ -144,22 +145,105 @@ data Texture = Texture TextureHandle TextureFormat
 
 -- Lights
 
-data LightType = SpotLight Vec3f Vec3f Float
-               | DirectionalLight Vec3f
-               | PointLight Vec3f
-               | NoLight
-               deriving (Show)
+data LightEnum
+  = SpotLightTy
+  | DirectionalLightTy
+  | PointLightTy
+  | AreaLightTy
+  deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
-data Shadow = Shadow Shader Texture deriving (Show, Eq)
-data Light = Light Shader ShaderMap (Maybe Shadow)
-           deriving (Show)
+data LightParams = LightParams {
+  ambientColor :: V3 Float,
+  lightColor :: V3 Float,
+  lightIntensity :: Float
+} deriving(Show, Eq, Ord)
+
+data LightType
+  = SpotLight {
+    spotLightDir :: V3 Float,
+    spotLightPos :: V3 Float,
+    spotLightCosCutoff :: Float
+  }
+  | DirectionalLight {
+    dirLightDir :: V3 Float
+  }
+  | PointLight {
+    pointLightPos :: V3 Float
+  } deriving (Show, Eq, Ord)
+
+data ShadowMap = ShadowMap Shader Texture
+                 deriving (Show)
+
+data Light = Light {
+  lightParams :: LightParams,
+  lightType :: LightType,
+  lightShadowMap :: Maybe ShadowMap
+} deriving (Show)
 
 --------------------------------------------------------------------------------
 
 -- Materials
 
--- Material consists of the variables specified by the engine for the shader.
-type Material = ShaderMap
+data MaterialVar a
+  = MatNothing
+  | MatDefault
+  | MatJust a
+  deriving (Show, Ord)
+
+instance Eq (MaterialVar a) where
+  MatNothing == MatNothing = True
+  MatDefault == MatDefault = True
+  (MatJust _) == (MatJust _) = True
+  _ == _ = False
+
+instance Hashable (MaterialVar a) where
+  hashWithSalt = hashUsing matVarToBool
+    where
+      matVarToBool MatNothing = False
+      matVarToBool _ = True
+
+data NormalModulation
+  = BumpMap Texture
+  | NormalMap Texture
+
+data ReflectionInfo
+  = ReflectionInfo {
+    indexOfRefraction :: Float,
+    reflectionMap :: Texture,
+    sharpness :: Float
+  }
+
+data Material =
+  BlinnPhongMaterial {
+    diffuseReflectivity :: MaterialVar (V3 Float),
+    diffuseMap :: MaterialVar (Texture),
+
+    specularExponent :: MaterialVar (Float),
+    specularReflectivity :: MaterialVar (V3 Float),
+    specularMap :: MaterialVar (Texture),
+
+    ambientReflectivity :: MaterialVar (V3 Float),
+
+    reflectionInfo :: MaterialVar (ReflectionInfo),
+
+    normalMod :: MaterialVar (NormalModulation)
+  }
+
+instance Hashable Material where
+  hashWithSalt s (BlinnPhongMaterial a b c d e f g h) =
+    s `hashWithSalt`
+    a `hashWithSalt`
+    b `hashWithSalt`
+    c `hashWithSalt`
+    d `hashWithSalt`
+    e `hashWithSalt`
+    f `hashWithSalt`
+    g `hashWithSalt` h
+
+data CompiledMaterial
+  = CompiledLitMaterial (Map.Map (LightEnum, Bool) Shader)
+  | CompiledUnlitMaterial Shader
+  deriving (Show, Eq)
 
 --------------------------------------------------------------------------------
 
@@ -170,7 +254,7 @@ data RenderFlag = Transparent
                 deriving (Show, Read, Ord, Eq, Enum)
 
 data RenderObject = RenderObject {
-  material :: Material,
+  materialVars :: ShaderMap,
   render :: Shader -> ShaderMap -> IO (),
   flags :: [RenderFlag]
 }

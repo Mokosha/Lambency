@@ -90,6 +90,7 @@ binOpBS LessThan = "<"
 binOpBS GreaterThan = ">"
 
 binFnBS :: BinaryFunction -> String
+binFnBS Pow = "pow"
 binFnBS Max = "max"
 binFnBS Min = "min"
 binFnBS Dot = "dot"
