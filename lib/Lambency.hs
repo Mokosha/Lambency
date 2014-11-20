@@ -152,13 +152,24 @@ printLogs [] = return []
 printLogs (LogAction s : rest) = putStrLn s >> printLogs rest
 printLogs (act : acts) = pure (act :) <*> printLogs acts
 
+handleWireframe :: [OutputAction] -> IO ([OutputAction])
+handleWireframe [] = return []
+handleWireframe (WireframeAction True : rest) = do
+  GL.polygonMode GL.$= (GL.Line, GL.Line)
+  handleWireframe rest
+handleWireframe (WireframeAction False : rest) = do
+  GL.polygonMode GL.$= (GL.Fill, GL.Fill)
+  handleWireframe rest
+handleWireframe (act : acts) = pure (act :) <*> handleWireframe acts
+
 -- When we handle actions, only really print logs and play any sounds
 -- that may need to start or stop.
 handleActions :: [OutputAction] -> IO ()
 handleActions actions =
   foldM_ (\acts f -> f acts) actions [
     printLogs,
-    playSounds
+    playSounds,
+    handleWireframe
   ]
 
 step :: a -> Game a -> TimeStep -> GameMonad (Either String a, Camera, [Light], Game a)

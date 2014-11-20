@@ -196,6 +196,7 @@ data RenderActions = RenderActions {
 -- we may also want to output sound or a debug string as well.
 data OutputAction = LogAction String
                   | SoundAction Sound SoundCommand
+                  | WireframeAction Bool
 
 --------------------------------------------------------------------------------
 

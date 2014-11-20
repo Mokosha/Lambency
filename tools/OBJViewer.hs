@@ -4,9 +4,13 @@ module Main (main) where
 import Control.Applicative
 import qualified Control.Wire as W
 
+import Control.Monad.Writer
+
 import Data.List (intercalate)
 
 import qualified Graphics.UI.GLFW as GLFW
+
+import FRP.Netwire.Input
 
 import qualified Lambency as L
 import Linear
@@ -25,6 +29,13 @@ initialCam = L.mkPerspCamera
 
 cam :: L.GameWire () L.Camera
 cam = L.mkViewerCam initialCam zero
+
+wireframeToggle :: L.GameWire a a
+wireframeToggle = (keyDebounced GLFW.Key'W W.>>> toggleWireframe True) W.<|> W.mkId
+  where
+    toggleWireframe wireframe = W.mkGenN $ \x -> do
+      tell [L.WireframeAction wireframe]
+      return (Right x, toggleWireframe $ not wireframe)
 
 mkOBJ :: FilePath -> IO (L.RenderObject)
 mkOBJ objfile = do
@@ -47,7 +58,7 @@ mkOBJ objfile = do
       L.createRenderObject mesh (L.createTexturedMaterial tex)
 
 controlWire :: L.RenderObject -> L.GameWire a a
-controlWire ro = L.mkObject ro (pure L.identity)
+controlWire ro = L.mkObject ro (pure L.identity) W.>>> wireframeToggle
 
 loadGame :: FilePath -> IO (L.Game ())
 loadGame objfile = do
