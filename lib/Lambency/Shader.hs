@@ -323,20 +323,20 @@ fragSpotlight = I.ShdrCode $ do
 
 createSimpleShader :: IO (Shader)
 createSimpleShader =
-  I.generateOpenGLShader $ I.compileProgram texVertex3Ty vertSimple fragSimple
+  I.generateOpenGLShader $ I.compileProgram (getVertexTy undefined) vertSimple fragSimple
 
 createTransparentShader :: IO (Shader)
 createTransparentShader =
-  I.generateOpenGLShader $ I.compileProgram texVertex3Ty vertSimple fragSimpleTrans
+  I.generateOpenGLShader $ I.compileProgram (getVertexTy undefined) vertSimple fragSimpleTrans
 
 createFontShader :: IO (Shader)
 createFontShader =
-  I.generateOpenGLShader $ I.compileProgram texVertex3Ty vertSimple fragFont
+  I.generateOpenGLShader $ I.compileProgram (getVertexTy undefined) vertSimple fragFont
 
 createSpotlightShader :: IO (Shader)
 createSpotlightShader =
-  I.generateOpenGLShader $ I.compileProgram normTexVertex3Ty vertStandard fragSpotlight
+  I.generateOpenGLShader $ I.compileProgram (getVertexTy undefined) vertStandard fragSpotlight
 
 createMinimalShader :: IO (Shader)
 createMinimalShader =
-  I.generateOpenGLShader $ I.compileProgram vertex3Ty vertMinimal fragMinimal
+  I.generateOpenGLShader $ I.compileProgram (getVertexTy undefined) vertMinimal fragMinimal

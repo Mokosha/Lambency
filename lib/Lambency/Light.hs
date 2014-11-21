@@ -1,5 +1,5 @@
 module Lambency.Light (
-  createSpotlight,
+  spotlight,
   createNoLight,
   createFontLight,
   setAmbient,

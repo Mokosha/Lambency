@@ -9,6 +9,8 @@ module Lambency.Material (
 
 --------------------------------------------------------------------------------
 import Lambency.Types
+import Lambency.Mesh
+import Lambency.Vertex
 
 import qualified Lambency.Shader.Expr as I
 import qualified Lambency.Shader.Base as I
