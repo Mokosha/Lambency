@@ -1,32 +1,68 @@
 module Lambency.Light (
+  getLightVarName,
+
+  mkLightParams,
+  
   spotlight,
-  createNoLight,
-  createFontLight,
+  dirlight,
+  pointlight,
+
+  addShadowMap,
+  
   setAmbient,
+  setColor,
+  setIntensity,
 ) where
 
 --------------------------------------------------------------------------------
-
-import Lambency.Shader
 import Lambency.Texture
+import Lambency.Shader
 import Lambency.Types
 
-import qualified Data.Map as Map
-
-import Linear.Matrix
-import Linear.Metric
 import Linear.V3
-
 --------------------------------------------------------------------------------
 
+mkLightVar :: String -> ShaderValue -> LightVar a
+mkLightVar n v = LightVar (n, v)
+
+mkLightVar3f :: String -> (V3 Float) -> LightVar (V3 Float)
+mkLightVar3f n v = mkLightVar n (Vector3Val v)
+
+mkLightVarf :: String -> Float -> LightVar Float
+mkLightVarf n f = mkLightVar n (FloatVal f)
+
 mkLightParams :: Vec3f -> Vec3f -> Float -> LightParams
-mkLightParams = LightParams
+mkLightParams a c i =
+  LightParams
+  (mkLightVar3f "lightAmbient" a)
+  (mkLightVar3f "lightColor" c)
+  (mkLightVarf "lightIntensity" i)
 
 spotlight :: LightParams -> Vec3f -> Vec3f -> Float -> Light
 spotlight params pos dir ang =
   Light {
     lightParams = params,
-    lightType = SpotLight dir pos ang,
+    lightType =
+      SpotLight
+      (mkLightVar3f "spotlightDir" dir)
+      (mkLightVar3f "spotlightPos" pos)
+      (mkLightVarf "spotlightCosCutoff" $ cos ang),
+    lightShadowMap = Nothing
+  }
+
+dirlight :: LightParams -> Vec3f -> Light
+dirlight params dir =
+  Light {
+    lightParams = params,
+    lightType = DirectionalLight (mkLightVar3f "dirlightDir" dir),
+    lightShadowMap = Nothing
+  }
+
+pointlight :: LightParams -> Vec3f -> Light
+pointlight params pos =
+  Light {
+    lightParams = params,
+    lightType = PointLight (mkLightVar3f "spotlightPos" pos),
     lightShadowMap = Nothing
   }
 
@@ -35,27 +71,18 @@ addShadowMap l = do
   depthTex <- createDepthTexture
   minShdr <- createMinimalShader
   return $ l { lightShadowMap = (Just $ ShadowMap minShdr depthTex) }
-{--
+
 setAmbient :: Vec3f -> Light -> Light
 setAmbient color (Light params lightTy shadow) =
-  Light ( (Map.insert "ambient" (Vector3Val color) shdrMap) shadow
+  let newColor = (mkLightVar3f "lightAmbient" color)
+  in Light (params { ambientColor = newColor}) lightTy shadow
 
-createNoLight :: IO (Light)
-createNoLight = let
-  shdrMap = Map.fromList [
-    ("alpha", FloatVal 1.0),
-    ("texCoordMatrix", Matrix3Val eye3)]
-  in do
-    shdr <- createTransparentShader
-    return $ Light shdr shdrMap Nothing
+setColor :: Vec3f -> Light -> Light
+setColor color (Light params lightTy shadow) =
+  let newColor = (mkLightVar3f "lightColor" color)
+  in Light (params { lightColor = newColor}) lightTy shadow
 
-createFontLight :: IO (Light)
-createFontLight = let
-  shdrMap = Map.fromList [
-    ("color", Vector3Val (V3 1 1 1)),
-    ("alpha", FloatVal 1.0),
-    ("texCoordMatrix", Matrix3Val eye3)]
-  in do
-    shdr <- createFontShader
-    return $ Light shdr shdrMap Nothing  
---}
+setIntensity :: Float -> Light -> Light
+setIntensity intensity (Light params lightTy shadow) =
+  let newi = (mkLightVarf "lightIntensity" intensity)
+  in Light (params { lightIntensity = newi}) lightTy shadow

@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Lambency.Shader (
   getProgram,
   getShaderVars,
@@ -10,10 +11,15 @@ module Lambency.Shader (
   createFontShader,
   createSpotlightShader,
   destroyShader,
-  beforeRender, afterRender
+  beforeRender, afterRender,
+
+  getLightVarName,
+  compileMaterial,
+
 ) where
 
 --------------------------------------------------------------------------------
+import Lambency.Material
 import Lambency.Vertex
 import Lambency.Texture
 import Lambency.Types
@@ -340,3 +346,336 @@ createSpotlightShader =
 createMinimalShader :: IO (Shader)
 createMinimalShader =
   I.generateOpenGLShader $ I.compileProgram (getVertexTy undefined) vertMinimal fragMinimal
+
+getLightVarName :: LightVar a -> String
+getLightVarName (LightVar (n, _)) = n
+
+genLitVertexShader :: Material -> I.ShaderCode a b
+genLitVertexShader mat = I.ShdrCode $ do
+  -- The actual fragment position needs to be set in order
+  -- to do lighting calculations based on world space coordinates.
+  position <- I.getInput3f "position"
+  m2wMatrix <- I.newUniformVar "m2wMatrix" I.matrix4Ty
+  pos <- I.setE I.vector3fTy $
+         I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D $
+         I.xform4f (I.mkVarExpr m2wMatrix) $
+         I.mkVec4f_31 (I.mkVarExpr position) (I.mkConstf 1)
+
+  -- Since the material is lit, it should also have a normal
+  normal <- I.getInput3f "normal"
+  norm <- I.setE I.vector3fTy $
+          I.normalize3f $
+          I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D $
+          I.xform4f (I.mkVarExpr m2wMatrix) $
+          I.mkVec4f_31 (I.mkVarExpr normal) (I.mkConstf 0)
+
+  -- If we're using textures then we should also check for texture
+  -- coordinates
+  let hasTexCoords = usesTextures mat
+  uv <- case usesTextures mat of
+    False -> I.newVar "dummyUV" I.vector2fTy
+    True -> I.getInput2f "texCoord"
+
+  -- All vertices need to be transformed based on the
+  -- MVP matrix being passed in...
+  mvpMatrix <- I.newUniformVar "mvpMatrix" I.matrix4Ty
+  out_pos <- I.setE I.vector4fTy $
+             I.xform4f (I.mkVarExpr mvpMatrix) $
+             I.mkVec4f_31 (I.mkVarExpr position) (I.mkConstf 1)
+
+  let output = I.addVertexPosition out_pos $
+               I.addCustomOVar "position" pos $
+               I.addCustomOVar "normal" norm $
+               if hasTexCoords
+               then I.addCustomOVar "uv" uv $ I.emptyO
+               else I.emptyO
+
+  return output
+
+getDiffuseColor :: Material -> I.ShaderContext i (I.ShaderVar (V3 Float))
+getDiffuseColor (BlinnPhongMaterial {..}) = do
+  reflectivity <- case diffuseReflectivity of
+    MaterialVar (_, Nothing) -> I.setE I.vector3fTy $ I.mkConstVec3f (V3 0 0 0)
+    MaterialVar (name, Just _) -> I.newUniformVar name I.vector3fTy
+  case diffuseMap of
+    MaterialVar (_, Nothing) -> return reflectivity
+    MaterialVar (name, Just _) -> do
+      tex <- I.newUniformVar name I.sampler2DTy
+      uv <- I.getInput2f "uv"
+      color <- I.setE I.vector3fTy $
+               I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D $
+               I.sample2D (I.mkVarExpr tex) $
+               I.mkVarExpr uv
+
+      I.setE I.vector3fTy $
+        I.mult3f (I.mkVarExpr color) (I.mkVarExpr reflectivity)
+
+getDiffuseColor (TexturedSpriteMaterial {..}) = error "Lambency.Material (getDiffuseColor): Not implemented!"
+getDiffuseColor (MaskedSpriteMaterial {..}) = error "Lambency.Material (getDiffuseColor): Not implemented!"
+
+type SpecularInfo = Maybe (I.ShaderVar (V3 Float), I.ShaderVar Float)
+
+getSpecularColor :: Material -> I.ShaderContext i (SpecularInfo)
+getSpecularColor (BlinnPhongMaterial {..}) = do
+  reflectivity <- case specularReflectivity of
+    MaterialVar (_, Nothing) -> return Nothing
+    MaterialVar (name, Just _) -> Just <$> I.newUniformVar name I.vector3fTy
+  applyMap <- case specularMap of
+    MaterialVar (_, Nothing) -> return reflectivity
+    MaterialVar (name, Just _) -> do
+      -- !FIXME! we should tailor the lookup of the specular values
+      -- based on what kind of texture we're passing here...
+      tex <- I.newUniformVar name I.sampler2DTy
+      uv <- I.getInput2f "uv"
+      color <- I.setE I.vector3fTy $
+               I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D $
+               I.sample2D (I.mkVarExpr tex) $
+               I.mkVarExpr uv
+
+      case reflectivity of
+        Just refl -> Just <$> (I.setE I.vector3fTy $
+                               I.mult3f (I.mkVarExpr color) (I.mkVarExpr refl))
+        Nothing -> return $ Just color
+
+  case specularExponent of
+    MaterialVar (_, Nothing) -> return Nothing
+    MaterialVar (name, Just _) -> do
+      e <- I.newUniformVar name I.floatTy
+      return $ (\x -> (x, e)) <$> applyMap
+
+getSpecularColor _ = error "Lambency.Material (getSpecularColor): Only Blinn-Phong materials contain specular!"
+
+getAmbientColor :: LightParams -> Material -> I.ShaderContext i (I.ShaderVar (V3 Float))
+getAmbientColor (LightParams{..}) (BlinnPhongMaterial {..}) = do
+  reflectivity <- case ambientReflectivity of
+    MaterialVar (_, Nothing) -> I.setE I.vector3fTy $ I.mkConstVec3f (V3 1 1 1)
+    MaterialVar (name, _) -> I.newUniformVar name I.vector3fTy
+
+  color <- I.newUniformVar (getLightVarName ambientColor) I.vector3fTy
+  I.setE I.vector3fTy $
+    I.mult3f (I.mkVarExpr color) (I.mkVarExpr reflectivity)  
+
+getAmbientColor _ _ = error "Lambency.Material (getAmbientColor): Only Blinn-Phong materials contain ambient!"
+
+handleNormalMaps :: Material -> I.ShaderVar (V3 Float) -> I.ShaderContext i (I.ShaderVar (V3 Float))
+handleNormalMaps (BlinnPhongMaterial {..}) norm =
+  case reflectionInfo of
+    Nothing -> return norm
+    _ -> error "Lambency.Material (handleNormalMaps): Not implemented"
+handleNormalMaps _ _ = error "Lambency.Material (handleNormalMaps): Only Blinn-Phong materials can use normal maps!"
+
+modulateLight :: I.ShaderVar (Float) -> I.ShaderVar (V3 Float) -> I.ShaderVar (V3 Float) ->
+                 I.ShaderContext i (I.ShaderVar (V3 Float))
+modulateLight intensity lightColor materialColor =
+  I.setE I.vector3fTy $
+  I.mult3f (I.mkVarExpr materialColor) $
+  I.scale3f (I.mkVarExpr lightColor) $
+  I.mkVarExpr intensity
+
+blinnPhongLightColor :: LightParams -> I.ShaderContext i (I.ShaderVar (V3 Float))
+blinnPhongLightColor (LightParams {..}) = do
+  color <- I.newUniformVar (getLightVarName lightColor) I.vector3fTy
+  intensity <- I.newUniformVar (getLightVarName lightIntensity) I.floatTy
+
+  I.setE I.vector3fTy $ I.scale3f (I.mkVarExpr color) (I.mkVarExpr intensity)
+
+blinnPhongNDotH :: I.ShaderVar (V3 Float) -> I.ShaderVar (V3 Float) -> I.ShaderVar (V3 Float) ->
+                   I.ShaderContext i (I.ShaderVar Float)
+blinnPhongNDotH lightDir pos norm = do
+  eyePos <- I.newUniformVar "eyePos" I.vector3fTy
+
+  ed <- I.setE I.vector3fTy $
+        I.sub3f (I.mkVarExpr eyePos) (I.mkVarExpr pos)
+
+  hVec <- I.setE I.vector3fTy $
+          I.normalize3f $
+          I.add3f (I.mkVarExpr ed) (I.mkVarExpr lightDir)
+
+  I.setE I.floatTy $
+    I.maxf (I.mkConstf 0) $
+    I.dot3f (I.mkVarExpr hVec) (I.mkVarExpr norm)
+
+blinnPhongLighting :: Light ->
+                      I.ShaderVar (V3 Float) -> SpecularInfo ->
+                      I.ShaderVar (V3 Float) -> I.ShaderVar (V3 Float) ->
+                      I.ShaderContext i (I.ShaderVar (V3 Float))
+blinnPhongLighting (Light params (SpotLight {..}) _) diffuseColor specularInfo pos norm = do
+
+  -- !FIXME! We might be able to calculate this in the vertex shader
+  -- to increase performance
+  lightPos <- I.newUniformVar (getLightVarName spotLightPos) I.vector3fTy
+  spotDir <- I.setE I.vector3fTy $
+             I.sub3f (I.mkVarExpr pos) (I.mkVarExpr lightPos)
+
+  lightDir <- I.newUniformVar (getLightVarName spotLightDir) I.vector3fTy
+  spotDot <- I.setE I.floatTy $
+             I.dot3f (I.mkVarExpr spotDir) (I.mkVarExpr lightDir)
+
+  outColor <- I.setE I.vector3fTy $ I.mkConstVec3f (V3 0 0 0)
+
+  cosCutoff <- I.newUniformVar (getLightVarName spotLightCosCutoff) I.floatTy
+  flip (I.ifThen (I.gtf (I.mkVarExpr spotDot) (I.mkVarExpr cosCutoff))) (return ()) $ do
+
+    lColor <- blinnPhongLightColor params
+
+    ld <- I.setE I.vector3fTy $
+          I.neg3f (I.mkVarExpr spotDir)
+
+    nDotL <- I.setE I.floatTy $
+             I.maxf (I.mkConstf 0) $
+             I.dot3f (I.mkVarExpr ld) (I.mkVarExpr norm)
+
+    diffuseLight <- modulateLight nDotL lColor diffuseColor
+    case specularInfo of
+      Nothing -> do
+        I.assignE outColor $ I.mkVarExpr diffuseLight
+
+      Just (color, e) -> do
+        nDotH <- blinnPhongNDotH ld pos norm
+        nDotHpow <- I.setE I.floatTy $ I.powf (I.mkVarExpr nDotH) (I.mkVarExpr e)
+        specularLight <- modulateLight nDotHpow lColor color
+        I.assignE outColor $ I.add3f (I.mkVarExpr diffuseLight) (I.mkVarExpr specularLight)
+
+  return outColor
+  
+blinnPhongLighting (Light params (DirectionalLight {..}) _) diffuseColor specularInfo pos norm = do
+  lightDir <- I.newUniformVar (getLightVarName dirLightDir) I.vector3fTy
+
+  lColor <- blinnPhongLightColor params
+
+  ld <- I.setE I.vector3fTy $
+        I.neg3f (I.mkVarExpr lightDir)
+
+  nDotL <- I.setE I.floatTy $
+           I.maxf (I.mkConstf 0) $
+           I.dot3f (I.mkVarExpr ld) (I.mkVarExpr norm)
+
+  diffuseLight <- modulateLight nDotL lColor diffuseColor
+
+  case specularInfo of
+    Nothing -> return diffuseLight
+    Just (color, e) -> do
+      nDotH <- blinnPhongNDotH ld pos norm
+      nDotHpow <- I.setE I.floatTy $ I.powf (I.mkVarExpr nDotH) (I.mkVarExpr e)
+      specularLight <- modulateLight nDotHpow lColor color
+      I.setE I.vector3fTy $
+        I.add3f (I.mkVarExpr diffuseLight) $
+        I.mkVarExpr specularLight
+
+blinnPhongLighting (Light params (PointLight {..}) _) diffuseColor specularInfo pos norm = do
+  -- !FIXME! We might be able to calculate this in the vertex shader
+  -- to increase performance
+  lightPos <- I.newUniformVar (getLightVarName pointLightPos) I.vector3fTy
+  ld <- I.setE I.vector3fTy $
+        I.sub3f (I.mkVarExpr lightPos) (I.mkVarExpr pos)
+
+  lColor <- blinnPhongLightColor params
+
+  nDotL <- I.setE I.floatTy $
+           I.maxf (I.mkConstf 0) $
+           I.dot3f (I.mkVarExpr ld) (I.mkVarExpr norm)
+
+  diffuseLight <- modulateLight nDotL lColor diffuseColor
+
+  case specularInfo of
+    Nothing -> return diffuseLight
+    Just (color, e) -> do
+      nDotH <- blinnPhongNDotH ld pos norm
+      nDotHpow <- I.setE I.floatTy $ I.powf (I.mkVarExpr nDotH) (I.mkVarExpr e)
+      specularLight <- modulateLight nDotHpow lColor color
+      I.setE I.vector3fTy $
+        I.add3f (I.mkVarExpr diffuseLight) $
+        I.mkVarExpr specularLight
+  
+genLitFragment :: Light -> Material -> I.ShaderContext i (I.ShaderVar (V3 Float))
+genLitFragment lightTy mat = do
+  pos <- I.getInput3f "position"
+  norm <- I.getInput3f "normal"
+  
+  diffuseColor <- getDiffuseColor mat
+  specularColor <- getSpecularColor mat
+
+  norm' <- handleNormalMaps mat norm
+
+  blinnPhongLighting lightTy diffuseColor specularColor pos norm'
+
+genShadowFragment :: I.ShaderContext i (I.ShaderVar Float)
+genShadowFragment = do
+  pos <- I.getInput3f "position"
+  
+  shadowMap <- I.newUniformVar "shadowMap" I.sampler2DTy
+  shadowVP <- I.newUniformVar "shadowVP" I.matrix4Ty
+
+  lightPersp <- I.setE I.vector4fTy $
+                I.xform4f (I.mkVarExpr shadowVP) $
+                I.mkVec4f_31 (I.mkVarExpr pos) (I.mkConstf 1)
+
+  I.assignE lightPersp $
+    I.div4f (I.mkVarExpr lightPersp) $
+    I.finishSwizzleS . I._w_ . I.swizzle4D $
+    I.mkVarExpr lightPersp
+
+  I.assignE lightPersp $
+    I.add4f (I.mkVec4f_1111 (I.mkConstf 0.5) (I.mkConstf 0.5) (I.mkConstf 0.5) (I.mkConstf 0.5)) $
+    I.scale4f (I.mkVarExpr lightPersp) (I.mkConstf 0.5)
+
+  -- !FIXME! Do a better bias here...
+  objDepth <- I.setE I.floatTy $
+              I.subf (I.finishSwizzleS . I._z_ . I.swizzle4D $ I.mkVarExpr lightPersp) (I.mkConstf 0.0001)
+  shdwDepth <- I.setE I.floatTy $
+               I.finishSwizzleS . I._z_ . I.swizzle4D $
+               I.sample2D (I.mkVarExpr shadowMap) $
+               I.finishSwizzleV . I._y_ . I._x_ . I.swizzle4D $
+               I.mkVarExpr lightPersp
+
+  I.setE I.floatTy $ I.castBoolToFloat $ I.gtf (I.mkVarExpr objDepth) (I.mkVarExpr shdwDepth)
+
+genLitFragShader :: Light -> Material -> I.ShaderCode a b
+genLitFragShader light mat = I.ShdrCode $ do
+
+  litFragment <- genLitFragment light mat
+  
+  ambientColor <- getAmbientColor (lightParams light) mat
+  finalColor <- I.setE I.vector3fTy $
+                I.add3f (I.mkVarExpr litFragment) (I.mkVarExpr ambientColor)
+
+  -- !TODO! materials should be able to define opacity...
+  let alpha = I.mkConstf 1.0
+
+  outColor <- I.setE I.vector4fTy $
+              I.mkVec4f_31 (I.mkVarExpr finalColor) alpha
+
+  return $ I.addFragmentColor outColor I.emptyO
+
+genShadowedFragShader :: Light -> Material -> I.ShaderCode a b
+genShadowedFragShader light mat = I.ShdrCode $ do
+
+  litFragment <- genLitFragment light mat
+
+  shadow <- genShadowFragment
+
+  ambientColor <- getAmbientColor (lightParams light) mat
+  finalColor <- I.setE I.vector3fTy $
+                I.add3f (I.mkVarExpr ambientColor) $
+                I.scale3f (I.mkVarExpr litFragment) $
+                I.mkVarExpr shadow
+
+  -- !TODO! materials should be able to define opacity...
+  let alpha = I.mkConstf 1.0
+
+  outColor <- I.setE I.vector4fTy $
+              I.mkVec4f_31 (I.mkVarExpr finalColor) alpha
+
+  return $ I.addFragmentColor outColor I.emptyO
+
+compileMaterial :: Light -> Material -> IO (Shader)
+compileMaterial l@(Light _ _ Nothing) mat =
+  let vshdr = genLitVertexShader mat
+      fshdr = genLitFragShader l mat
+      vty = getVertexTy (undefined :: OTVertex3)
+  in I.generateOpenGLShader $ I.compileProgram vty vshdr fshdr
+compileMaterial light mat =
+  let vshdr = genLitVertexShader mat
+      fshdr = genShadowedFragShader light mat
+      vty = getVertexTy (undefined :: OTVertex3)
+  in I.generateOpenGLShader $ I.compileProgram vty vshdr fshdr

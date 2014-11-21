@@ -1,10 +1,10 @@
 module Lambency.Types (
   Vec2f, Vec3f, Vec4f, Quatf, Mat2f, Mat3f, Mat4f,
   Camera(..), CameraType(..), CameraViewDistance(..),
-  LightEnum(..), LightParams(..), LightType(..), Light(..), ShadowMap(..),
+  LightVar(..), LightParams(..), LightType(..), Light(..), ShadowMap(..),
   Shader(..), ShaderVarTy(..), ShaderValue(..), ShaderVar(..), ShaderMap,
   Texture(..), TextureSize(..), TextureFormat(..), FBOHandle, TextureHandle(..),
-  MaterialVar(..), NormalModulation(..), ReflectionInfo(..), Material(..), CompiledMaterial(..),
+  MaterialVar(..), NormalModulation(..), ReflectionInfo(..), Material(..),
   RenderFlag(..), RenderObject(..), RenderAction(..), RenderActions(..),
   OutputAction(..),
   TimeStep,
@@ -21,6 +21,7 @@ import Lambency.Sound
 
 import qualified Lambency.Transform as XForm
 
+import Data.Maybe (isJust)
 import Data.Hashable
 import Data.Time.Clock
 
@@ -118,7 +119,7 @@ data ShaderValue = Matrix2Val (Mat2f)
                  | FloatVal Float
                  | FloatListVal [Float]
                  | TextureVal Texture
-                 deriving (Show)
+                 deriving (Show, Eq, Ord)
 
 type ShaderMap = Map.Map String ShaderValue
 
@@ -129,47 +130,58 @@ data Shader = Shader GL.Program ShaderVarMap deriving(Show, Eq)
 -- Textures
 
 newtype TextureSize = TexSize { getTextureSize :: Vec2i }
-                      deriving(Show, Eq)
+                      deriving(Show, Eq, Ord)
 
 type FBOHandle = GL.FramebufferObject
 data TextureHandle = TexHandle GL.TextureObject TextureSize
-                     deriving(Show, Eq)
+                     deriving(Show, Eq, Ord)
 data TextureFormat = RGBA8 | RGB8 | Alpha8
-                     deriving(Show, Eq)
+                     deriving(Show, Eq, Ord, Enum, Bounded)
 
 data Texture = Texture TextureHandle TextureFormat
              | RenderTexture TextureHandle FBOHandle
-               deriving(Show, Eq)
+               deriving(Show, Eq, Ord)
 
 --------------------------------------------------------------------------------
 
 -- Lights
 
-data LightEnum
-  = SpotLightTy
-  | DirectionalLightTy
-  | PointLightTy
-  | AreaLightTy
-  deriving (Show, Read, Eq, Ord, Enum, Bounded)
+newtype LightVar a = LightVar (String, ShaderValue)
+                     deriving (Show, Eq, Ord)
+
+instance Hashable (LightVar a) where
+  hashWithSalt = hashUsing lightVarToStr
+    where
+      lightVarToStr (LightVar v) = fst v
 
 data LightParams = LightParams {
-  ambientColor :: V3 Float,
-  lightColor :: V3 Float,
-  lightIntensity :: Float
+  ambientColor :: LightVar (V3 Float),
+  lightColor :: LightVar (V3 Float),
+  lightIntensity :: LightVar Float
 } deriving(Show, Eq, Ord)
+
+instance Hashable LightParams where
+  hashWithSalt s (LightParams x y z) = 
+    s `hashWithSalt` x `hashWithSalt` y `hashWithSalt` z
 
 data LightType
   = SpotLight {
-    spotLightDir :: V3 Float,
-    spotLightPos :: V3 Float,
-    spotLightCosCutoff :: Float
+    spotLightDir :: LightVar (V3 Float),
+    spotLightPos :: LightVar (V3 Float),
+    spotLightCosCutoff :: LightVar Float
   }
   | DirectionalLight {
-    dirLightDir :: V3 Float
+    dirLightDir :: LightVar (V3 Float)
   }
   | PointLight {
-    pointLightPos :: V3 Float
+    pointLightPos :: LightVar (V3 Float)
   } deriving (Show, Eq, Ord)
+
+instance Hashable LightType where
+  hashWithSalt s (SpotLight x y z) =
+    s `hashWithSalt` x `hashWithSalt` y `hashWithSalt` z
+  hashWithSalt s (DirectionalLight x) = s `hashWithSalt` x
+  hashWithSalt s (PointLight x) = s `hashWithSalt` x
 
 data ShadowMap = ShadowMap Shader Texture
                  deriving (Show)
@@ -180,41 +192,39 @@ data Light = Light {
   lightShadowMap :: Maybe ShadowMap
 } deriving (Show)
 
+instance Hashable Light where
+  hashWithSalt s (Light x y z) =
+    hashUsing isJust (s `hashWithSalt` x `hashWithSalt` y) z
+
 --------------------------------------------------------------------------------
 
 -- Materials
 
-data MaterialVar a
-  = MatNothing
-  | MatDefault
-  | MatJust a
-  deriving (Show, Ord)
-
-instance Eq (MaterialVar a) where
-  MatNothing == MatNothing = True
-  MatDefault == MatDefault = True
-  (MatJust _) == (MatJust _) = True
-  _ == _ = False
+newtype MaterialVar a = MaterialVar (String, Maybe ShaderValue)
+                      deriving (Show, Eq, Ord)
 
 instance Hashable (MaterialVar a) where
-  hashWithSalt = hashUsing matVarToBool
-    where
-      matVarToBool MatNothing = False
-      matVarToBool _ = True
+  hashWithSalt s (MaterialVar (n, ms)) = hashUsing isJust (s `hashWithSalt` n) ms
 
 data NormalModulation
   = BumpMap Texture
   | NormalMap Texture
+  deriving (Show, Eq, Ord)
 
 data ReflectionInfo
   = ReflectionInfo {
-    indexOfRefraction :: Float,
-    reflectionMap :: Texture,
-    sharpness :: Float
+    indexOfRefraction :: MaterialVar Float,
+    reflectionMap :: MaterialVar Texture,
+    sharpness :: MaterialVar Float
   }
+  deriving (Show, Eq, Ord)
 
-data Material =
-  BlinnPhongMaterial {
+instance Hashable ReflectionInfo where
+  hashWithSalt s (ReflectionInfo a b c) =
+    s `hashWithSalt` a `hashWithSalt` b `hashWithSalt` c
+
+data Material
+  = BlinnPhongMaterial {
     diffuseReflectivity :: MaterialVar (V3 Float),
     diffuseMap :: MaterialVar (Texture),
 
@@ -224,26 +234,39 @@ data Material =
 
     ambientReflectivity :: MaterialVar (V3 Float),
 
-    reflectionInfo :: MaterialVar (ReflectionInfo),
+    reflectionInfo :: Maybe (ReflectionInfo),
 
     normalMod :: MaterialVar (NormalModulation)
-  }
+    }
+
+    -- A textured sprite is a quad that has a texture on it
+    -- The texture coordinates may be modulated based on the
+    -- texture matrix
+  | TexturedSpriteMaterial {
+    spriteTextureMatrix :: MaterialVar (M33 Float),
+    spriteTexture :: MaterialVar Texture
+    }
+
+    -- A masked sprite is a quad that has a grayscale texture
+    -- that represents an alpha mask. Everything else is colored
+    -- based on the sprite color.
+    -- The texture coordinates may be modulated based on the
+    -- texture matrix.
+  | MaskedSpriteMaterial {
+    spriteColor :: MaterialVar (V3 Float),
+    spriteMaskMatrix :: MaterialVar (M33 Float),
+    spriteMask :: MaterialVar Texture
+    }
+    deriving (Show, Eq, Ord)
 
 instance Hashable Material where
   hashWithSalt s (BlinnPhongMaterial a b c d e f g h) =
-    s `hashWithSalt`
-    a `hashWithSalt`
-    b `hashWithSalt`
-    c `hashWithSalt`
-    d `hashWithSalt`
-    e `hashWithSalt`
-    f `hashWithSalt`
-    g `hashWithSalt` h
-
-data CompiledMaterial
-  = CompiledLitMaterial (Map.Map (LightEnum, Bool) Shader)
-  | CompiledUnlitMaterial Shader
-  deriving (Show, Eq)
+    s `hashWithSalt` a `hashWithSalt` b `hashWithSalt` c `hashWithSalt`
+    d `hashWithSalt` e `hashWithSalt` f `hashWithSalt` g `hashWithSalt` h
+  hashWithSalt s (TexturedSpriteMaterial a b) =
+    s `hashWithSalt` a `hashWithSalt` b
+  hashWithSalt s (MaskedSpriteMaterial a b c) =
+    s `hashWithSalt` a `hashWithSalt` b `hashWithSalt` c
 
 --------------------------------------------------------------------------------
 
@@ -254,7 +277,7 @@ data RenderFlag = Transparent
                 deriving (Show, Read, Ord, Eq, Enum)
 
 data RenderObject = RenderObject {
-  materialVars :: ShaderMap,
+  material :: Material,
   render :: Shader -> ShaderMap -> IO (),
   flags :: [RenderFlag]
 }
