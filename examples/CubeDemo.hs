@@ -95,8 +95,9 @@ loadGame = do
       gameWire = cube W.>>>
                  (frameWire sysFont) W.>>>
                  (L.quitWire GLFW.Key'Q)
-  spotlight <- L.createSpotlight lightPos (negate lightPos) 0
-  return $ L.Game { L.staticLights = [spotlight],
+      lightParams = L.mkLightParams (V3 0.5 0.5 0.5) (V3 1.0 1.0 1.0) 1.0
+      light = L.spotlight lightParams lightPos (negate lightPos) (pi/2)
+  return $ L.Game { L.staticLights = [light],
                     L.staticGeometry = [plane, bunny],
                     L.mainCamera = demoCam,
                     L.dynamicLights = [],

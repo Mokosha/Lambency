@@ -1,7 +1,6 @@
 module Lambency.Render (
   Renderable(..),
-  RenderConfig,
-  mkRenderConfig,
+  RenderState, initialRenderState,
   RenderContext,
   emptyRenderActions,
   clearBuffers,
@@ -17,6 +16,7 @@ module Lambency.Render (
 --------------------------------------------------------------------------------
 
 import Lambency.Camera
+import Lambency.Material
 import Lambency.Light
 import Lambency.Shader
 import Lambency.Texture
@@ -24,43 +24,97 @@ import Lambency.Transform
 import Lambency.Types
 import Lambency.Vertex
 
-import Control.Monad.RWS.Strict
+import Control.Monad.State
+import Control.Concurrent.STM
 
 import Data.Array.IO
 import Data.Array.Storable
 import Data.Bits (complement)
+import Data.Hashable
 import Data.Int
-import Data.List (partition, sortBy)
+import Data.List (partition)
 import qualified Data.Map as Map
 
 import Foreign.Storable
 import Foreign.Ptr
+
+import GHC.Exts (groupWith)
 
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 
 import Linear
 
+import System.IO.Unsafe
 --------------------------------------------------------------------------------
 
-data RenderConfig = RenderConfig {
-  uiLight :: Light,
-  fontLight :: Light
+data RenderStateFlag
+  = RenderState'DepthOnly
+    deriving (Show, Read, Eq, Ord, Enum, Bounded)
+
+data RenderState = RenderState {
+  currentRenderXF :: Transform,
+  currentRenderVars :: ShaderMap,
+  currentRenderFlags :: [RenderStateFlag]
 }
 
-mkRenderConfig :: IO (RenderConfig)
-mkRenderConfig = do
-  ui <- createNoLight
-  font <- createFontLight
-  return $ RenderConfig ui font
+type RenderContext = StateT RenderState IO
 
-type RenderContext = RWST RenderConfig () Transform IO
+initialRenderState :: RenderState
+initialRenderState = RenderState identity Map.empty []
 
 emptyRenderActions :: RenderActions
 emptyRenderActions = RenderActions {
   renderScene = RenderObjects [],
   renderUI = RenderObjects []
 }
+
+data ShaderCache = ShaderCache {
+  unlitShaders :: Map.Map Int Shader, -- Parameterized by material hashes
+  litShaders :: Map.Map Int Shader -- Parameterized by (material, light) hashes
+}
+
+shaderCache :: TVar ShaderCache
+shaderCache = unsafePerformIO $ newTVarIO (ShaderCache Map.empty Map.empty)
+
+addLitShader :: Int -> Shader -> IO ()
+addLitShader h shdr = do
+  atomically $ modifyTVar' shaderCache $ \cache ->
+    cache { litShaders = Map.insert h shdr (litShaders cache) }
+
+addUnlitShader :: Int -> Shader -> IO ()
+addUnlitShader h shdr = do
+  atomically $ modifyTVar' shaderCache $ \cache ->
+    cache { unlitShaders = Map.insert h shdr (unlitShaders cache) }
+
+lookupLitShader :: Material -> Light -> IO (Shader)
+lookupLitShader mat light = do
+  let litHash = hash (mat, light)
+  cache <- readTVarIO shaderCache
+  let litShdrs = litShaders cache
+  case Map.lookup litHash litShdrs of
+    Just s -> return s
+    Nothing -> do
+      putStrLn $ "Compiling lit material: " ++ show mat
+      shdr <- compileMaterial light mat
+      addLitShader litHash shdr
+      return shdr
+
+lookupUnlitShader :: Material -> IO (Shader)
+lookupUnlitShader mat = do
+  let minimalHash = hash mat
+  cache <- readTVarIO shaderCache
+  let unlitShdrs = unlitShaders cache
+  case Map.lookup minimalHash unlitShdrs of
+    Just s -> return s
+    Nothing -> do
+      putStrLn $ "Compiling unlit material: " ++ show mat
+      shdr <- compileUnlitMaterial mat
+      addUnlitShader minimalHash shdr
+      return shdr
+
+lookupMinimalShader :: IO (Shader)
+lookupMinimalShader = lookupUnlitShader MinimalMaterial
 
 clearBuffers :: IO ()
 clearBuffers = GL.clear [GL.ColorBuffer, GL.DepthBuffer, GL.StencilBuffer]
@@ -77,15 +131,12 @@ setupBuffer tgt xs = do
   withStorableArray varr (\ptr -> GL.bufferData tgt GL.$= (ptrsize xs, ptr, GL.StaticDraw))
   return buf
 
-shaderCache :: TVar (Data.Map Int Shader)
-shaderCache = unsafeIO $ newTVarIO (Map.empty)
-
 createBasicRO :: (Vertex a) => [a] -> [Int32] -> Material -> IO (RenderObject)
 
 -- If there's no vertices, then there's nothing to render...
 createBasicRO [] _ _ = do
   return $ RenderObject {
-    materialVars = Map.empty,
+    material = NoMaterial,
     render = \_ _ -> return (),
     flags = []
   }
@@ -110,8 +161,8 @@ createBasicRO verts@(v:_) idxs mat =
     -- Takes as input an array of vertices and indices and returns a function
     -- that renders the vertices for a given shader and shader variable mapping
     createRenderFunc :: GL.BufferObject -> GL.BufferObject ->
-                        GL.NumArrayIndices -> (Shader -> ShaderMap -> IO ())
-    createRenderFunc vbo ibo nIndices = (\shdr shdrmap -> do
+                        GL.NumArrayIndices -> Shader -> ShaderMap -> IO ()
+    createRenderFunc vbo ibo nIndices shdr shdrmap = do
 
         -- Set all uniforms for this shader
         let shdrVars = getShaderVars shdr
@@ -126,7 +177,7 @@ createBasicRO verts@(v:_) idxs mat =
         GL.bindBuffer GL.ElementArrayBuffer GL.$= Just ibo
 
         -- Render
-        GL.drawElements GL.Triangles nIndices GL.UnsignedInt nullPtr)
+        GL.drawElements GL.Triangles nIndices GL.UnsignedInt nullPtr
 
   in do
     vbo <- setupBuffer GL.ArrayBuffer verts
@@ -135,7 +186,7 @@ createBasicRO verts@(v:_) idxs mat =
       -- materialVars = mat,
       -- !FIXME! These should be the variables extracted from the
       -- material after being compiled into shader code...
-      materialVars = Map.empty,
+      material = mat,
       render = createRenderFunc vbo ibo $ fromIntegral (length idxs),
       flags = []
     }
@@ -148,18 +199,39 @@ updateMatrices "mvpMatrix" (Matrix4Val m1) (Matrix4Val m2) = Matrix4Val $ m1 !*!
 updateMatrices "m2wMatrix" (Matrix4Val m1) (Matrix4Val m2) = Matrix4Val $ m1 !*! m2
 updateMatrices _ v1 _ = v1
 
-place :: Camera -> RenderObject -> RenderObject
-place cam ro = let
-  sm :: ShaderMap
-  sm = Map.singleton "mvpMatrix" (Matrix4Val $ getViewProjMatrix cam)
-  in
-   ro { materialVars = Map.unionWithKey updateMatrices (materialVars ro) sm }
+groupROsByMaterial :: [RenderObject] -> [[RenderObject]]
+groupROsByMaterial = groupWith (hash . material)
 
-renderROs :: [RenderObject] -> Shader -> ShaderMap -> IO ()
-renderROs ros shdr shdrmap = do
+renderROsWithShader :: [RenderObject] -> Shader -> ShaderMap -> IO ()
+renderROsWithShader ros shdr shdrmap = do
   beforeRender shdr
-  flip mapM_ ros $ \ro -> (render ro) shdr $ Map.union (materialVars ro) shdrmap
+  flip mapM_ ros $ \ro -> do
+    let matVars = materialShaderVars $ material ro
+    (render ro) shdr $ Map.union matVars shdrmap
   afterRender shdr
+
+renderLitROs :: [RenderObject] -> Light -> ShaderMap -> IO ()
+renderLitROs ros light shdrmap =
+  let vars = Map.union shdrmap $ getLightShaderVars light
+      renderWithShdr [] = return ()
+      renderWithShdr rs@(ro : _) = do
+        shdr <- lookupLitShader (material ro) light
+        renderROsWithShader rs shdr vars
+  in mapM_ renderWithShdr $ groupROsByMaterial ros
+
+renderUnlitROs :: [RenderObject] -> ShaderMap -> IO ()
+renderUnlitROs ros shdrmap =
+  let renderWithShdr [] = return ()
+      renderWithShdr rs@(ro : _) = do
+        shdr <- lookupUnlitShader (material ro)
+        renderROsWithShader rs shdr shdrmap
+  in mapM_ renderWithShdr $ groupROsByMaterial ros
+
+appendCamXForm :: Camera -> ShaderMap -> ShaderMap
+appendCamXForm cam sm' =
+  let sm :: ShaderMap
+      sm = Map.singleton "mvpMatrix" (Matrix4Val $ getViewProjMatrix cam)
+  in Map.unionWithKey updateMatrices sm' sm
 
 appendXform :: Transform -> ShaderMap -> ShaderMap
 appendXform xform sm' = let
@@ -177,51 +249,84 @@ xformObject :: Transform -> RenderObject -> RenderObject
 xformObject xform ro =
   ro { render = \shr -> (render ro) shr . appendXform xform }
 
-divideAndRenderROs :: [RenderObject] -> Camera -> Light -> IO ()
+place :: Camera -> RenderObject -> RenderObject
+place cam ro =
+  ro { render = \shr -> (render ro) shr . appendCamXForm cam }
+
+divideAndRenderROs :: [RenderObject] -> Camera -> Maybe Light -> RenderContext ()
 divideAndRenderROs [] _ _ = return ()
-divideAndRenderROs ros cam (Light shdr shdrmap _) = let
-  camDist :: RenderObject -> Float
-  camDist ro = z
-    where 
-      (Matrix4Val (V4 _ _ (V4 _ _ _ z) _)) =
-        case Map.lookup "mvpMatrix" (materialVars ro)
-        of Nothing -> Matrix4Val eye4
-           Just x -> x
+divideAndRenderROs ros cam light = let
+  placeAndDivideObjs :: RenderContext ([RenderObject], [RenderObject])
+  placeAndDivideObjs = do
+    st <- get
+    let xf = currentRenderXF st
+    return $
+      partition (\ro -> Transparent `elem` (flags ro)) $
+      -- sortBy (\ro1 ro2 -> compare (camDist ro1) (camDist ro2)) $
+      map (place cam . xformObject xf) ros
 
-  (trans, opaque) = partition (\ro -> Transparent `elem` (flags ro)) $
-                    sortBy (\ro1 ro2 -> compare (camDist ro1) (camDist ro2)) $
-                    map (place cam) ros
-
-  renderFn :: [RenderObject] -> (Maybe GL.ComparisonFunction) -> IO ()
+  renderFn :: [RenderObject] -> (Maybe GL.ComparisonFunction) -> RenderContext ()
   renderFn [] _ = return ()
   renderFn rs d = do
-    GL.depthFunc GL.$= d
-    renderROs rs shdr shdrmap
-
+    st <- get
+    let vars = currentRenderVars st
+    liftIO $ do
+      GL.depthFunc GL.$= d
+      case light of
+        Nothing -> renderUnlitROs rs vars
+        Just l -> renderLitROs rs l vars
   in do
-    renderFn opaque (Just GL.Lequal)
-    renderFn (reverse trans) Nothing
+    st <- get
+    (trans, opaque) <- placeAndDivideObjs
+    if RenderState'DepthOnly `elem` (currentRenderFlags st)
+      then liftIO $ do
+      shdr <- lookupMinimalShader
+      renderROsWithShader opaque shdr (currentRenderVars st)
+      else do
+      renderFn opaque (Just GL.Lequal)
+      renderFn (reverse trans) Nothing
 
-renderLight :: RenderAction -> Camera -> Light -> RenderContext ()
-renderLight act cam (Light shdr shdrmap (Just (Shadow shadowShdr shadowMap))) = do
-  (lcam, shadowShdrMap) <- liftIO $ do
+addRenderFlag :: RenderStateFlag -> RenderContext ()
+addRenderFlag flag = do
+  st <- get
+  let fs = currentRenderFlags st
+  put $ st { currentRenderFlags = flag : fs }
+
+addRenderVar :: String -> ShaderValue -> RenderContext ()
+addRenderVar name val = do
+  st <- get
+  let vars = currentRenderVars st
+  put $ st { currentRenderVars = Map.insert name val vars }
+
+mkLightCam :: LightType -> Camera
+mkLightCam (SpotLight dir' pos' _) =
+  let LightVar (_, Vector3Val pos) = pos'
+      LightVar (_, Vector3Val dir) = dir'
+  in mkPerspCamera pos dir (V3 0 1 0) (pi / 4) 1 0.1 500.0
+
+mkLightCam c = error $ "Lambency.Render (mkLightCam): Camera for light type unsupported: " ++ show c
+
+renderLight :: RenderAction -> Camera -> Maybe Light -> RenderContext ()
+renderLight act cam (Just (Light params lightTy (Just (ShadowMap _ shadowMap)))) = do
+  (lcam, shadowVP) <- liftIO $ do
     bindRenderTexture shadowMap
     clearBuffers
     -- Right now the MVP matrix of each object is for the main camera, so
     -- we need to replace it with the combination from the model matrix
     -- and the shadow VP...
-    let (Vector3Val pos) = shdrmap Map.! "lightPos"
-        (Vector3Val dir) = shdrmap Map.! "lightDir"
-        lightCam = mkPerspCamera pos dir (V3 0 1 0) (pi / 4) 1 0.1 500.0
-        shadowVP = Matrix4Val $ getViewProjMatrix lightCam
-    return (lightCam, Map.insert "shadowVP" shadowVP shdrmap)
-  renderLight act lcam (Light shadowShdr shdrmap Nothing)
+    let lightCam = mkLightCam lightTy
+    return (lightCam, Matrix4Val $ getViewProjMatrix lightCam)
+  renderLight act lcam Nothing
   liftIO clearRenderTexture
-  renderLight act cam (Light shdr shadowShdrMap Nothing)
+  addRenderVar "shadowMap" (TextureVal shadowMap)
+  addRenderVar "shadowVP" shadowVP
+  addRenderFlag RenderState'DepthOnly
+  renderLight act cam (Just $ Light params lightTy Nothing)
 
 -- If there's no clipped geometry then we're not rendering anything...
 renderLight (RenderClipped (RenderObjects []) _) _ _ = return ()
 renderLight (RenderClipped clip action) camera light = do
+  liftIO $ putStrLn "Rendering clipped objects"
   liftIO $ do
     -- Disable stencil test, and drawing into the color and depth buffers
     -- Enable writing to stencil buffer, and always write to it.
@@ -256,14 +361,14 @@ renderLight (RenderClipped clip action) camera light = do
   liftIO $ GL.stencilTest GL.$= GL.Disabled
 
 renderLight (RenderTransformed xf act) camera light = do
-  oldxf <- get
-  withRWST (\x s -> (x, transform xf s)) $ renderLight act camera light
-  put oldxf
+  oldState <- get
+  withStateT (\st -> st { currentRenderXF = transform xf (currentRenderXF st) }) $
+    renderLight act camera light
+  put oldState
 
 renderLight (RenderObjects ros') camera light = do
-  xf <- get
-  let ros = map (xformObject xf) $ filter (not . elem Text . flags) ros'
-  liftIO $ divideAndRenderROs ros camera light
+  let ros = filter (not . elem Text . flags) ros'
+  divideAndRenderROs ros camera light
 
 renderLight (RenderCons act1 act2) camera light = do
   renderLight act1 camera light
@@ -271,17 +376,14 @@ renderLight (RenderCons act1 act2) camera light = do
 
 renderText :: RenderAction -> Camera -> RenderContext ()
 renderText (RenderObjects objs) camera = do
-  xf <- get
-  config <- ask
-  liftIO $
-    divideAndRenderROs
-    (map (xformObject xf) $ filter ((elem Text) . flags) objs)
-    camera
-    (fontLight config)
+  let ros = filter ((elem Text) . flags) objs
+  divideAndRenderROs ros camera Nothing
+
 renderText (RenderTransformed xf act) camera = do
-  oldxf <- get
-  withRWST (\x s -> (x, transform xf s)) $ renderText act camera
-  put oldxf
+  oldState <- get
+  withStateT (\st -> st { currentRenderXF = transform xf (currentRenderXF st) }) $
+    renderText act camera
+  put oldState
 renderText (RenderClipped _ act) camera = do
   -- !FIXME! ignoring clipped text...
   -- liftIO $ putStrLn "Warning: Unable to render clipped text!"
@@ -290,8 +392,9 @@ renderText (RenderCons act1 act2) camera = renderText act1 camera >> renderText 
 
 performRenderActions :: [Light] -> Camera -> RenderActions -> RenderContext ()
 performRenderActions lights camera actions = do
-  mapM_ (\l -> renderLight (renderScene actions) camera l) lights
-  config <- ask
+  case lights of
+    [] -> renderLight (renderScene actions) camera Nothing
+    _ -> mapM_ (\l -> renderLight (renderScene actions) camera (Just l)) lights
   cam <- liftIO $ do
     -- !FIXME! This should be stored in the camera...? Why
     -- are we querying IO here? =(
@@ -303,7 +406,7 @@ performRenderActions lights camera actions = do
       zero (negate localForward) localUp          -- The three axes
       0 (fromIntegral szx) (fromIntegral szy) 0   -- Match the screen size
       0.01 50.0                                   -- The near and far planes
-  renderLight (renderUI actions) cam (uiLight config)
+  renderLight (renderUI actions) cam Nothing
   renderText (renderUI actions) cam
 
 type AppendObjectFn = RenderObject -> RenderAction -> RenderAction

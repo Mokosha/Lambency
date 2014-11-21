@@ -64,8 +64,9 @@ loadGame :: FilePath -> IO (L.Game ())
 loadGame objfile = do
   obj <- mkOBJ objfile
   let lightPos = 10 *^ (V3 0 1 (-1))
-  spotlight <- L.createSpotlight lightPos (negate lightPos) 0
-  return $ L.Game { L.staticLights = [L.setAmbient (V3 0.5 0.5 0.5) spotlight],
+      lightParams = L.mkLightParams (V3 0.5 0.5 0.5) (V3 1.0 1.0 1.0) 1.0
+      light = L.spotlight lightParams lightPos (negate lightPos) (pi/2)
+  return $ L.Game { L.staticLights = [light],
                     L.staticGeometry = [],
                     L.mainCamera = cam,
                     L.dynamicLights = [],

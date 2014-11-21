@@ -123,7 +123,7 @@ data ShaderValue = Matrix2Val (Mat2f)
 
 type ShaderMap = Map.Map String ShaderValue
 
-data Shader = Shader GL.Program ShaderVarMap deriving(Show, Eq)
+data Shader = Shader GL.Program ShaderVarMap deriving(Show, Eq, Ord)
 
 --------------------------------------------------------------------------------
 
@@ -184,13 +184,15 @@ instance Hashable LightType where
   hashWithSalt s (PointLight x) = s `hashWithSalt` x
 
 data ShadowMap = ShadowMap Shader Texture
-                 deriving (Show)
+                 deriving (Show, Eq, Ord)
 
-data Light = Light {
-  lightParams :: LightParams,
-  lightType :: LightType,
-  lightShadowMap :: Maybe ShadowMap
-} deriving (Show)
+data Light
+  = Light {
+    lightParams :: LightParams,
+    lightType :: LightType,
+    lightShadowMap :: Maybe ShadowMap
+    }
+  deriving (Show, Eq, Ord)
 
 instance Hashable Light where
   hashWithSalt s (Light x y z) =
@@ -244,7 +246,8 @@ data Material
     -- texture matrix
   | TexturedSpriteMaterial {
     spriteTextureMatrix :: MaterialVar (M33 Float),
-    spriteTexture :: MaterialVar Texture
+    spriteTexture :: MaterialVar Texture,
+    spriteAlpha :: MaterialVar Float
     }
 
     -- A masked sprite is a quad that has a grayscale texture
@@ -253,20 +256,24 @@ data Material
     -- The texture coordinates may be modulated based on the
     -- texture matrix.
   | MaskedSpriteMaterial {
-    spriteColor :: MaterialVar (V3 Float),
+    spriteMaskColor :: MaterialVar (V4 Float),
     spriteMaskMatrix :: MaterialVar (M33 Float),
     spriteMask :: MaterialVar Texture
     }
+  | MinimalMaterial
+  | NoMaterial
     deriving (Show, Eq, Ord)
 
 instance Hashable Material where
   hashWithSalt s (BlinnPhongMaterial a b c d e f g h) =
     s `hashWithSalt` a `hashWithSalt` b `hashWithSalt` c `hashWithSalt`
     d `hashWithSalt` e `hashWithSalt` f `hashWithSalt` g `hashWithSalt` h
-  hashWithSalt s (TexturedSpriteMaterial a b) =
-    s `hashWithSalt` a `hashWithSalt` b
+  hashWithSalt s (TexturedSpriteMaterial a b c) =
+    s `hashWithSalt` a `hashWithSalt` b `hashWithSalt` c
   hashWithSalt s (MaskedSpriteMaterial a b c) =
     s `hashWithSalt` a `hashWithSalt` b `hashWithSalt` c
+  hashWithSalt s (MinimalMaterial) = hashWithSalt s "MinimalMaterial"
+  hashWithSalt s NoMaterial = hashWithSalt s "NoMaterial"
 
 --------------------------------------------------------------------------------
 

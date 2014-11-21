@@ -236,6 +236,13 @@ buildOpenGLSource (ShaderProgram decls stmts) =
     buildStatements 2 stmts,
     BS.pack "}"]
 
+printShaderSrc :: BS.ByteString -> IO ()
+printShaderSrc shdrSrc = putStrLn $ BS.unpack numberedSrc
+ where
+   numStrs = map (BS.pack . take 5 . flip (++) ":      " . show) [1::Int,2..]
+   numberedSrc = BS.intercalate (BS.singleton '\n') $
+                 zipWith BS.append numStrs $ BS.lines shdrSrc
+
 generateShader :: ShaderProgram -> GL.ShaderType -> IO (GL.Shader)
 generateShader prg ty = do
   shdr <- GL.createShader ty
@@ -243,22 +250,12 @@ generateShader prg ty = do
   GL.shaderSourceBS shdr GL.$= shdrSrc
   GL.compileShader shdr
   shaderLog <- GL.get $ GL.shaderInfoLog shdr
-{--
-  putStrLn $
-    let numStrs = map (BS.pack . take 5 . flip (++) ":      " . show) [1::Int,2..]
-        numberedSrc = BS.intercalate (BS.singleton '\n') $
-                      zipWith BS.append numStrs $ BS.lines shdrSrc
-    in BS.unpack numberedSrc
---}
+  printShaderSrc shdrSrc
   if null (filter (/= '\0') $ shaderLog)
     then return ()
     else do
     putStrLn shaderLog
-    putStrLn $
-      let numStrs = map (BS.pack . take 5 . flip (++) ":      " . show) [1::Int,2..]
-          numberedSrc = BS.intercalate (BS.singleton '\n') $
-                        zipWith BS.append numStrs $ BS.lines shdrSrc
-      in BS.unpack numberedSrc
+    printShaderSrc shdrSrc
     error "Internal Error: OpenGL shader compilation failed!"
   return shdr
 

@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Lambency.Sprite (
   SpriteFrame(..),
   Sprite(..),
@@ -22,8 +23,6 @@ module Lambency.Sprite (
 import Control.Comonad
 import Control.Wire hiding ((.))
 
-import qualified Data.Map as Map
-
 import Lambency.Material
 import Lambency.Mesh
 import Lambency.Render
@@ -46,14 +45,38 @@ newtype Sprite = Sprite { getFrames :: CyclicList SpriteFrame }
 curFrameOffset :: Sprite -> V2 Float
 curFrameOffset = offset . extract . getFrames
 
-updateScale :: V2 Float -> V2 Float -> ShaderMap -> ShaderMap
-updateScale (V2 sx sy) (V2 tx ty) =
-  Map.insert "texCoordMatrix" (Matrix3Val $
-                               V3 (V3 sx 0 0) (V3 0 sy 0) (V3 tx ty 1))
+updateColor :: V4 Float -> Material -> Material
+updateColor c mat@(MaskedSpriteMaterial {..}) =
+  mat { spriteMaskColor = updateMaterialVar4vf c spriteMaskColor }
+updateColor _ m = error $ "Lambency.Sprite (updateColor): Unsupported material type: " ++ show m
+
+updateAlpha :: Float -> Material -> Material
+updateAlpha a' mat@(MaskedSpriteMaterial {..}) =
+  case spriteMaskColor of
+    MaterialVar (_, Nothing) ->
+      mat { spriteMaskColor = updateMaterialVar4vf (V4 1 1 1 a') spriteMaskColor }
+    MaterialVar (_, Just (Vector4Val (V4 r g b _))) ->
+      mat { spriteMaskColor = updateMaterialVar4vf (V4 r g b a') spriteMaskColor }
+    MaterialVar (_, Just _) ->
+      error $ "Lambency.Sprite (updateAlpha): Internal error -- spriteMaskColor is not a V4 value??"
+
+updateAlpha a mat@(TexturedSpriteMaterial {..}) =
+  mat { spriteAlpha = updateMaterialVarf a spriteAlpha }
+updateAlpha _ m = error $ "Lambency.Sprite (updateColor): Unsupported material type: " ++ show m
+
+genTexMatrix :: V2 Float -> V2 Float -> M33 Float
+genTexMatrix (V2 sx sy) (V2 tx ty) = V3 (V3 sx 0 0) (V3 0 sy 0) (V3 tx ty 1)
+
+updateScale :: V2 Float -> V2 Float -> Material -> Material
+updateScale s t mat@(MaskedSpriteMaterial {..}) =
+  mat { spriteMaskMatrix = updateMaterialVar3mf (genTexMatrix s t) spriteMaskMatrix }
+updateScale s t mat@(TexturedSpriteMaterial {..}) =
+  mat { spriteTextureMatrix = updateMaterialVar3mf (genTexMatrix s t) spriteTextureMatrix }
+updateScale _ _ m = error $ "Lambency.Sprite (updateScale): Unsupported material type: " ++ show m
 
 -- !FIXME! This function shouldn't be here and we should really be using lenses
-mapROMaterialVars :: (ShaderMap -> ShaderMap) -> RenderObject -> RenderObject
-mapROMaterialVars fn ro = ro { materialVars = fn (materialVars ro) }
+mapROMaterial :: (Material -> Material) -> RenderObject -> RenderObject
+mapROMaterial fn ro = ro { material = fn (material ro) }
 
 mapFrameRO :: (RenderObject -> RenderObject) -> SpriteFrame -> SpriteFrame
 mapFrameRO fn sf = sf { frameRO = fn (frameRO sf) }
@@ -61,12 +84,12 @@ mapFrameRO fn sf = sf { frameRO = fn (frameRO sf) }
 addTextFlag :: SpriteFrame -> SpriteFrame
 addTextFlag = mapFrameRO $ \ro -> ro { flags = [Text, Transparent] }
 
-changeSpriteColor :: V3 Float -> Sprite -> Sprite
-changeSpriteColor c = Sprite . fmap (mapFrameRO $ mapROMaterialVars $ Map.insert "color" (Vector3Val c)) . getFrames
+changeSpriteColor :: V4 Float -> Sprite -> Sprite
+changeSpriteColor c = Sprite . fmap (mapFrameRO $ mapROMaterial $ updateColor c) . getFrames
 
 initStaticSprite :: Bool -> Texture -> IO (Sprite)
 initStaticSprite isMask tex = do
-  let mat = if isMask then createMaskedMaterial tex else createTexturedMaterial tex
+  let mat = if isMask then maskedSpriteMaterial tex else texturedSpriteMaterial tex
   ro <- createRenderObject quad mat
   return . Sprite . cycleSingleton $ SpriteFrame {
     offset = zero,
@@ -76,7 +99,7 @@ initStaticSprite isMask tex = do
 
 initAnimatedSprite :: Bool -> [V2 Int] -> [V2 Int] -> Texture -> IO (Sprite)
 initAnimatedSprite isMask frameSzs offsets tex = do
-  let mat = if isMask then createMaskedMaterial tex else createTexturedMaterial tex
+  let mat = if isMask then maskedSpriteMaterial tex else texturedSpriteMaterial tex
   ro <- createRenderObject quad mat
   return . Sprite . cyclicFromList $ map (genFrame ro) (zip frameSzs offsets)
   where
@@ -86,7 +109,7 @@ initAnimatedSprite isMask frameSzs offsets tex = do
       in SpriteFrame {
         offset = texOff,
         spriteSize = sz,
-        frameRO = ro { materialVars = updateScale (changeRange sz) texOff (materialVars ro)}
+        frameRO = ro { material = updateScale (changeRange sz) texOff (material ro)}
         }
 
     changeRange :: V2 Int -> V2 Float
@@ -147,7 +170,7 @@ renderSprite s = renderFrameAt $ frameRO $ extract . getFrames $ s
 renderSpriteWithAlpha :: Sprite -> Float -> V2 Int -> Float -> V2 Float -> GameMonad ()
 renderSpriteWithAlpha s a = renderFrameAt (setAlpha $ frameRO $ extract . getFrames $ s)
   where
-    setAlpha ro = ro { materialVars = Map.insert "alpha" (FloatVal a) (materialVars ro),
+    setAlpha ro = ro { material = updateAlpha a (material ro),
                        flags = (Transparent : (flags ro)) }
 
 data SpriteAnimationType

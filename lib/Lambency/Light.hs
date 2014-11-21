@@ -1,5 +1,6 @@
 module Lambency.Light (
   getLightVarName,
+  getLightShaderVars,
 
   mkLightParams,
   
@@ -19,6 +20,8 @@ import Lambency.Texture
 import Lambency.Shader
 import Lambency.Types
 
+import qualified Data.Map as Map
+
 import Linear.V3
 --------------------------------------------------------------------------------
 
@@ -37,6 +40,21 @@ mkLightParams a c i =
   (mkLightVar3f "lightAmbient" a)
   (mkLightVar3f "lightColor" c)
   (mkLightVarf "lightIntensity" i)
+
+getLightShaderVars :: Light -> ShaderMap
+getLightShaderVars (Light params ty _) =
+  let mkShdrVarPair :: LightVar a -> (String, ShaderValue)
+      mkShdrVarPair (LightVar x) = x
+
+      getTypeVars (SpotLight x y z) =
+        [mkShdrVarPair x, mkShdrVarPair y, mkShdrVarPair z]
+      getTypeVars (DirectionalLight dir) = [mkShdrVarPair dir]
+      getTypeVars (PointLight pos) = [mkShdrVarPair pos]
+
+      getParamVars (LightParams a c i) =
+        [mkShdrVarPair a, mkShdrVarPair c, mkShdrVarPair i]
+  in
+   Map.fromList $ getTypeVars ty ++ getParamVars params
 
 spotlight :: LightParams -> Vec3f -> Vec3f -> Float -> Light
 spotlight params pos dir ang =

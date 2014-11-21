@@ -35,7 +35,7 @@ emptyO :: ShaderOutput a
 emptyO = ShaderOutput []
 
 varyingPrefix :: String
-varyingPrefix = "__varying_"
+varyingPrefix = "_varying_"
 
 getOutputVar :: ShaderOutputVar -> ShaderVarRep
 getOutputVar (CustomOutput "" v) = v
@@ -64,24 +64,27 @@ mkSpecialStmts (ShaderOutput ovars) = concatMap mkStmt ovars
     mkStmt (SpecialOutput sv v) = [SpecialAssignment sv v]
     mkStmt _ = []
 
-updateStmt :: ShaderVarRep -> Statement -> [Statement]
-updateStmt v1 s@(LocalDecl v2 Nothing)
+updateStmt :: ShaderOutputVar -> Statement -> [Statement]
+updateStmt (SpecialOutput _ _) s = [s]
+updateStmt (CustomOutput _ v1) s@(LocalDecl v2 Nothing)
   | v1 == v2 = []
   | otherwise = [s]
-updateStmt v1 s@(LocalDecl v2 (Just e))
-  | v1 == v2 = [Assignment v1 e]
+updateStmt (CustomOutput name v1) s@(LocalDecl v2 (Just e))
+  | v1 == v2 = [Assignment v e]
   | otherwise = [s]
+    where
+      v = v1 { shdrVarName = (varyingPrefix ++ name) }
 updateStmt _ s@(Assignment _ _) = [s]
 updateStmt _ s@(SpecialAssignment _ _) = [s]
 updateStmt v (IfThenElse e s1 s2) =
-  let output = ShaderOutput [CustomOutput "" v]
+  let output = ShaderOutput [v]
   in [IfThenElse e (updateStmts s1 output) (updateStmts s2 output)]
 
 updateStmts :: [Statement] -> ShaderOutput a -> [Statement]
 updateStmts stmts vars =
-  let updateFor :: ShaderVarRep -> [Statement] -> [Statement]
+  let updateFor :: ShaderOutputVar -> [Statement] -> [Statement]
       updateFor v = concat . map (updateStmt v)
-  in foldl (flip updateFor) stmts (collectCustom vars) ++ (mkSpecialStmts vars)
+  in foldl (flip updateFor) stmts (getOutputVars vars) ++ (mkSpecialStmts vars)
 
 newVar :: String -> ShaderVarTy a -> ShaderContext i (ShaderVar a)
 newVar name (ShaderVarTy ty) = do
@@ -180,22 +183,14 @@ addVertexOutputs = zipWith setCopyStmt
 compileProgram :: Vertex v => VertexTy v -> ShaderCode v o -> ShaderCode o f -> Shader v
 compileProgram iptTy (ShdrCode vertexPrg) (ShdrCode fragmentPrg) =
   let vs_input@(ShaderInput vs_input_vars) = mkAttributes iptTy
-      (vs_output, varID, (vs_decls, vs_stmts')) =
+      (vs_output, varID, (vs_decls, vs_stmts)) =
         runRWS (compileShdrCode vertexPrg) (vs_input, VertexShaderTy) (length vs_input_vars)
 
       vs_output_vars = collectCustom vs_output
-      (fs_input_vars, vs_stmts) =
-        case vs_output_vars `intersect` vs_input_vars of
-          [] -> (vs_output_vars, updateStmts vs_stmts' vs_output)
-          bothIO -> error "Shader.Program (compileProgram): This shouldn't happen"
-{--         let newVars = copyShdrVars (varID + 1) bothIO
-            in
-             ((vs_output_vars \\ bothIO) ++ newVars, 
-              updateStmts vs_stmts' vs_output ++ (addVertexOutputs newVars bothIO))
---}
+      fs_input_vars = vs_output_vars
 
       fs_input = ShaderInput fs_input_vars
-      (fs_output, _, (fs_decls, fs_stmts)) =
+      (_, _, (fs_decls, fs_stmts)) =
         runRWS (compileShdrCode fragmentPrg) (fs_input, FragmentShaderTy) (varID + length fs_input_vars)
 
       varyingDecls = map Varying fs_input_vars
@@ -205,12 +200,12 @@ compileProgram iptTy (ShdrCode vertexPrg) (ShdrCode fragmentPrg) =
      vertexProgram =
        ShaderProgram {
          shaderDecls = concat [attribDecls, vs_decls, varyingDecls],
-         shaderStmts = vs_stmts
+         shaderStmts = updateStmts vs_stmts vs_output
          },
      fragmentProgram =
        ShaderProgram {
          shaderDecls = fs_decls ++ varyingDecls,
-         shaderStmts = updateStmts fs_stmts fs_output
+         shaderStmts = fs_stmts
        }
      }
     

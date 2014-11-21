@@ -15,6 +15,7 @@ module Lambency.Shader (
 
   getLightVarName,
   compileMaterial,
+  compileUnlitMaterial
 
 ) where
 
@@ -412,6 +413,7 @@ getDiffuseColor (BlinnPhongMaterial {..}) = do
 
 getDiffuseColor (TexturedSpriteMaterial {..}) = error "Lambency.Material (getDiffuseColor): Not implemented!"
 getDiffuseColor (MaskedSpriteMaterial {..}) = error "Lambency.Material (getDiffuseColor): Not implemented!"
+getDiffuseColor m = error $ "Lambency.Material (getDiffuseColor): Not supported for material: " ++ show m
 
 type SpecularInfo = Maybe (I.ShaderVar (V3 Float), I.ShaderVar Float)
 
@@ -669,13 +671,27 @@ genShadowedFragShader light mat = I.ShdrCode $ do
   return $ I.addFragmentColor outColor I.emptyO
 
 compileMaterial :: Light -> Material -> IO (Shader)
-compileMaterial l@(Light _ _ Nothing) mat =
-  let vshdr = genLitVertexShader mat
-      fshdr = genLitFragShader l mat
-      vty = getVertexTy (undefined :: OTVertex3)
-  in I.generateOpenGLShader $ I.compileProgram vty vshdr fshdr
-compileMaterial light mat =
-  let vshdr = genLitVertexShader mat
-      fshdr = genShadowedFragShader light mat
-      vty = getVertexTy (undefined :: OTVertex3)
-  in I.generateOpenGLShader $ I.compileProgram vty vshdr fshdr
+compileMaterial l@(Light _ _ Nothing) mat
+  | isUnlit mat = compileUnlitMaterial mat
+  | otherwise =
+    let vshdr = genLitVertexShader mat
+        fshdr = genLitFragShader l mat
+        vty = getVertexTy (undefined :: OTVertex3)
+    in I.generateOpenGLShader $ I.compileProgram vty vshdr fshdr
+compileMaterial light mat
+  | isUnlit mat = compileUnlitMaterial mat
+  | otherwise =
+    let vshdr = genLitVertexShader mat
+        fshdr = genShadowedFragShader light mat
+        vty = getVertexTy (undefined :: OTVertex3)
+    in I.generateOpenGLShader $ I.compileProgram vty vshdr fshdr
+
+compileUnlitMaterial :: Material -> IO (Shader)
+compileUnlitMaterial NoMaterial =
+  error "Lambency.Shader (compileUnlitMaterial): Cannot compile non-material!"
+compileUnlitMaterial mat
+  | (not.isUnlit) mat = error "Material requires light!"
+  | otherwise = compileUnlit mat
+  where
+    compileUnlit MinimalMaterial = createMinimalShader
+    compileUnlit _ = error "Lambency.Shader (compileUnlitMaterial): Not implemented!"

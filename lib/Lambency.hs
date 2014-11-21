@@ -202,7 +202,7 @@ data GameLoopState a = GameLoopState {
 
 type GameLoopM a =
   -- Reader
-  ReaderT (RenderConfig, GLFWInputControl, GLFW.Window) (
+  ReaderT (GLFWInputControl, GLFW.Window) (
   -- State  (gameObject, logic, session and time)
   StateT (GameLoopState a) IO)
 
@@ -235,7 +235,7 @@ stepGame gs = do
 runGame :: GameState -> GameLoopM a (Either String a, TimeStepper, StateStepper a)
 runGame gs = do
 
-  (rcfg, ictl, win) <- ask
+  (ictl, win) <- ask
   gls <- get
 
   ipt <- liftIO $ getInput ictl
@@ -287,7 +287,8 @@ runGame gs = do
       -- !FIXME! This should be moved to the camera...
       GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
       clearBuffers
-      _ <- evalRWST renderPrg rcfg identity
+      _ <- evalStateT renderPrg initialRenderState
+      _ <- error "Blah"
       GL.flush
       GLFW.swapBuffers win
 
@@ -319,13 +320,10 @@ run win initialGameObject initialGame = do
   let session = W.countSession (double2Float physicsDeltaTime) W.<*> W.pure ()
   curTime <- getCurrentTime
 
-  -- Create our rendering config
-  renderCfg <- mkRenderConfig
-
   -- Stick in an initial poll events call...
   GLFW.pollEvents
 
-  let statePrg = runReaderT (runLoop curTime) (renderCfg, ictl, win)
+  let statePrg = runReaderT (runLoop curTime) (ictl, win)
   evalStateT statePrg $ GameLoopState initialGameObject initialGame session (toEnum 0) 0
 
   hSetBuffering stdout oldBuffering

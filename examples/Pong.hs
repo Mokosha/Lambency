@@ -77,15 +77,14 @@ startBall = Ball (0.5 *^ (vi2f2 $ V2 screenWidth screenHeight)) ballStartSpeed
 --------------------------------------------------
 -- Rendering
 
-renderPaddle :: L.RenderObject -> Bool -> Float -> L.GameMonad ()
-renderPaddle ro b f = L.addRenderAction (paddleXForm $ paddleLoc b f) ro
+renderPaddle :: L.Sprite -> Bool -> Float -> L.GameMonad ()
+renderPaddle s b f = L.renderSprite s (V2 paddleWidth paddleHeight) (-1) (paddleLoc b f)
 
-renderBall :: L.RenderObject -> Ball -> L.GameMonad ()
-renderBall ro (Ball (V2 x y) _) = L.addRenderAction xf ro
+renderBall :: L.Sprite -> Ball -> L.GameMonad ()
+renderBall s (Ball (V2 x y) _) = L.renderSprite s sc (-1) pp
   where
-    xf = L.translate (V3 (x - ballRadius) (y - ballRadius) (-1)) $
-         L.nonuniformScale ((2 *^) $ V3 ballRadius ballRadius 1) $
-         L.identity
+    pp = V2 (x - ballRadius) (y - ballRadius)
+    sc = round <$> ((2 *^) $ V2 ballRadius ballRadius)
 
 renderScore :: L.Font -> Int -> Int -> L.GameMonad ()
 renderScore f p1 p2 =
@@ -98,27 +97,32 @@ renderScore f p1 p2 =
      L.renderUIString f score1 (scoreCenter + (V2 (-scoreOffset-scoreLen) scoreOffset))
      L.renderUIString f score2 (scoreCenter + (V2 scoreOffset scoreOffset))
 
-dashedMidsection :: L.RenderObject -> [(L.Transform, L.RenderObject)]
-dashedMidsection ro = [(L.translate (tr x) $ L.nonuniformScale sc L.identity, ro) | x <- [0,1..12]]
+dashedMidsection :: L.Sprite -> [(V2 Float, V2 Int, L.Sprite)]
+dashedMidsection s = [(tr x, sc, s) | x <- [0,1..12]]
   where
-    sc :: V3 Float
-    sc = V3 3 20 1
+    sc :: V2 Int
+    sc = V2 4 20
 
-    tr :: Int -> V3 Float
-    tr x = 0.5 *^ (vi2f3 $ V3 screenWidth (80 * x) (-1)) ^-^ (V3 1.5 0 0)
+    tr :: Int -> V2 Float
+    tr x = 0.5 *^ (vi2f2 $ V2 screenWidth (80 * x)) ^-^ (V2 1.5 0)
 
-wallXF :: L.Transform
-wallXF = L.nonuniformScale (vi2f3 $ V3 screenWidth wallHeight 1) L.identity
+wallScale :: V2 Int
+wallScale = V2 screenWidth wallHeight
 
-mkWall :: Bool -> L.RenderObject -> (L.Transform, L.RenderObject)
-mkWall True x = (L.translate (vi2f3 $ V3 0 (screenHeight - wallHeight) (-1)) wallXF, x)
-mkWall False x = (wallXF, x)
+mkWall :: Bool -> L.Sprite -> (V2 Float, V2 Int, L.Sprite)
+mkWall True x = (vi2f2 $ V2 0 (screenHeight - wallHeight), wallScale, x)
+mkWall False x = (V2 0 0, wallScale, x)
 
-renderPaddleWire :: L.RenderObject -> Bool -> L.GameWire Float Float
-renderPaddleWire ro playerOne = mkGen_ $ \y -> renderPaddle ro playerOne y >> return (Right y)
+renderPaddleWire :: L.Sprite -> Bool -> L.GameWire Float Float
+renderPaddleWire s playerOne = mkGen_ $ \y -> renderPaddle s playerOne y >> return (Right y)
 
-renderBallWire :: L.RenderObject -> L.GameWire Ball Ball
-renderBallWire ro = mkGen_ $ \b -> renderBall ro b >> return (Right b)
+renderBallWire :: L.Sprite -> L.GameWire Ball Ball
+renderBallWire s = mkGen_ $ \b -> renderBall s b >> return (Right b)
+
+renderStatic :: [(V2 Float, V2 Int, L.Sprite)] -> L.GameWire a a
+renderStatic rs = mkGen_ $ \x -> mapM_ renderIt rs >> return (Right x)
+  where
+    renderIt (pp, sc, s) = L.renderSprite s sc (-1) pp
 
 --------------------------------------------------
 -- Game logic
@@ -130,11 +134,11 @@ paddleFeedback handler =
    handler
   ) >>> integral paddleStartY >>> (mkId &&& mkId)
 
-paddleWire :: Bool -> L.RenderObject ->  L.GameWire (a, Float) Float -> L.GameWire a Float
+paddleWire :: Bool -> L.Sprite ->  L.GameWire (a, Float) Float -> L.GameWire a Float
 paddleWire playerOne ro handler =
   loop (second (delay 0) >>> paddleFeedback handler) >>> renderPaddleWire ro playerOne
 
-ballWire :: L.RenderObject -> L.GameWire Ball Ball
+ballWire :: L.Sprite -> L.GameWire Ball Ball
 ballWire ro = integrateBall >>> renderBallWire ro
   where
     integrateBall :: L.GameWire Ball Ball
@@ -203,7 +207,7 @@ handleScore f = scoreWire 0 0
             renderScore f p1' p2'
             return (Right (max p1' p2', b'), scoreWire p1' p2')
 
-gameFeedback :: L.RenderObject -> L.RenderObject -> IO (L.GameWire (Int, Ball) (Int, Ball))
+gameFeedback :: L.Sprite -> L.Sprite -> IO (L.GameWire (Int, Ball) (Int, Ball))
 gameFeedback quad circle = do
   sysFont <- getDataFileName ("examples" </> "kenpixel.ttf") >>= L.loadTTFont 36 (V3 1 1 1)
   sound <- getDataFileName ("examples" </> "pong-bloop.wav") >>= L.loadSound
@@ -218,7 +222,7 @@ gameFeedback quad circle = do
       collideWith playerOne s handler = (mkId &&& paddleWire playerOne quad handler) >>>
                                         collidePaddle playerOne s
 
-gameWire :: L.RenderObject -> L.RenderObject -> IO (L.GameWire Int Int)
+gameWire :: L.Sprite -> L.Sprite -> IO (L.GameWire Int Int)
 gameWire quad circle = do
   feedback <- gameFeedback quad circle
   return $ (loop $ second (delay startBall) >>> feedback) >>> (when (< 10))
@@ -232,14 +236,14 @@ pongCam = pure zero >>> (L.mk2DCam screenWidth screenHeight)
 loadGame :: IO (L.Game Int)
 loadGame = do
   white <- L.createSolidTexture (255, 255, 255, 255)
-  quad <- L.createRenderObject L.quad (L.createTexturedMaterial white)
-  nolight <- L.createNoLight
+  quad <- L.loadStaticSpriteWithMask white
   w <- gameWire quad quad
-  return $ L.Game { L.staticLights = [nolight],
-                    L.staticGeometry = [mkWall False quad, mkWall True quad] ++ dashedMidsection quad,
+  let staticSprites = [mkWall False quad, mkWall True quad] ++ dashedMidsection quad
+  return $ L.Game { L.staticLights = [],
+                    L.staticGeometry = [],
                     L.mainCamera = pongCam,
                     L.dynamicLights = [],
-                    L.gameLogic = w >>> L.quitWire GLFW.Key'Q}
+                    L.gameLogic = w >>> renderStatic staticSprites >>> L.quitWire GLFW.Key'Q}
 
 main :: IO ()
 main = L.runWindow screenWidth screenHeight "Pong Demo" 0 loadGame
