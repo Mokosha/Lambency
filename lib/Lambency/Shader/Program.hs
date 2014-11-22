@@ -187,6 +187,16 @@ compileProgram iptTy (ShdrCode vertexPrg) (ShdrCode fragmentPrg) =
         runRWS (compileShdrCode vertexPrg) (vs_input, VertexShaderTy) (length vs_input_vars)
 
       vs_output_vars = collectCustom vs_output
+
+      extra_vs_stmts =
+        let (ShaderOutput vs_out) = vs_output
+            isVSInput (SpecialOutput _ _) = False
+            isVSInput (CustomOutput _ v) = v `elem` vs_input_vars
+
+            toVSOutput var@(CustomOutput _ v) = Assignment (getOutputVar var) (VarExpr v)
+            toVSOutput _ = error "Lambency.Shader.Program (compileProgram): Only output that matches input should go here."
+        in map toVSOutput $ filter isVSInput vs_out
+
       fs_input_vars = vs_output_vars
 
       fs_input = ShaderInput fs_input_vars
@@ -200,7 +210,7 @@ compileProgram iptTy (ShdrCode vertexPrg) (ShdrCode fragmentPrg) =
      vertexProgram =
        ShaderProgram {
          shaderDecls = concat [attribDecls, vs_decls, varyingDecls],
-         shaderStmts = updateStmts vs_stmts vs_output
+         shaderStmts = extra_vs_stmts ++ updateStmts vs_stmts vs_output
          },
      fragmentProgram =
        ShaderProgram {

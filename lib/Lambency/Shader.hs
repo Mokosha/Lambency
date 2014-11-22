@@ -373,9 +373,10 @@ genLitVertexShader mat = I.ShdrCode $ do
   -- If we're using textures then we should also check for texture
   -- coordinates
   let hasTexCoords = usesTextures mat
-  uv <- case usesTextures mat of
-    False -> I.newVar "dummyUV" I.vector2fTy
-    True -> I.getInput2f "texCoord"
+  uv <-
+    if hasTexCoords
+    then I.getInput2f "texCoord"
+    else I.newVar "dummyUV" I.vector2fTy
 
   -- All vertices need to be transformed based on the
   -- MVP matrix being passed in...
