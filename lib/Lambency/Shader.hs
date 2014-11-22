@@ -20,6 +20,12 @@ module Lambency.Shader (
 ) where
 
 --------------------------------------------------------------------------------
+import Control.Applicative
+import Control.Monad
+
+import Data.Maybe
+import qualified Data.Map as Map
+
 import Lambency.Material
 import Lambency.Vertex
 import Lambency.Texture
@@ -31,18 +37,16 @@ import qualified Lambency.Shader.OpenGL as I
 import qualified Lambency.Shader.Program as I
 import qualified Lambency.Shader.Var as I
 
-import qualified Graphics.Rendering.OpenGL as GL
-import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
-
-import qualified Data.Map as Map
-import Control.Applicative
-
 import Linear.Matrix
 import Linear.V2
 import Linear.V3
+import Linear.V4
 
 import Foreign.Marshal.Utils
 import Foreign.Ptr
+
+import qualified Graphics.Rendering.OpenGL as GL
+import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
 --------------------------------------------------------------------------------
 
 type ShaderVarMap = Map.Map String ShaderVar
@@ -83,6 +87,12 @@ setUniformVar (Uniform FloatTy loc) (FloatVal f) = do
 
 setUniformVar (Uniform Vector3Ty loc) (Vector3Val (V3 x y z)) = do
   GL.uniform loc GL.$= GL.Vertex3 (f x) (f y) (f z)
+  where
+    f :: Float -> GL.GLfloat
+    f = realToFrac
+
+setUniformVar (Uniform Vector4Ty loc) (Vector4Val (V4 x y z w)) = do
+  GL.uniform loc GL.$= GL.Vertex4 (f x) (f y) (f z) (f w)
   where
     f :: Float -> GL.GLfloat
     f = realToFrac
@@ -348,51 +358,128 @@ createMinimalShader :: IO (Shader)
 createMinimalShader =
   I.generateOpenGLShader $ I.compileProgram (getVertexTy undefined) vertMinimal fragMinimal
 
-getLightVarName :: LightVar a -> String
-getLightVarName (LightVar (n, _)) = n
-
-genLitVertexShader :: Material -> I.ShaderCode a b
-genLitVertexShader mat = I.ShdrCode $ do
-  -- The actual fragment position needs to be set in order
-  -- to do lighting calculations based on world space coordinates.
-  position <- I.getInput3f "position"
-  m2wMatrix <- I.newUniformVar "m2wMatrix" I.matrix4Ty
-  pos <- I.setE I.vector3fTy $
-         I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D $
-         I.xform4f (I.mkVarExpr m2wMatrix) $
-         I.mkVec4f_31 (I.mkVarExpr position) (I.mkConstf 1)
-
-  -- Since the material is lit, it should also have a normal
-  normal <- I.getInput3f "normal"
-  norm <- I.setE I.vector3fTy $
-          I.normalize3f $
-          I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D $
-          I.xform4f (I.mkVarExpr m2wMatrix) $
-          I.mkVec4f_31 (I.mkVarExpr normal) (I.mkConstf 0)
-
-  -- If we're using textures then we should also check for texture
-  -- coordinates
-  let hasTexCoords = usesTextures mat
+handleUnlitVertex :: MaterialVar Texture -> MaterialVar (M33 Float) -> I.ShaderCode a b
+handleUnlitVertex texture texMatrix = I.ShdrCode $ do
   uv <-
-    if hasTexCoords
-    then I.getInput2f "texCoord"
-    else I.newVar "dummyUV" I.vector2fTy
+    case isDefined texture of
+      False -> I.newVar "dummyUV" I.vector2fTy
+      True -> do
+        case isDefined texMatrix  of
+          False -> I.getInput2f "texCoord"
+          True -> do
+            tc <- I.getInput2f "texCoord"
+            tcMat <- I.newUniformVar (getMatVarName texMatrix) I.matrix3Ty
 
-  -- All vertices need to be transformed based on the
-  -- MVP matrix being passed in...
+            -- Transform texture coordinates by the matrix
+            tcTrans <- I.setE I.vector3fTy $
+                       I.xform3f (I.mkVarExpr tcMat) $
+                       I.mkVec3f_21 (I.mkVarExpr tc) (I.mkConstf 1.0)
+
+            -- Perspective divide...
+            I.setE I.vector2fTy $
+              I.finishSwizzleV . I._y_ . I._x_ . I.swizzle3D $
+              I.div3f (I.mkVarExpr tcTrans) $
+              I.finishSwizzleS . I._z_ . I.swizzle3D $
+              (I.mkVarExpr tcTrans)
+
+  position <- I.getInput3f "position"
   mvpMatrix <- I.newUniformVar "mvpMatrix" I.matrix4Ty
   out_pos <- I.setE I.vector4fTy $
              I.xform4f (I.mkVarExpr mvpMatrix) $
              I.mkVec4f_31 (I.mkVarExpr position) (I.mkConstf 1)
 
   let output = I.addVertexPosition out_pos $
-               I.addCustomOVar "position" pos $
-               I.addCustomOVar "normal" norm $
-               if hasTexCoords
+               if isDefined texture
                then I.addCustomOVar "uv" uv $ I.emptyO
                else I.emptyO
-
   return output
+
+genUnlitVertexShader :: Material -> I.ShaderCode a b
+genUnlitVertexShader (MaskedSpriteMaterial {..}) = handleUnlitVertex spriteMask spriteMaskMatrix
+genUnlitVertexShader (TexturedSpriteMaterial {..}) = handleUnlitVertex spriteTexture spriteTextureMatrix
+genUnlitVertexShader m =
+  error $ "Lambency.Shader (genLitVertexShader): Cannot generate unlit vertex shader for material: " ++ show m
+
+genUnlitFragmentShader :: Material -> I.ShaderCode a b
+genUnlitFragmentShader (MaskedSpriteMaterial{..}) =
+  let lookupMaskValue tex = do
+        guard (isDefined tex)
+
+        let MaterialVar (name, Just _) = tex
+
+        sampler <- I.newUniformVar name I.sampler2DTy
+        uv <- I.getInput2f "uv"
+        I.setE I.floatTy $
+          I.finishSwizzleS . I._x_ . I.swizzle4D $
+          I.sample2D (I.mkVarExpr sampler) (I.mkVarExpr uv)
+
+  in I.ShdrCode $ do
+    -- Just determine the final color
+    maskedValue <- lookupMaskValue spriteMask <|> (I.setE I.floatTy $ I.mkConstf 1.0)
+
+    color <- case spriteMaskColor of
+      MaterialVar (_, Nothing) ->
+        error "Lambency.Shader (genUnlitFragmentShader): Masked material must have color!"
+      MaterialVar (name, _) -> I.newUniformVar name I.vector4fTy
+
+    outColor <- I.setE I.vector4fTy $
+                I.mkVec4f_31 (I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D $ I.mkVarExpr color) $
+                I.multf (I.mkVarExpr maskedValue) $
+                I.finishSwizzleS . I._w_ . I.swizzle4D $
+                I.mkVarExpr color
+
+    return $ I.addFragmentColor outColor I.emptyO
+  
+genUnlitFragmentShader m =
+  error $ "Lambency.Shader (genLitVertexShader): Cannot generate unlit fragment shader for material: " ++ show m
+
+getLightVarName :: LightVar a -> String
+getLightVarName (LightVar (n, _)) = n
+
+genLitVertexShader :: Material -> I.ShaderCode a b
+genLitVertexShader mat
+  | isUnlit mat = error "Lambency.Shader (genLitVertexShader): Generating lit vertex shader for unlit material!"
+  | otherwise = I.ShdrCode $ do
+    -- The actual fragment position needs to be set in order
+    -- to do lighting calculations based on world space coordinates.
+    position <- I.getInput3f "position"
+    m2wMatrix <- I.newUniformVar "m2wMatrix" I.matrix4Ty
+    pos <- I.setE I.vector3fTy $
+           I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D $
+           I.xform4f (I.mkVarExpr m2wMatrix) $
+           I.mkVec4f_31 (I.mkVarExpr position) (I.mkConstf 1)
+
+    -- Since the material is lit, it should also have a normal
+    normal <- I.getInput3f "normal"
+    norm <- I.setE I.vector3fTy $
+            I.normalize3f $
+            I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D $
+            I.xform4f (I.mkVarExpr m2wMatrix) $
+            I.mkVec4f_31 (I.mkVarExpr normal) (I.mkConstf 0)
+
+    -- If we're using textures then we should also check for texture
+    -- coordinates
+    let hasTexCoords = usesTextures mat
+    uv <-
+      if hasTexCoords
+      then I.getInput2f "texCoord"
+      else I.newVar "dummyUV" I.vector2fTy
+
+    -- All vertices need to be transformed based on the
+    -- MVP matrix being passed in...
+    mvpMatrix <- I.newUniformVar "mvpMatrix" I.matrix4Ty
+    out_pos <- I.setE I.vector4fTy $
+               I.xform4f (I.mkVarExpr mvpMatrix) $
+               I.mkVec4f_31 (I.mkVarExpr position) (I.mkConstf 1)
+
+    let output = I.addVertexPosition out_pos $
+                 I.addCustomOVar "position" pos $
+                 I.addCustomOVar "normal" norm $
+                 if hasTexCoords
+                 then I.addCustomOVar "uv" uv $ I.emptyO
+                 else I.emptyO
+
+    return output
 
 getDiffuseColor :: Material -> I.ShaderContext i (I.ShaderVar (V3 Float))
 getDiffuseColor (BlinnPhongMaterial {..}) = do
@@ -423,6 +510,12 @@ getSpecularColor (BlinnPhongMaterial {..}) = do
   reflectivity <- case specularReflectivity of
     MaterialVar (_, Nothing) -> return Nothing
     MaterialVar (name, Just _) -> Just <$> I.newUniformVar name I.vector3fTy
+
+  -- We must have specular reflectivity to use specular color
+  guard $ isJust reflectivity
+
+  -- We don't need a specular map, but if we have one then make sure to
+  -- multiply the appropriate value with the reflectivity
   applyMap <- case specularMap of
     MaterialVar (_, Nothing) -> return reflectivity
     MaterialVar (name, Just _) -> do
@@ -440,6 +533,13 @@ getSpecularColor (BlinnPhongMaterial {..}) = do
                                I.mult3f (I.mkVarExpr color) (I.mkVarExpr refl))
         Nothing -> return $ Just color
 
+  if not (isJust applyMap)
+    then error "Lambency.Shader (getSpecularColor): This shouldn't happen"
+    else return ()
+
+  -- Finally, we have to have a specular exponent. If we don't, then
+  -- we definitely don't have any specular activity
+  guard $ isDefined specularExponent
   case specularExponent of
     MaterialVar (_, Nothing) -> return Nothing
     MaterialVar (name, Just _) -> do
@@ -596,7 +696,7 @@ genLitFragment lightTy mat = do
   norm <- I.getInput3f "normal"
   
   diffuseColor <- getDiffuseColor mat
-  specularColor <- getSpecularColor mat
+  specularColor <- getSpecularColor mat <|> return Nothing
 
   norm' <- handleNormalMaps mat norm
 
@@ -690,9 +790,11 @@ compileMaterial light mat
 compileUnlitMaterial :: Material -> IO (Shader)
 compileUnlitMaterial NoMaterial =
   error "Lambency.Shader (compileUnlitMaterial): Cannot compile non-material!"
+compileUnlitMaterial MinimalMaterial = createMinimalShader
 compileUnlitMaterial mat
   | (not.isUnlit) mat = error "Material requires light!"
-  | otherwise = compileUnlit mat
+  | otherwise = I.generateOpenGLShader $ I.compileProgram vty vshdr fshdr
   where
-    compileUnlit MinimalMaterial = createMinimalShader
-    compileUnlit _ = error "Lambency.Shader (compileUnlitMaterial): Not implemented!"
+    vshdr = genUnlitVertexShader mat
+    fshdr = genUnlitFragmentShader mat
+    vty = getVertexTy (undefined :: TVertex3)

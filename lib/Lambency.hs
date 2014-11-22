@@ -288,7 +288,6 @@ runGame gs = do
       GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
       clearBuffers
       _ <- evalStateT renderPrg initialRenderState
-      _ <- error "Blah"
       GL.flush
       GLFW.swapBuffers win
 

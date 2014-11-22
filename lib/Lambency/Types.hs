@@ -146,7 +146,7 @@ data Texture = Texture TextureHandle TextureFormat
 
 -- Lights
 
-newtype LightVar a = LightVar (String, ShaderValue)
+newtype LightVar a = LightVar { getLightVar :: (String, ShaderValue) }
                      deriving (Show, Eq, Ord)
 
 instance Hashable (LightVar a) where
@@ -202,16 +202,20 @@ instance Hashable Light where
 
 -- Materials
 
-newtype MaterialVar a = MaterialVar (String, Maybe ShaderValue)
+newtype MaterialVar a = MaterialVar { getMatVar :: (String, Maybe ShaderValue) }
                       deriving (Show, Eq, Ord)
 
 instance Hashable (MaterialVar a) where
   hashWithSalt s (MaterialVar (n, ms)) = hashUsing isJust (s `hashWithSalt` n) ms
 
 data NormalModulation
-  = BumpMap Texture
-  | NormalMap Texture
+  = BumpMap (MaterialVar Texture)
+  | NormalMap (MaterialVar Texture)
   deriving (Show, Eq, Ord)
+
+instance Hashable NormalModulation where
+  hashWithSalt s (BumpMap v) = s `hashWithSalt` v
+  hashWithSalt s (NormalMap v) = s `hashWithSalt` v
 
 data ReflectionInfo
   = ReflectionInfo {
@@ -238,7 +242,7 @@ data Material
 
     reflectionInfo :: Maybe (ReflectionInfo),
 
-    normalMod :: MaterialVar (NormalModulation)
+    normalMod :: Maybe (NormalModulation)
     }
 
     -- A textured sprite is a quad that has a texture on it

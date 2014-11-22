@@ -5,7 +5,6 @@ module Lambency.Shader.Program where
 import Control.Monad.RWS.Strict
 
 import qualified Data.Map as Map
-import Data.List ((\\), intersect)
 
 import Lambency.Vertex
 
@@ -118,10 +117,18 @@ data Shader v = Shader {
 }
 
 ifThen :: Expr Bool -> ShaderContext i () -> ShaderContext i () -> ShaderContext i ()
-ifThen (Expr e) c1 c2 = ShdrCtx $ RWST $ \ipt st ->
-  let (_, id1, (decls1, s1)) = runRWS (compileShdrCode c1) ipt (st + 1)
-      (_, id2, (decls2, s2)) = runRWS (compileShdrCode c2) ipt (id1 + 1)
-  in return ((), id2 + 1, (decls1 ++ decls2, [IfThenElse e s1 s2]))
+ifThen (Expr e) (ShdrCtx c1) (ShdrCtx c2) =
+  ShdrCtx $ RWST $ \ipt st ->
+  case runRWST c1 ipt (st + 1) of
+    Nothing ->
+      case runRWST c2 ipt (st + 1) of
+        Nothing -> Nothing
+        Just (_, id2, (decls2, s2)) -> Just ((), id2 + 1, (decls2, [IfThenElse e [] s2]))
+    Just (_, id1, (decls1, s1)) ->
+      case runRWST c2 ipt (id1 + 1) of
+        Nothing -> Just ((), id1 + 1, (decls1, [IfThenElse e s1 []]))
+        Just (_, id2, (decls2, s2)) ->
+          Just ((), id2 + 1, (decls1 ++ decls2, [IfThenElse e s1 s2]))
 
 attribToVarTy :: VertexAttribute -> ShaderVarTyRep
 attribToVarTy (VertexAttribute 1 IntAttribTy) = IntTy
@@ -182,9 +189,13 @@ addVertexOutputs = zipWith setCopyStmt
 
 compileProgram :: Vertex v => VertexTy v -> ShaderCode v o -> ShaderCode o f -> Shader v
 compileProgram iptTy (ShdrCode vertexPrg) (ShdrCode fragmentPrg) =
-  let vs_input@(ShaderInput vs_input_vars) = mkAttributes iptTy
-      (vs_output, varID, (vs_decls, vs_stmts)) =
-        runRWS (compileShdrCode vertexPrg) (vs_input, VertexShaderTy) (length vs_input_vars)
+  let
+      vs_input@(ShaderInput vs_input_vars) = mkAttributes iptTy
+
+      Just (vs_output, varID, (vs_decls, vs_stmts)) = runRWST
+                                                      (compileShdrCode vertexPrg)
+                                                      (vs_input, VertexShaderTy)
+                                                      (length vs_input_vars)
 
       vs_output_vars = collectCustom vs_output
 
@@ -200,8 +211,11 @@ compileProgram iptTy (ShdrCode vertexPrg) (ShdrCode fragmentPrg) =
       fs_input_vars = vs_output_vars
 
       fs_input = ShaderInput fs_input_vars
-      (_, _, (fs_decls, fs_stmts)) =
-        runRWS (compileShdrCode fragmentPrg) (fs_input, FragmentShaderTy) (varID + length fs_input_vars)
+
+      Just (fs_output, _, (fs_decls, fs_stmts)) = runRWST
+                                                  (compileShdrCode fragmentPrg)
+                                                  (fs_input, FragmentShaderTy)
+                                                  (varID + length fs_input_vars)
 
       varyingDecls = map Varying fs_input_vars
       attribDecls = map Attribute vs_input_vars
@@ -215,7 +229,7 @@ compileProgram iptTy (ShdrCode vertexPrg) (ShdrCode fragmentPrg) =
      fragmentProgram =
        ShaderProgram {
          shaderDecls = fs_decls ++ varyingDecls,
-         shaderStmts = fs_stmts
+         shaderStmts = updateStmts fs_stmts fs_output
        }
      }
     

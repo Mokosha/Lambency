@@ -160,9 +160,15 @@ data ShaderType
   deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
 newtype ShaderContext i a =
-  ShdrCtx { compileShdrCode :: RWS (ShaderInput i, ShaderType) ([Declaration], [Statement]) Int a }
-  deriving (Functor, Applicative, Monad, MonadReader (ShaderInput i, ShaderType),
-            MonadWriter ([Declaration], [Statement]), MonadState Int)
+  ShdrCtx { compileShdrCode :: RWST
+                               (ShaderInput i, ShaderType)  -- Reader
+                               ([Declaration], [Statement]) -- Writer
+                               Int                          -- State (varID)
+                               Maybe a }
+  deriving (Functor, Applicative, Monad, Alternative, MonadPlus,
+            MonadReader (ShaderInput i, ShaderType),
+            MonadWriter ([Declaration], [Statement]),
+            MonadState Int)
 
 newtype ShaderCode i o = ShdrCode (ShaderContext i (ShaderOutput o))
 
