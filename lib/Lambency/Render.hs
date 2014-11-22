@@ -24,6 +24,7 @@ import Lambency.Transform
 import Lambency.Types
 import Lambency.Vertex
 
+import Control.Applicative
 import Control.Monad.State
 import Control.Concurrent.STM
 
@@ -50,6 +51,7 @@ import System.IO.Unsafe
 
 data RenderStateFlag
   = RenderState'DepthOnly
+  | RenderState'ShadowedPass
     deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
 data RenderState = RenderState {
@@ -87,16 +89,16 @@ addUnlitShader h shdr = do
   atomically $ modifyTVar' shaderCache $ \cache ->
     cache { unlitShaders = Map.insert h shdr (unlitShaders cache) }
 
-lookupLitShader :: Material -> Light -> IO (Shader)
-lookupLitShader mat light = do
-  let litHash = hash (mat, light)
+lookupLitShader :: Material -> Light -> Maybe Texture -> IO (Shader)
+lookupLitShader mat light shadowmap = do
+  let litHash = hash (mat, light, (\_ -> "__has_shadowmap__") <$> shadowmap)
   cache <- readTVarIO shaderCache
   let litShdrs = litShaders cache
   case Map.lookup litHash litShdrs of
     Just s -> return s
     Nothing -> do
       putStrLn $ "Compiling lit material: " ++ show mat
-      shdr <- compileMaterial light mat
+      shdr <- compileMaterial light mat shadowmap
       addLitShader litHash shdr
       return shdr
 
@@ -210,12 +212,12 @@ renderROsWithShader ros shdr shdrmap = do
     (render ro) shdr $ Map.union matVars shdrmap
   afterRender shdr
 
-renderLitROs :: [RenderObject] -> Light -> ShaderMap -> IO ()
-renderLitROs ros light shdrmap =
+renderLitROs :: [RenderObject] -> Light -> Maybe Texture -> ShaderMap -> IO ()
+renderLitROs ros light shadowmap shdrmap =
   let vars = Map.union shdrmap $ getLightShaderVars light
       renderWithShdr [] = return ()
       renderWithShdr rs@(ro : _) = do
-        shdr <- lookupLitShader (material ro) light
+        shdr <- lookupLitShader (material ro) light shadowmap
         renderROsWithShader rs shdr vars
   in mapM_ renderWithShdr $ groupROsByMaterial ros
 
@@ -274,23 +276,33 @@ divideAndRenderROs ros cam light = let
       GL.depthFunc GL.$= d
       case light of
         Nothing -> renderUnlitROs rs vars
-        Just l -> renderLitROs rs l vars
+        Just l -> do
+          let currentFlags = currentRenderFlags st
+          case RenderState'ShadowedPass `elem` currentFlags of
+            True -> do
+              case Map.lookup "shadowMap" vars of
+                Just (TextureVal tex) -> renderLitROs rs l (Just tex) vars
+                _ -> error "Lambency.Render (divideAndRenderROs): Shadow pass but no shadow map??"
+            False -> renderLitROs rs l Nothing vars
   in do
     st <- get
     (trans, opaque) <- placeAndDivideObjs
-    if RenderState'DepthOnly `elem` (currentRenderFlags st)
-      then liftIO $ do
-      shdr <- lookupMinimalShader
-      renderROsWithShader opaque shdr (currentRenderVars st)
-      else do
-      renderFn opaque (Just GL.Lequal)
-      renderFn (reverse trans) Nothing
+    let currentFlags = currentRenderFlags st
 
-addRenderFlag :: RenderStateFlag -> RenderContext ()
-addRenderFlag flag = do
+    case RenderState'DepthOnly `elem` currentFlags of
+      True -> liftIO $ do
+        GL.depthFunc GL.$= (Just GL.Lequal)
+        shdr <- lookupMinimalShader
+        renderROsWithShader opaque shdr (currentRenderVars st)
+      False -> do
+        renderFn opaque (Just GL.Lequal)
+        renderFn (reverse trans) Nothing
+
+withRenderFlag :: RenderStateFlag -> RenderContext () -> RenderContext ()
+withRenderFlag flag action = do
   st <- get
-  let fs = currentRenderFlags st
-  put $ st { currentRenderFlags = flag : fs }
+  withStateT (\s -> s { currentRenderFlags = flag : (currentRenderFlags s) }) action
+  put st
 
 addRenderVar :: String -> ShaderValue -> RenderContext ()
 addRenderVar name val = do
@@ -299,6 +311,7 @@ addRenderVar name val = do
   put $ st { currentRenderVars = Map.insert name val vars }
 
 mkLightCam :: LightType -> Camera
+-- !FIXME! light fov should be based on spotlight cos cutoff...
 mkLightCam (SpotLight dir' pos' _) =
   let LightVar (_, Vector3Val pos) = pos'
       LightVar (_, Vector3Val dir) = dir'
@@ -307,7 +320,7 @@ mkLightCam (SpotLight dir' pos' _) =
 mkLightCam c = error $ "Lambency.Render (mkLightCam): Camera for light type unsupported: " ++ show c
 
 renderLight :: RenderAction -> Camera -> Maybe Light -> RenderContext ()
-renderLight act cam (Just (Light params lightTy (Just (ShadowMap _ shadowMap)))) = do
+renderLight act cam (Just (Light params lightTy (Just (ShadowMap shadowMap)))) = do
   (lcam, shadowVP) <- liftIO $ do
     bindRenderTexture shadowMap
     clearBuffers
@@ -316,12 +329,12 @@ renderLight act cam (Just (Light params lightTy (Just (ShadowMap _ shadowMap))))
     -- and the shadow VP...
     let lightCam = mkLightCam lightTy
     return (lightCam, Matrix4Val $ getViewProjMatrix lightCam)
-  renderLight act lcam Nothing
+  withRenderFlag RenderState'DepthOnly $ renderLight act lcam Nothing
   liftIO clearRenderTexture
   addRenderVar "shadowMap" (TextureVal shadowMap)
   addRenderVar "shadowVP" shadowVP
-  addRenderFlag RenderState'DepthOnly
-  renderLight act cam (Just $ Light params lightTy Nothing)
+  withRenderFlag RenderState'ShadowedPass $
+    renderLight act cam (Just $ Light params lightTy Nothing)
 
 -- If there's no clipped geometry then we're not rendering anything...
 renderLight (RenderClipped (RenderObjects []) _) _ _ = return ()

@@ -563,7 +563,7 @@ getAmbientColor _ _ = error "Lambency.Material (getAmbientColor): Only Blinn-Pho
 handleNormalMaps :: Material -> I.ShaderVar (V3 Float) -> I.ShaderContext i (I.ShaderVar (V3 Float))
 handleNormalMaps (BlinnPhongMaterial {..}) norm =
   case reflectionInfo of
-    Nothing -> return norm
+    Nothing -> I.setE I.vector3fTy $ I.normalize3f (I.mkVarExpr norm)
     _ -> error "Lambency.Material (handleNormalMaps): Not implemented"
 handleNormalMaps _ _ = error "Lambency.Material (handleNormalMaps): Only Blinn-Phong materials can use normal maps!"
 
@@ -608,6 +608,7 @@ blinnPhongLighting (Light params (SpotLight {..}) _) diffuseColor specularInfo p
   -- to increase performance
   lightPos <- I.newUniformVar (getLightVarName spotLightPos) I.vector3fTy
   spotDir <- I.setE I.vector3fTy $
+             I.normalize3f $
              I.sub3f (I.mkVarExpr pos) (I.mkVarExpr lightPos)
 
   lightDir <- I.newUniformVar (getLightVarName spotLightDir) I.vector3fTy
@@ -690,18 +691,6 @@ blinnPhongLighting (Light params (PointLight {..}) _) diffuseColor specularInfo 
         I.add3f (I.mkVarExpr diffuseLight) $
         I.mkVarExpr specularLight
   
-genLitFragment :: Light -> Material -> I.ShaderContext i (I.ShaderVar (V3 Float))
-genLitFragment lightTy mat = do
-  pos <- I.getInput3f "position"
-  norm <- I.getInput3f "normal"
-  
-  diffuseColor <- getDiffuseColor mat
-  specularColor <- getSpecularColor mat <|> return Nothing
-
-  norm' <- handleNormalMaps mat norm
-
-  blinnPhongLighting lightTy diffuseColor specularColor pos norm'
-
 genShadowFragment :: I.ShaderContext i (I.ShaderVar Float)
 genShadowFragment = do
   pos <- I.getInput3f "position"
@@ -731,16 +720,24 @@ genShadowFragment = do
                I.finishSwizzleV . I._y_ . I._x_ . I.swizzle4D $
                I.mkVarExpr lightPersp
 
-  I.setE I.floatTy $ I.castBoolToFloat $ I.gtf (I.mkVarExpr objDepth) (I.mkVarExpr shdwDepth)
+  I.setE I.floatTy $ I.castBoolToFloat $ I.gtf (I.mkVarExpr shdwDepth) (I.mkVarExpr objDepth)
 
 genLitFragShader :: Light -> Material -> I.ShaderCode a b
 genLitFragShader light mat = I.ShdrCode $ do
 
-  litFragment <- genLitFragment light mat
-  
+  pos <- I.getInput3f "position"
+  norm <- I.getInput3f "normal"
+
+  diffuseColor <- getDiffuseColor mat
+  specularColor <- getSpecularColor mat <|> return Nothing
+
+  litFragment <- handleNormalMaps mat norm >>=
+                 blinnPhongLighting light diffuseColor specularColor pos
+
   ambientColor <- getAmbientColor (lightParams light) mat
   finalColor <- I.setE I.vector3fTy $
-                I.add3f (I.mkVarExpr litFragment) (I.mkVarExpr ambientColor)
+                I.add3f (I.mkVarExpr litFragment) $
+                I.mult3f (I.mkVarExpr ambientColor) (I.mkVarExpr diffuseColor)
 
   -- !TODO! materials should be able to define opacity...
   let alpha = I.mkConstf 1.0
@@ -753,13 +750,20 @@ genLitFragShader light mat = I.ShdrCode $ do
 genShadowedFragShader :: Light -> Material -> I.ShaderCode a b
 genShadowedFragShader light mat = I.ShdrCode $ do
 
-  litFragment <- genLitFragment light mat
+  pos <- I.getInput3f "position"
+  norm <- I.getInput3f "normal"
+
+  diffuseColor <- getDiffuseColor mat
+  specularColor <- getSpecularColor mat <|> return Nothing
+
+  litFragment <- handleNormalMaps mat norm >>=
+                 blinnPhongLighting light diffuseColor specularColor pos
 
   shadow <- genShadowFragment
 
   ambientColor <- getAmbientColor (lightParams light) mat
   finalColor <- I.setE I.vector3fTy $
-                I.add3f (I.mkVarExpr ambientColor) $
+                I.add3f (I.mult3f (I.mkVarExpr ambientColor) (I.mkVarExpr diffuseColor)) $
                 I.scale3f (I.mkVarExpr litFragment) $
                 I.mkVarExpr shadow
 
@@ -771,15 +775,15 @@ genShadowedFragShader light mat = I.ShdrCode $ do
 
   return $ I.addFragmentColor outColor I.emptyO
 
-compileMaterial :: Light -> Material -> IO (Shader)
-compileMaterial l@(Light _ _ Nothing) mat
+compileMaterial :: Light -> Material -> Maybe Texture -> IO (Shader)
+compileMaterial light mat Nothing
   | isUnlit mat = compileUnlitMaterial mat
   | otherwise =
     let vshdr = genLitVertexShader mat
-        fshdr = genLitFragShader l mat
+        fshdr = genLitFragShader light mat
         vty = getVertexTy (undefined :: OTVertex3)
     in I.generateOpenGLShader $ I.compileProgram vty vshdr fshdr
-compileMaterial light mat
+compileMaterial light mat (Just _)
   | isUnlit mat = compileUnlitMaterial mat
   | otherwise =
     let vshdr = genLitVertexShader mat
@@ -792,7 +796,7 @@ compileUnlitMaterial NoMaterial =
   error "Lambency.Shader (compileUnlitMaterial): Cannot compile non-material!"
 compileUnlitMaterial MinimalMaterial = createMinimalShader
 compileUnlitMaterial mat
-  | (not.isUnlit) mat = error "Material requires light!"
+  | (not.isUnlit) mat = error "Lambency.Shader (compileUnlitMaterial): Material requires light!"
   | otherwise = I.generateOpenGLShader $ I.compileProgram vty vshdr fshdr
   where
     vshdr = genUnlitVertexShader mat

@@ -183,8 +183,8 @@ instance Hashable LightType where
   hashWithSalt s (DirectionalLight x) = s `hashWithSalt` x
   hashWithSalt s (PointLight x) = s `hashWithSalt` x
 
-data ShadowMap = ShadowMap Shader Texture
-                 deriving (Show, Eq, Ord)
+newtype ShadowMap = ShadowMap Texture
+                  deriving (Show, Eq, Ord)
 
 data Light
   = Light {

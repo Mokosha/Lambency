@@ -91,13 +91,13 @@ loadGame = do
   plane <- mkPlane
   bunny <- mkBunny
   cube <- cubeWire
-  let lightPos = 10 *^ (V3 (-1) 1 0)
+  let lightPos = 5 *^ (V3 (-1) 1 0)
       gameWire = cube W.>>>
                  (frameWire sysFont) W.>>>
                  (L.quitWire GLFW.Key'Q)
-      lightParams = L.mkLightParams (V3 0.5 0.5 0.5) (V3 1.0 1.0 1.0) 1.0
-      light = L.spotlight lightParams lightPos (negate lightPos) (pi/2)
-  return $ L.Game { L.staticLights = [light],
+      lightParams = L.mkLightParams (V3 0.15 0.15 0.15) (V3 1.0 1.0 1.0) 1.0
+  shadowLight <- L.addShadowMap $ L.spotlight lightParams lightPos (negate lightPos) (pi/2)
+  return $ L.Game { L.staticLights = [shadowLight],
                     L.staticGeometry = [plane, bunny],
                     L.mainCamera = demoCam,
                     L.dynamicLights = [],

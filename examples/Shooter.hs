@@ -8,8 +8,6 @@ import qualified Graphics.UI.GLFW as GLFW
 import qualified Lambency as L
 
 import Linear hiding (trace)
-
-import Debug.Trace
 --------------------------------------------------------------------------------
 
 --------------------------------------------------

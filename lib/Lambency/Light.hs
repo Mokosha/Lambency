@@ -87,8 +87,7 @@ pointlight params pos =
 addShadowMap :: Light -> IO (Light)
 addShadowMap l = do
   depthTex <- createDepthTexture
-  minShdr <- createMinimalShader
-  return $ l { lightShadowMap = (Just $ ShadowMap minShdr depthTex) }
+  return $ l { lightShadowMap = (Just $ ShadowMap depthTex) }
 
 setAmbient :: Vec3f -> Light -> Light
 setAmbient color (Light params lightTy shadow) =
