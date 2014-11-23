@@ -31,8 +31,7 @@ demoCam = L.mkDebugCam initialCam
 
 mkPlane :: IO (L.Transform, L.RenderObject)
 mkPlane = do
-  tex <- L.createSolidTexture (128, 128, 128, 255)
-  ro <- L.createRenderObject L.plane (L.createTexturedMaterial tex)
+  ro <- L.createRenderObject L.plane (L.diffuseColoredMaterial $ V3 0.5 0.5 0.5)
   return (xform, ro)
   where xform = L.uniformScale 10 $
                 L.translate (V3 0 (-2) 0) $
@@ -40,9 +39,8 @@ mkPlane = do
 
 mkBunny:: IO (L.Transform, L.RenderObject)
 mkBunny = do
-  tex <- L.createSolidTexture (67, 128, 67, 255)
   mesh <- getDataFileName ("examples" </> "bunnyN" <.> "obj") >>= L.loadOTV3
-  ro <- L.createRenderObject mesh (L.createTexturedMaterial tex)
+  ro <- L.createRenderObject mesh (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
   return (xform, ro)
   where xform = L.rotate (Quat.axisAngle (V3 0 1 0) pi) $
                 L.translate (V3 (-4) (-4.8) (-5)) $
@@ -53,7 +51,7 @@ cubeWire = do
   sound <- getDataFileName ("examples" </> "stereol" <.> "wav") >>= L.loadSound
   (Just tex) <- getDataFileName ("examples" </> "crate" <.> "png") >>= L.loadTexture
   mesh <- getDataFileName ("examples" </> "cube" <.> "obj") >>= L.loadOTV3
-  ro <- L.createRenderObject mesh (L.createTexturedMaterial tex)
+  ro <- L.createRenderObject mesh (L.diffuseTexturedMaterial tex)
   return $ playSound sound 3.0 W.>>> (L.mkObject ro (rotate initial))
   where
     playSound :: L.Sound -> Float -> L.GameWire a a

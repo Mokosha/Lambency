@@ -6,14 +6,18 @@ module Lambency.Material (
   defaultMaskedSprite,
 
   materialShaderVars,
-  
+
   createSimpleMaterial,
-  createTexturedMaterial,
+  shinyTexturedMaterial,
+  diffuseTexturedMaterial,
+  shinyColoredMaterial,
+  diffuseColoredMaterial,
   
   updateMaterialVar3mf,
   updateMaterialVar3vf,
   updateMaterialVar4vf,
   updateMaterialVarf,
+  updateMaterialVarTex,
 
   maskedSpriteMaterial,
   texturedSpriteMaterial,
@@ -38,7 +42,7 @@ defaultBlinnPhong :: Material
 defaultBlinnPhong = BlinnPhongMaterial {
   diffuseReflectivity = MaterialVar ("diffuseColor", Just $ Vector3Val $ V3 1 1 1),
   diffuseMap = MaterialVar ("diffuseMap", Nothing),
-  specularExponent = MaterialVar ("specularExponent", Nothing),
+  specularExponent = MaterialVar ("specularExponent", Just $ FloatVal 10.0),
   specularReflectivity = MaterialVar ("specularColor", Just $ Vector3Val $ V3 1 1 1),
   specularMap = MaterialVar ("specularMap", Nothing),
   ambientReflectivity = MaterialVar ("ambientColor", Just $ Vector3Val $ V3 1 1 1),
@@ -99,9 +103,38 @@ materialShaderVars _ = error "Lambency.Material (materialShaderVars): Not implem
 createSimpleMaterial :: Material
 createSimpleMaterial = defaultBlinnPhong
 
-createTexturedMaterial :: Texture -> Material
-createTexturedMaterial tex =
-  defaultBlinnPhong { diffuseMap = MaterialVar ("diffuseMap", Just $ TextureVal tex) }
+shinyTexturedMaterial :: Texture -> Material
+shinyTexturedMaterial tex =
+  defaultBlinnPhong { diffuseMap = updateMaterialVarTex tex $ diffuseMap defaultBlinnPhong }
+
+diffuseTexturedMaterial :: Texture -> Material
+diffuseTexturedMaterial tex =
+  defaultBlinnPhong { diffuseMap = updateMaterialVarTex tex $ diffuseMap defaultBlinnPhong,
+                      specularExponent =
+                        let MaterialVar (name, _) = specularExponent defaultBlinnPhong
+                        in MaterialVar (name, Nothing)}
+
+shinyColoredMaterial :: V3 Float -> Material
+shinyColoredMaterial color =
+  defaultBlinnPhong { diffuseReflectivity = updateMaterialVar3vf color $ diffuseReflectivity defaultBlinnPhong }
+
+diffuseColoredMaterial :: V3 Float -> Material
+diffuseColoredMaterial color =
+  defaultBlinnPhong { diffuseReflectivity = updateMaterialVar3vf color $ diffuseReflectivity defaultBlinnPhong,
+                      specularExponent =
+                        let MaterialVar (name, _) = specularExponent defaultBlinnPhong
+                        in MaterialVar (name, Nothing) }
+
+maskedSpriteMaterial :: Texture -> Material
+maskedSpriteMaterial tex =
+  defaultMaskedSprite { spriteMaskMatrix = MaterialVar ("spriteMaskMatrix", Just $ Matrix3Val $ eye3),
+                        spriteMask = MaterialVar ("spriteMask", Just $ TextureVal tex) }
+
+texturedSpriteMaterial :: Texture -> Material
+texturedSpriteMaterial tex =
+  TexturedSpriteMaterial { spriteTextureMatrix = MaterialVar ("spriteMaskMatrix", Just $ Matrix3Val $ eye3),
+                           spriteTexture = MaterialVar ("spriteMask", Just $ TextureVal tex),
+                           spriteAlpha = MaterialVar ("spriteAlpha", Just $ FloatVal 1) }
 
 updateMaterialVar3mf :: M33 Float -> MaterialVar (M33 Float) -> MaterialVar (M33 Float)
 updateMaterialVar3mf x (MaterialVar (n, _)) = MaterialVar (n, Just $ Matrix3Val x)
@@ -115,16 +148,8 @@ updateMaterialVar4vf x (MaterialVar (n, _)) = MaterialVar (n, Just $ Vector4Val 
 updateMaterialVarf :: Float -> MaterialVar Float -> MaterialVar Float
 updateMaterialVarf x (MaterialVar (n, _)) = MaterialVar (n, Just $ FloatVal x)
 
-maskedSpriteMaterial :: Texture -> Material
-maskedSpriteMaterial tex =
-  defaultMaskedSprite { spriteMaskMatrix = MaterialVar ("spriteMaskMatrix", Just $ Matrix3Val $ eye3),
-                        spriteMask = MaterialVar ("spriteMask", Just $ TextureVal tex) }
-
-texturedSpriteMaterial :: Texture -> Material
-texturedSpriteMaterial tex =
-  TexturedSpriteMaterial { spriteTextureMatrix = MaterialVar ("spriteMaskMatrix", Just $ Matrix3Val $ eye3),
-                           spriteTexture = MaterialVar ("spriteMask", Just $ TextureVal tex),
-                           spriteAlpha = MaterialVar ("spriteAlpha", Just $ FloatVal 1) }
+updateMaterialVarTex :: Texture -> MaterialVar Texture -> MaterialVar Texture
+updateMaterialVarTex x (MaterialVar (n, _)) = MaterialVar (n, Just $ TextureVal x)
 
 isDefined :: MaterialVar a -> Bool
 isDefined (MaterialVar (_, Nothing)) = False

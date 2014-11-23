@@ -44,6 +44,8 @@ library
                        Lambency.Shader.Base
                        Lambency.Shader.Expr
                        Lambency.Shader.OpenGL
+                       Lambency.Shader.Optimization
+                       Lambency.Shader.Optimization.RemoveUnused
                        Lambency.Shader.Program
                        Lambency.Shader.Var
 

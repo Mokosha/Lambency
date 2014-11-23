@@ -40,9 +40,9 @@ data ShaderVarRep = ShdrVarRep {
   shdrVarName :: String,
   shdrVarID :: Int,
   shdrVarTy :: ShaderVarTyRep
-} deriving (Show, Eq)
+} deriving (Show, Eq, Ord)
 
-newtype ShaderVar a = ShaderVar ShaderVarRep
+newtype ShaderVar a = ShaderVar ShaderVarRep deriving (Show, Eq, Ord)
 newtype ShaderVarTy a = ShaderVarTy ShaderVarTyRep deriving (Show, Read, Eq, Ord, Bounded)
 
 ------------------------------------------------------------

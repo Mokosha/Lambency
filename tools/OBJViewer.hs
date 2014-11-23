@@ -41,21 +41,21 @@ mkOBJ :: FilePath -> IO (L.RenderObject)
 mkOBJ objfile = do
   exists <- doesFileExist objfile
   if not exists then error ("OBJ file " ++ objfile ++ " not found") else return ()
-  tex <- L.createSolidTexture (67, 128, 67, 255)
   objInfo <- L.getOBJInfo objfile
+  let material = L.diffuseColoredMaterial $ V3 0.26 0.5 0.26
   case objInfo of
     (L.OBJInfo _ 0 0 _) -> do
       mesh <- L.genTexCoords . L.genNormalsV3 <$> L.loadV3 objfile
-      L.createRenderObject mesh (L.createTexturedMaterial tex)
+      L.createRenderObject mesh material
     (L.OBJInfo _ _ 0 _) -> do
       mesh <- L.genNormalsTV3 <$> L.loadTV3 objfile
-      L.createRenderObject mesh (L.createTexturedMaterial tex)
+      L.createRenderObject mesh material
     (L.OBJInfo _ 0 _ _) -> do
       mesh <- L.genTexCoords <$> L.loadOV3 objfile
-      L.createRenderObject mesh (L.createTexturedMaterial tex)
+      L.createRenderObject mesh material
     _ -> do
       mesh <- L.loadOTV3 objfile
-      L.createRenderObject mesh (L.createTexturedMaterial tex)
+      L.createRenderObject mesh material
 
 controlWire :: L.RenderObject -> L.GameWire a a
 controlWire ro = L.mkObject ro (pure L.identity) W.>>> wireframeToggle

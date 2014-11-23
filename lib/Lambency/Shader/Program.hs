@@ -9,6 +9,7 @@ import qualified Data.Map as Map
 import Lambency.Vertex
 
 import Lambency.Shader.Base
+import Lambency.Shader.Optimization
 
 import Linear
 --------------------------------------------------------------------------------
@@ -217,19 +218,14 @@ compileProgram iptTy (ShdrCode vertexPrg) (ShdrCode fragmentPrg) =
                                                   (fs_input, FragmentShaderTy)
                                                   (varID + length fs_input_vars)
 
-      varyingDecls = map Varying fs_input_vars
-      attribDecls = map Attribute vs_input_vars
+      final_vs_stmts = extra_vs_stmts ++ updateStmts vs_stmts vs_output
+      final_fs_stmts = updateStmts fs_stmts fs_output
+
+      varyingDecls = map Varying $ filter (flip isShaderVarUsed final_fs_stmts) fs_input_vars
+      attribDecls = map Attribute $ filter (flip isShaderVarUsed final_vs_stmts) vs_input_vars
   in
    Shader {
-     vertexProgram =
-       ShaderProgram {
-         shaderDecls = concat [attribDecls, vs_decls, varyingDecls],
-         shaderStmts = extra_vs_stmts ++ updateStmts vs_stmts vs_output
-         },
-     fragmentProgram =
-       ShaderProgram {
-         shaderDecls = fs_decls ++ varyingDecls,
-         shaderStmts = updateStmts fs_stmts fs_output
-       }
+     vertexProgram = ShaderProgram (concat [attribDecls, vs_decls, varyingDecls]) final_vs_stmts,
+     fragmentProgram = ShaderProgram (fs_decls ++ varyingDecls) final_fs_stmts
      }
     

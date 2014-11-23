@@ -280,6 +280,8 @@ divideAndRenderROs ros cam light = let
             Just (TextureVal tex) -> renderLitROs rs l (Just tex) vars
             _ -> renderLitROs rs l Nothing vars
   in do
+    addRenderVar "eyePos" (Vector3Val $ getCamPos cam)
+
     st <- get
     (trans, opaque) <- placeAndDivideObjs
     let currentFlags = currentRenderFlags st
