@@ -1,6 +1,8 @@
 module Lambency.Mesh (
   Mesh(..),
 
+  getMeshVertexTy,
+
   genNormalsV3,
   genNormalsTV3,
 
@@ -30,6 +32,11 @@ type Vec3f = V3 Float
 data Mesh a = Mesh { vertices :: [a],
                      indices :: [Int32] }
               deriving (Show)
+
+getMeshVertexTy :: Vertex a => Mesh a -> VertexTy a
+getMeshVertexTy (Mesh vs _) =
+  let (v : _) = (undefined : vs)
+  in getVertexTy v
 
 mkV3 :: (Float, Float, Float) -> V3 Float
 mkV3 (a, b, c) = V3 a b c
