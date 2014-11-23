@@ -23,6 +23,8 @@ module Lambency.Sprite (
 import Control.Comonad
 import Control.Wire hiding ((.))
 
+import Data.List (nub)
+
 import Lambency.Material
 import Lambency.Mesh
 import Lambency.Render
@@ -82,7 +84,7 @@ mapFrameRO :: (RenderObject -> RenderObject) -> SpriteFrame -> SpriteFrame
 mapFrameRO fn sf = sf { frameRO = fn (frameRO sf) }
 
 addTextFlag :: SpriteFrame -> SpriteFrame
-addTextFlag = mapFrameRO $ \ro -> ro { flags = [Text, Transparent] }
+addTextFlag = mapFrameRO $ \ro -> ro { flags = nub $ Text : (flags ro) }
 
 changeSpriteColor :: V4 Float -> Sprite -> Sprite
 changeSpriteColor c = Sprite . fmap (mapFrameRO $ mapROMaterial $ updateColor c) . getFrames
@@ -94,7 +96,7 @@ initStaticSprite isMask tex = do
   return . Sprite . cycleSingleton $ SpriteFrame {
     offset = zero,
     spriteSize = textureSize tex,
-    frameRO = if isMask then ro { flags = [Text, Transparent] } else ro
+    frameRO = if isMask then ro { flags = nub $ Transparent : (flags ro) } else ro
   }
 
 initAnimatedSprite :: Bool -> [V2 Int] -> [V2 Int] -> Texture -> IO (Sprite)
@@ -145,6 +147,7 @@ loadAnimatedSpriteWithTexture t frameSzs offsets =
 
 loadAnimatedSpriteWithMask :: Texture -> [V2 Int] -> [V2 Int] -> IO (Maybe Sprite)
 loadAnimatedSpriteWithMask t frameSzs offsets =
+  -- !HACK! Not all animated (multi-frame) mask sprites are fonts...
   initAnimatedSprite True frameSzs offsets t >>= (return . Just . Sprite . fmap addTextFlag . getFrames)
 
 loadFixedSizeAnimatedSprite :: FilePath -> V2 Int -> [V2 Int] -> IO (Maybe Sprite)
@@ -165,13 +168,13 @@ renderFrameAt ro sc depth (V2 x y) = addRenderAction xf ro
          nonuniformScale (V3 sx sy 1) identity
 
 renderSprite :: Sprite -> V2 Int -> Float -> V2 Float -> GameMonad ()
-renderSprite s = renderFrameAt $ frameRO $ extract . getFrames $ s
+renderSprite s = renderSpriteWithAlpha s 1.0
 
 renderSpriteWithAlpha :: Sprite -> Float -> V2 Int -> Float -> V2 Float -> GameMonad ()
 renderSpriteWithAlpha s a = renderFrameAt (setAlpha $ frameRO $ extract . getFrames $ s)
   where
     setAlpha ro = ro { material = updateAlpha a (material ro),
-                       flags = (Transparent : (flags ro)) }
+                       flags = nub $ Transparent : (flags ro) }
 
 data SpriteAnimationType
   = SpriteAnimationType'Forward
