@@ -305,10 +305,12 @@ addRenderVar name val = do
 
 mkLightCam :: LightType -> Camera
 -- !FIXME! light fov should be based on spotlight cos cutoff...
-mkLightCam (SpotLight dir' pos' _) =
+mkLightCam (SpotLight dir' pos' cosCutoff') =
   let LightVar (_, Vector3Val pos) = pos'
       LightVar (_, Vector3Val dir) = dir'
-  in mkPerspCamera pos dir (V3 0 1 0) (pi / 4) 1 0.1 500.0
+      LightVar (_, FloatVal cco) = cosCutoff'
+      ang = acos cco
+  in mkPerspCamera pos dir (V3 0 1 0) (2 * ang) 1 0.1 500.0
 
 mkLightCam c = error $ "Lambency.Render (mkLightCam): Camera for light type unsupported: " ++ show c
 
