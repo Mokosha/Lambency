@@ -429,7 +429,33 @@ genUnlitFragmentShader (MaskedSpriteMaterial{..}) =
                 I.mkVarExpr color
 
     return $ I.addFragmentColor outColor I.emptyO
-  
+
+genUnlitFragmentShader (TexturedSpriteMaterial {..}) =
+  let lookupTextureValue tex = do
+        guard (isDefined tex)
+
+        let MaterialVar (name, Just _) = tex
+
+        sampler <- I.newUniformVar name I.sampler2DTy
+        uv <- I.getInput2f "uv"
+        I.setE I.vector4fTy $ I.sample2D (I.mkVarExpr sampler) (I.mkVarExpr uv)
+
+  in I.ShdrCode $ do
+    -- Just determine the final color
+    color <- lookupTextureValue spriteTexture <|> (I.setE I.vector4fTy $ I.mkConstVec4f $ V4 1 1 1 1 )
+
+    alpha <- case spriteAlpha of
+      MaterialVar (_, Nothing) -> I.setE I.floatTy $ I.mkConstf 1.0
+      MaterialVar (name, _) -> I.newUniformVar name I.floatTy
+
+    outColor <- I.setE I.vector4fTy $
+                I.mkVec4f_31 (I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D $ I.mkVarExpr color) $
+                I.multf (I.mkVarExpr alpha) $
+                I.finishSwizzleS . I._w_ . I.swizzle4D $
+                I.mkVarExpr color
+
+    return $ I.addFragmentColor outColor I.emptyO
+
 genUnlitFragmentShader m =
   error $ "Lambency.Shader (genLitVertexShader): Cannot generate unlit fragment shader for material: " ++ show m
 
