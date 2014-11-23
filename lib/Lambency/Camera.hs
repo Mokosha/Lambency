@@ -48,7 +48,7 @@ mkOrthoCamera :: Vec3f -> Vec3f -> Vec3f  ->
                  Camera
 mkOrthoCamera pos dir up l r t b n f = Camera
 
-  (mkXForm pos dir up)
+  (mkXForm pos (signorm dir) (signorm up))
 
   Ortho {
     left = l,
@@ -66,7 +66,7 @@ mkPerspCamera :: Vec3f -> Vec3f -> Vec3f ->
                  Float -> Float -> Float -> Float -> Camera
 mkPerspCamera pos dir up fovy aspratio n f = Camera
 
-  (mkXForm pos dir up)
+  (mkXForm pos (signorm dir) (signorm up))
 
   Persp {
     fovY = fovy,

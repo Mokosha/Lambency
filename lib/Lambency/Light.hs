@@ -22,6 +22,7 @@ import Lambency.Types
 
 import qualified Data.Map as Map
 
+import Linear.Metric
 import Linear.V3
 --------------------------------------------------------------------------------
 
@@ -62,7 +63,7 @@ spotlight params pos dir ang =
     lightParams = params,
     lightType =
       SpotLight
-      (mkLightVar3f "spotlightDir" dir)
+      (mkLightVar3f "spotlightDir" $ signorm dir)
       (mkLightVar3f "spotlightPos" pos)
       (mkLightVarf "spotlightCosCutoff" $ cos ang),
     lightShadowMap = Nothing
@@ -72,7 +73,7 @@ dirlight :: LightParams -> Vec3f -> Light
 dirlight params dir =
   Light {
     lightParams = params,
-    lightType = DirectionalLight (mkLightVar3f "dirlightDir" dir),
+    lightType = DirectionalLight (mkLightVar3f "dirlightDir" $ signorm dir),
     lightShadowMap = Nothing
   }
 
@@ -80,7 +81,7 @@ pointlight :: LightParams -> Vec3f -> Light
 pointlight params pos =
   Light {
     lightParams = params,
-    lightType = PointLight (mkLightVar3f "spotlightPos" pos),
+    lightType = PointLight (mkLightVar3f "pointlightPos" pos),
     lightShadowMap = Nothing
   }
 
