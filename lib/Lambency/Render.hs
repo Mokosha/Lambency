@@ -218,7 +218,10 @@ renderLitROs ros light shadowmap shdrmap =
   let vars = Map.union shdrmap $ getLightShaderVars light
       renderWithShdr [] = return ()
       renderWithShdr rs@(ro : _) = do
-        shdr <- lookupLitShader (material ro) light shadowmap
+        let m = material ro
+        shdr <- lookupLitShader m light shadowmap
+        -- !FIXME! Make sure that the ro's vertex type has the same attributes that
+        -- the shader expects
         renderROsWithShader rs shdr vars
   in mapM_ renderWithShdr $ groupROsByMaterial ros
 
@@ -226,7 +229,10 @@ renderUnlitROs :: [RenderObject] -> ShaderMap -> IO ()
 renderUnlitROs ros shdrmap =
   let renderWithShdr [] = return ()
       renderWithShdr rs@(ro : _) = do
-        shdr <- lookupUnlitShader (material ro)
+        let m = material ro
+        shdr <- lookupUnlitShader m
+        -- !FIXME! Make sure that the ro's vertex type has the same attributes that
+        -- the shader expects
         renderROsWithShader rs shdr shdrmap
   in mapM_ renderWithShdr $ groupROsByMaterial ros
 
