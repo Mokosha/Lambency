@@ -85,22 +85,29 @@ frameWire font = (W.mkId W.&&& (lastRenderTime W.>>> sAvg 5)) W.>>> renderWire
       L.renderUIString font ("Frame Time (ms): " ++ (show fps)) (V2 10 10)
       return $ Right v
 
+lightWire :: L.Light -> L.GameWire () L.Light
+lightWire initial = (W.timeF W.>>>) $ W.mkSF_ $ \t ->
+  let Just (V3 _ py pz) = L.getLightPosition initial
+      newPos = V3 (sin(t) * 10) py pz
+  in L.setLightPosition newPos $
+     L.setLightDirection (negate newPos) initial
+
 loadGame :: IO (L.Game ())
 loadGame = do
   sysFont <- getDataFileName ("examples" </> "kenpixel" <.> "ttf") >>= L.loadTTFont 18 (V3 1 0 0)
   plane <- mkPlane
   bunny <- mkBunny
   cube <- cubeWire
-  let lightPos = 5 *^ (V3 (-1) 1 0)
-      gameWire = cube W.>>>
+  let gameWire = cube W.>>>
                  (frameWire sysFont) W.>>>
                  (L.quitWire GLFW.Key'Q)
+      lightPos = 5 *^ (V3 (-2) 1 0)
       lightParams = L.mkLightParams (V3 0.15 0.15 0.15) (V3 1.0 1.0 1.0) 1.0
-  shadowLight <- L.addShadowMap $ L.spotlight lightParams lightPos (negate lightPos) (pi/2)
-  return $ L.Game { L.staticLights = [shadowLight],
+  shadowLight <- L.addShadowMap $ L.spotlight lightParams lightPos (negate lightPos) (pi/4)
+  return $ L.Game { L.staticLights = [],
                     L.staticGeometry = [plane, bunny],
                     L.mainCamera = demoCam,
-                    L.dynamicLights = [],
+                    L.dynamicLights = [lightWire shadowLight],
                     L.gameLogic = gameWire}
 
 main :: IO ()
