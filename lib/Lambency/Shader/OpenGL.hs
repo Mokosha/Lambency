@@ -314,7 +314,7 @@ genVariableLocs prg decls =
     ufrmMap <- zipWithM (lookupUniform prg) (scanl toSamplerIdx 0 ufrms) ufrms
     return $ Map.union (Map.fromList attrMap) (Map.fromList ufrmMap)
 
-generateOpenGLShader :: Shader v -> IO (L.Shader)
+generateOpenGLShader :: Shader -> IO (L.Shader)
 generateOpenGLShader (Shader vs@(ShaderProgram vs_decls _) fs@(ShaderProgram fs_decls _)) = do
   prg <- GL.createProgram
   generateShader vs GL.VertexShader >>= GL.attachShader prg

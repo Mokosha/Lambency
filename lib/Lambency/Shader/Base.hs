@@ -147,32 +147,38 @@ data Statement = LocalDecl ShaderVarRep (Maybe ExprRep)
                | SpecialAssignment SpecialVar ShaderVarRep
                | IfThenElse ExprRep [Statement] [Statement]
 
-newtype ShaderInput i = ShaderInput { getInputVars :: [ShaderVarRep] }
+newtype ShaderInput = ShaderInput { getInputVars :: [ShaderVarRep] }
 
 data ShaderOutputVar = CustomOutput String ShaderVarRep
                      | SpecialOutput SpecialVar ShaderVarRep
 
-newtype ShaderOutput o = ShaderOutput { getOutputVars :: [ShaderOutputVar] }
+newtype ShaderOutput = ShaderOutput { getOutputVars :: [ShaderOutputVar] }
 
 data ShaderType
   = VertexShaderTy
   | FragmentShaderTy
   deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
-newtype ShaderContext i a =
+newtype ShaderContext a =
   ShdrCtx { compileShdrCode :: RWST
-                               (ShaderInput i, ShaderType)  -- Reader
+                               (ShaderInput, ShaderType)    -- Reader
                                ([Declaration], [Statement]) -- Writer
                                Int                          -- State (varID)
                                Maybe a }
   deriving (Functor, Applicative, Monad, Alternative, MonadPlus,
-            MonadReader (ShaderInput i, ShaderType),
+            MonadReader (ShaderInput, ShaderType),
             MonadWriter ([Declaration], [Statement]),
             MonadState Int)
 
-newtype ShaderCode i o = ShdrCode (ShaderContext i (ShaderOutput o))
+newtype ShaderCode = ShdrCode (ShaderContext ShaderOutput)
 
 data ShaderProgram = ShaderProgram {
   shaderDecls :: [Declaration],
   shaderStmts :: [Statement]
 }
+
+data Shader = Shader {
+  vertexProgram :: ShaderProgram,
+  fragmentProgram :: ShaderProgram
+}
+

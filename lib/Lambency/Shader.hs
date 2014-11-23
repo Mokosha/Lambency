@@ -22,7 +22,6 @@ import Data.Maybe
 import qualified Data.Map as Map
 
 import Lambency.Material
-import Lambency.Vertex
 import Lambency.Texture
 import Lambency.Types
 
@@ -33,7 +32,6 @@ import qualified Lambency.Shader.Program as I
 import qualified Lambency.Shader.Var as I
 
 import Linear.Matrix
-import Linear.V2
 import Linear.V3
 import Linear.V4
 
@@ -124,7 +122,7 @@ afterRender shdr = do
 
 ----------------------------------------
 
-vertMinimal :: I.ShaderCode Vertex3 ()
+vertMinimal :: I.ShaderCode
 vertMinimal = I.ShdrCode $ do
   position <- I.getInput3f "position"
   mvpMatrix <- I.newUniformVar "mvpMatrix" I.matrix4Ty
@@ -133,13 +131,14 @@ vertMinimal = I.ShdrCode $ do
              I.mkVec4f_31 (I.mkVarExpr position) (I.mkConstf 1)
   return $ I.addVertexPosition out_pos I.emptyO
   
-
-fragMinimal :: I.ShaderCode a ()
+fragMinimal :: I.ShaderCode
 fragMinimal = I.ShdrCode $ return I.emptyO
 
 createMinimalShader :: IO (Shader)
 createMinimalShader =
-  I.generateOpenGLShader $ I.compileProgram (getVertexTy undefined) vertMinimal fragMinimal
+  I.generateOpenGLShader $ I.compileProgram vertMinimal fragMinimal
+
+--------------------
 
 {-- !TODO! We should use dithering on non-specular non-textured materials, although
  -- this is kind of hard (read: work) to interleave into the current shader system
@@ -170,7 +169,7 @@ dither3 v seed = do
   I.mkVec3f_111 <$> dither vx r <*> dither vy r <*> dither vz r
 --}
 
-handleUnlitVertex :: MaterialVar Texture -> MaterialVar (M33 Float) -> I.ShaderCode a b
+handleUnlitVertex :: MaterialVar Texture -> MaterialVar (M33 Float) -> I.ShaderCode
 handleUnlitVertex texture texMatrix = I.ShdrCode $ do
   uv <-
     case isDefined texture of
@@ -206,13 +205,13 @@ handleUnlitVertex texture texMatrix = I.ShdrCode $ do
                else I.emptyO
   return output
 
-genUnlitVertexShader :: Material -> I.ShaderCode a b
+genUnlitVertexShader :: Material -> I.ShaderCode
 genUnlitVertexShader (MaskedSpriteMaterial {..}) = handleUnlitVertex spriteMask spriteMaskMatrix
 genUnlitVertexShader (TexturedSpriteMaterial {..}) = handleUnlitVertex spriteTexture spriteTextureMatrix
 genUnlitVertexShader m =
   error $ "Lambency.Shader (genLitVertexShader): Cannot generate unlit vertex shader for material: " ++ show m
 
-genUnlitFragmentShader :: Material -> I.ShaderCode a b
+genUnlitFragmentShader :: Material -> I.ShaderCode
 genUnlitFragmentShader (MaskedSpriteMaterial{..}) =
   let lookupMaskValue tex = do
         guard (isDefined tex)
@@ -274,7 +273,7 @@ genUnlitFragmentShader m =
 getLightVarName :: LightVar a -> String
 getLightVarName (LightVar (n, _)) = n
 
-genLitVertexShader :: Material -> I.ShaderCode a b
+genLitVertexShader :: Material -> I.ShaderCode
 genLitVertexShader mat
   | isUnlit mat = error "Lambency.Shader (genLitVertexShader): Generating lit vertex shader for unlit material!"
   | otherwise = I.ShdrCode $ do
@@ -319,7 +318,7 @@ genLitVertexShader mat
 
     return output
 
-getDiffuseColor :: Material -> I.ShaderContext i (I.ShaderVar (V3 Float))
+getDiffuseColor :: Material -> I.ShaderContext (I.ShaderVar (V3 Float))
 getDiffuseColor (BlinnPhongMaterial {..}) = do
   reflectivity <- case diffuseReflectivity of
     MaterialVar (_, Nothing) -> I.setE I.vector3fTy $ I.mkConstVec3f (V3 0 0 0)
@@ -343,7 +342,7 @@ getDiffuseColor m = error $ "Lambency.Material (getDiffuseColor): Not supported 
 
 type SpecularInfo = Maybe (I.ShaderVar (V3 Float), I.ShaderVar Float)
 
-getSpecularColor :: Material -> I.ShaderContext i (SpecularInfo)
+getSpecularColor :: Material -> I.ShaderContext (SpecularInfo)
 getSpecularColor (BlinnPhongMaterial {..}) = do
   reflectivity <- case specularReflectivity of
     MaterialVar (_, Nothing) -> return Nothing
@@ -386,7 +385,7 @@ getSpecularColor (BlinnPhongMaterial {..}) = do
 
 getSpecularColor _ = error "Lambency.Material (getSpecularColor): Only Blinn-Phong materials contain specular!"
 
-getAmbientColor :: LightParams -> Material -> I.ShaderContext i (I.ShaderVar (V3 Float))
+getAmbientColor :: LightParams -> Material -> I.ShaderContext (I.ShaderVar (V3 Float))
 getAmbientColor (LightParams{..}) (BlinnPhongMaterial {..}) = do
   reflectivity <- case ambientReflectivity of
     MaterialVar (_, Nothing) -> I.setE I.vector3fTy $ I.mkConstVec3f (V3 1 1 1)
@@ -398,7 +397,7 @@ getAmbientColor (LightParams{..}) (BlinnPhongMaterial {..}) = do
 
 getAmbientColor _ _ = error "Lambency.Material (getAmbientColor): Only Blinn-Phong materials contain ambient!"
 
-handleNormalMaps :: Material -> I.ShaderVar (V3 Float) -> I.ShaderContext i (I.ShaderVar (V3 Float))
+handleNormalMaps :: Material -> I.ShaderVar (V3 Float) -> I.ShaderContext (I.ShaderVar (V3 Float))
 handleNormalMaps (BlinnPhongMaterial {..}) norm =
   case reflectionInfo of
     Nothing -> I.setE I.vector3fTy $ I.normalize3f (I.mkVarExpr norm)
@@ -406,14 +405,14 @@ handleNormalMaps (BlinnPhongMaterial {..}) norm =
 handleNormalMaps _ _ = error "Lambency.Material (handleNormalMaps): Only Blinn-Phong materials can use normal maps!"
 
 modulateLight :: I.ShaderVar (Float) -> I.ShaderVar (V3 Float) -> I.ShaderVar (V3 Float) ->
-                 I.ShaderContext i (I.ShaderVar (V3 Float))
+                 I.ShaderContext (I.ShaderVar (V3 Float))
 modulateLight intensity lightColor materialColor =
   I.setE I.vector3fTy $
   I.mult3f (I.mkVarExpr materialColor) $
   I.scale3f (I.mkVarExpr lightColor) $
   I.mkVarExpr intensity
 
-blinnPhongLightColor :: LightParams -> I.ShaderContext i (I.ShaderVar (V3 Float))
+blinnPhongLightColor :: LightParams -> I.ShaderContext (I.ShaderVar (V3 Float))
 blinnPhongLightColor (LightParams {..}) = do
   color <- I.newUniformVar (getLightVarName lightColor) I.vector3fTy
   intensity <- I.newUniformVar (getLightVarName lightIntensity) I.floatTy
@@ -421,7 +420,7 @@ blinnPhongLightColor (LightParams {..}) = do
   I.setE I.vector3fTy $ I.scale3f (I.mkVarExpr color) (I.mkVarExpr intensity)
 
 blinnPhongNDotH :: I.ShaderVar (V3 Float) -> I.ShaderVar (V3 Float) -> I.ShaderVar (V3 Float) ->
-                   I.ShaderContext i (I.ShaderVar Float)
+                   I.ShaderContext (I.ShaderVar Float)
 blinnPhongNDotH lightDir pos norm = do
   eyePos <- I.newUniformVar "eyePos" I.vector3fTy
 
@@ -439,7 +438,7 @@ blinnPhongNDotH lightDir pos norm = do
 blinnPhongLighting :: Light ->
                       I.ShaderVar (V3 Float) -> SpecularInfo ->
                       I.ShaderVar (V3 Float) -> I.ShaderVar (V3 Float) ->
-                      I.ShaderContext i (I.ShaderVar (V3 Float))
+                      I.ShaderContext (I.ShaderVar (V3 Float))
 blinnPhongLighting (Light params (SpotLight {..}) _) diffuseColor specularInfo pos norm = do
 
   -- !FIXME! We might be able to calculate this in the vertex shader
@@ -529,7 +528,7 @@ blinnPhongLighting (Light params (PointLight {..}) _) diffuseColor specularInfo 
         I.add3f (I.mkVarExpr diffuseLight) $
         I.mkVarExpr specularLight
   
-genShadowFragment :: I.ShaderContext i (I.ShaderVar Float)
+genShadowFragment :: I.ShaderContext (I.ShaderVar Float)
 genShadowFragment = do
   pos <- I.getInput3f "position"
   
@@ -560,7 +559,7 @@ genShadowFragment = do
 
   I.setE I.floatTy $ I.castBoolToFloat $ I.gtf (I.mkVarExpr shdwDepth) (I.mkVarExpr objDepth)
 
-genLitFragShader :: Light -> Material -> I.ShaderCode a b
+genLitFragShader :: Light -> Material -> I.ShaderCode
 genLitFragShader light mat = I.ShdrCode $ do
 
   pos <- I.getInput3f "position"
@@ -585,7 +584,7 @@ genLitFragShader light mat = I.ShdrCode $ do
 
   return $ I.addFragmentColor outColor I.emptyO
 
-genShadowedFragShader :: Light -> Material -> I.ShaderCode a b
+genShadowedFragShader :: Light -> Material -> I.ShaderCode
 genShadowedFragShader light mat = I.ShdrCode $ do
 
   pos <- I.getInput3f "position"
@@ -619,15 +618,13 @@ compileMaterial light mat Nothing
   | otherwise =
     let vshdr = genLitVertexShader mat
         fshdr = genLitFragShader light mat
-        vty = getVertexTy (undefined :: OTVertex3)
-    in I.generateOpenGLShader $ I.compileProgram vty vshdr fshdr
+    in I.generateOpenGLShader $ I.compileProgram vshdr fshdr
 compileMaterial light mat (Just _)
   | isUnlit mat = compileUnlitMaterial mat
   | otherwise =
     let vshdr = genLitVertexShader mat
         fshdr = genShadowedFragShader light mat
-        vty = getVertexTy (undefined :: OTVertex3)
-    in I.generateOpenGLShader $ I.compileProgram vty vshdr fshdr
+    in I.generateOpenGLShader $ I.compileProgram vshdr fshdr
 
 compileUnlitMaterial :: Material -> IO (Shader)
 compileUnlitMaterial NoMaterial =
@@ -635,8 +632,7 @@ compileUnlitMaterial NoMaterial =
 compileUnlitMaterial MinimalMaterial = createMinimalShader
 compileUnlitMaterial mat
   | (not.isUnlit) mat = error "Lambency.Shader (compileUnlitMaterial): Material requires light!"
-  | otherwise = I.generateOpenGLShader $ I.compileProgram vty vshdr fshdr
+  | otherwise = I.generateOpenGLShader $ I.compileProgram vshdr fshdr
   where
     vshdr = genUnlitVertexShader mat
     fshdr = genUnlitFragmentShader mat
-    vty = getVertexTy (undefined :: TVertex3)
