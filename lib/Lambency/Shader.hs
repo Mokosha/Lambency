@@ -410,7 +410,7 @@ genUnlitFragmentShader (MaskedSpriteMaterial{..}) =
         sampler <- I.newUniformVar name I.sampler2DTy
         uv <- I.getInput2f "uv"
         I.setE I.floatTy $
-          I.finishSwizzleS . I._x_ . I.swizzle4D $
+          I.finishSwizzleS . I._w_ . I.swizzle4D $
           I.sample2D (I.mkVarExpr sampler) (I.mkVarExpr uv)
 
   in I.ShdrCode $ do
