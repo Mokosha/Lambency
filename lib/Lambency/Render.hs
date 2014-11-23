@@ -44,14 +44,13 @@ import GHC.Exts (groupWith)
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 
-import Linear
+import Linear hiding (trace)
 
 import System.IO.Unsafe
 --------------------------------------------------------------------------------
 
 data RenderStateFlag
   = RenderState'DepthOnly
-  | RenderState'ShadowedPass
     deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
 data RenderState = RenderState {
@@ -277,13 +276,9 @@ divideAndRenderROs ros cam light = let
       case light of
         Nothing -> renderUnlitROs rs vars
         Just l -> do
-          let currentFlags = currentRenderFlags st
-          case RenderState'ShadowedPass `elem` currentFlags of
-            True -> do
-              case Map.lookup "shadowMap" vars of
-                Just (TextureVal tex) -> renderLitROs rs l (Just tex) vars
-                _ -> error "Lambency.Render (divideAndRenderROs): Shadow pass but no shadow map??"
-            False -> renderLitROs rs l Nothing vars
+          case Map.lookup "shadowMap" vars of
+            Just (TextureVal tex) -> renderLitROs rs l (Just tex) vars
+            _ -> renderLitROs rs l Nothing vars
   in do
     st <- get
     (trans, opaque) <- placeAndDivideObjs
@@ -333,13 +328,11 @@ renderLight act cam (Just (Light params lightTy (Just (ShadowMap shadowMap)))) =
   liftIO clearRenderTexture
   addRenderVar "shadowMap" (TextureVal shadowMap)
   addRenderVar "shadowVP" shadowVP
-  withRenderFlag RenderState'ShadowedPass $
-    renderLight act cam (Just $ Light params lightTy Nothing)
+  renderLight act cam (Just $ Light params lightTy Nothing)
 
 -- If there's no clipped geometry then we're not rendering anything...
 renderLight (RenderClipped (RenderObjects []) _) _ _ = return ()
 renderLight (RenderClipped clip action) camera light = do
-  liftIO $ putStrLn "Rendering clipped objects"
   liftIO $ do
     -- Disable stencil test, and drawing into the color and depth buffers
     -- Enable writing to stencil buffer, and always write to it.
