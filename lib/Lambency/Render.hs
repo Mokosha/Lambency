@@ -259,8 +259,7 @@ divideAndRenderROs [] _ _ = return ()
 divideAndRenderROs ros cam light = let
   placeAndDivideObjs :: RenderContext ([RenderObject], [RenderObject])
   placeAndDivideObjs = do
-    st <- get
-    let xf = currentRenderXF st
+    xf <- currentRenderXF <$> get
     return $
       partition (\ro -> Transparent `elem` (flags ro)) $
       -- sortBy (\ro1 ro2 -> compare (camDist ro1) (camDist ro2)) $
@@ -269,8 +268,7 @@ divideAndRenderROs ros cam light = let
   renderFn :: [RenderObject] -> (Maybe GL.ComparisonFunction) -> RenderContext ()
   renderFn [] _ = return ()
   renderFn rs d = do
-    st <- get
-    let vars = currentRenderVars st
+    vars <- currentRenderVars <$> get
     liftIO $ do
       GL.depthFunc GL.$= d
       case light of
@@ -496,7 +494,7 @@ addTransformedRenderAction xf prg = do
   return result
 
 addRenderAction :: Transform -> RenderObject -> GameMonad ()
-addRenderAction xf ro = lift $  modify $ appendSceneWith appendObj (xformObject xf ro)
+addRenderAction xf ro = lift $ modify $ appendSceneWith appendObj (xformObject xf ro)
 
 addRenderUIAction :: V2 Float -> RenderObject -> GameMonad ()
 addRenderUIAction (V2 x y) ro = lift $
