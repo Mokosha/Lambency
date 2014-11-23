@@ -236,7 +236,7 @@ pongCam = pure zero >>> (L.mk2DCam screenWidth screenHeight)
 loadGame :: IO (L.Game Int)
 loadGame = do
   white <- L.createSolidTexture (255, 255, 255, 255)
-  quad <- L.loadStaticSpriteWithMask white
+  quad <- L.changeSpriteColor (V4 0.4 0.6 0.2 1.0) <$> L.loadStaticSpriteWithMask white
   w <- gameWire quad quad
   let staticSprites = [mkWall False quad, mkWall True quad] ++ dashedMidsection quad
   return $ L.Game { L.staticLights = [],
