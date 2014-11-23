@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Lambency.Light (
   getLightVarName,
   getLightShaderVars,
@@ -9,10 +10,16 @@ module Lambency.Light (
   pointlight,
 
   addShadowMap,
+
+  getLightPosition,
+  setLightPosition,
+
+  getLightDirection,
+  setLightDirection,
   
-  setAmbient,
-  setColor,
-  setIntensity,
+  setLightAmbient,
+  setLightColor,
+  setLightIntensity,
 ) where
 
 --------------------------------------------------------------------------------
@@ -90,17 +97,55 @@ addShadowMap l = do
   depthTex <- createDepthTexture
   return $ l { lightShadowMap = (Just $ ShadowMap depthTex) }
 
-setAmbient :: Vec3f -> Light -> Light
-setAmbient color (Light params lightTy shadow) =
+getLightPosition :: Light -> Maybe (V3 Float)
+getLightPosition (Light _ (SpotLight {..}) _) =
+  let LightVar (_, Vector3Val v) = spotLightPos
+  in Just v
+getLightPosition (Light _ (PointLight {..}) _) =
+  let LightVar (_, Vector3Val v) = pointLightPos
+  in Just v
+getLightPosition _ = Nothing
+
+setLightPosition :: Vec3f -> Light -> Light
+setLightPosition pos (Light params (SpotLight {..}) shdw) =
+  let LightVar (name, _) = spotLightPos
+      newPos = LightVar (name, Vector3Val pos)
+  in Light params (SpotLight spotLightDir newPos spotLightCosCutoff) shdw
+setLightPosition pos (Light params (PointLight {..}) shdw) =
+  let LightVar (name, _) = pointLightPos
+      newPos = LightVar (name, Vector3Val pos)
+  in Light params (PointLight newPos) shdw
+setLightPosition _ light = light -- Silently do nothing for lights that have no position...
+
+getLightDirection :: Light -> Maybe (V3 Float)
+getLightDirection (Light _ (SpotLight {..}) _) =
+  let LightVar (_, Vector3Val v) = spotLightDir in Just v
+getLightDirection (Light _ (DirectionalLight {..}) _) =
+  let LightVar (_, Vector3Val v) = dirLightDir in Just v
+getLightDirection _ = Nothing
+
+setLightDirection :: Vec3f -> Light -> Light
+setLightDirection dir (Light params (SpotLight {..}) shdw) =
+  let LightVar (name, _) = spotLightDir
+      newDir = LightVar (name, Vector3Val $ signorm dir)
+  in Light params (SpotLight newDir spotLightPos spotLightCosCutoff) shdw
+setLightDirection dir (Light params (DirectionalLight {..}) shdw) =
+  let LightVar (name, _) = dirLightDir
+      newDir = LightVar (name, Vector3Val $ signorm dir)
+  in Light params (DirectionalLight newDir) shdw
+setLightDirection _ light = light -- Silently do nothing for lights that have no direction...
+
+setLightAmbient :: Vec3f -> Light -> Light
+setLightAmbient color (Light params lightTy shadow) =
   let newColor = (mkLightVar3f "lightAmbient" color)
   in Light (params { ambientColor = newColor}) lightTy shadow
 
-setColor :: Vec3f -> Light -> Light
-setColor color (Light params lightTy shadow) =
+setLightColor :: Vec3f -> Light -> Light
+setLightColor color (Light params lightTy shadow) =
   let newColor = (mkLightVar3f "lightColor" color)
   in Light (params { lightColor = newColor}) lightTy shadow
 
-setIntensity :: Float -> Light -> Light
-setIntensity intensity (Light params lightTy shadow) =
+setLightIntensity :: Float -> Light -> Light
+setLightIntensity intensity (Light params lightTy shadow) =
   let newi = (mkLightVarf "lightIntensity" intensity)
   in Light (params { lightIntensity = newi}) lightTy shadow
