@@ -250,7 +250,7 @@ generateShader prg ty = do
   GL.shaderSourceBS shdr GL.$= shdrSrc
   GL.compileShader shdr
   shaderLog <- GL.get $ GL.shaderInfoLog shdr
-  printShaderSrc shdrSrc
+  -- printShaderSrc shdrSrc
   if null (filter (/= '\0') $ shaderLog)
     then return ()
     else do

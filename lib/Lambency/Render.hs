@@ -96,7 +96,8 @@ lookupLitShader mat light shadowmap = do
   case Map.lookup litHash litShdrs of
     Just s -> return s
     Nothing -> do
-      putStrLn $ "Compiling lit material: " ++ show mat
+      putStrLn $ "Compiling lit material..."
+      -- putStrLn $ "Compiling lit material: " ++ show mat
       shdr <- compileMaterial light mat shadowmap
       addLitShader litHash shdr
       return shdr
@@ -109,7 +110,8 @@ lookupUnlitShader mat = do
   case Map.lookup minimalHash unlitShdrs of
     Just s -> return s
     Nothing -> do
-      putStrLn $ "Compiling unlit material: " ++ show mat
+      putStrLn $ "Compiling unlit material..."
+      -- putStrLn $ "Compiling unlit material: " ++ show mat
       shdr <- compileUnlitMaterial mat
       addUnlitShader minimalHash shdr
       return shdr
