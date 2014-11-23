@@ -56,16 +56,10 @@ data VertexAttributeTy = FloatAttribTy
 
 data VertexAttribute = VertexAttribute Int VertexAttributeTy
 
-getVertexAttributeDimension :: VertexAttribute -> Int
-getVertexAttributeDimension (VertexAttribute x _) = x
-
 getVertexAttributeByteSize :: VertexAttribute -> Int
-getVertexAttributeByteSize x = f x * g x
-  where
-    f = getVertexAttributeDimension
-    g (VertexAttribute _ FloatAttribTy) = 4
-    g (VertexAttribute _ IntAttribTy) = 4
-    g (VertexAttribute _ DoubleAttribTy) = 8
+getVertexAttributeByteSize (VertexAttribute d FloatAttribTy) = 4 * d
+getVertexAttributeByteSize (VertexAttribute d IntAttribTy) = 4 * d
+getVertexAttributeByteSize (VertexAttribute d DoubleAttribTy) = 8 * d
 
 data Vertex2 = Vertex2 !Vec2f deriving (Show, Read, Eq, Ord)
 data Vertex3 = Vertex3 !Vec3f deriving (Show, Read, Eq, Ord)
