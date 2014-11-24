@@ -63,7 +63,7 @@ library
                        OpenGLRaw,
                        JuicyPixels,
                        linear >= 1.13 && < 1.15,
-                       parsec >= 3.1.2,
+                       parsec >= 3.1.7,
                        text,
                        stm >= 2.4,
                        mtl >= 2.1.2,

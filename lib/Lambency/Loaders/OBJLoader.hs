@@ -2,6 +2,8 @@ module Lambency.Loaders.OBJLoader (
   OBJInfo(..),
   getOBJInfo,
 
+  OBJOutput(..),
+
   loadV3,
   loadOV3,
   loadTV3,
@@ -9,7 +11,6 @@ module Lambency.Loaders.OBJLoader (
 ) where
 
 --------------------------------------------------------------------------------
-
 import Lambency.Mesh
 import Lambency.Vertex
 
@@ -59,11 +60,18 @@ data OBJGeometry = OBJGeometry {
 } deriving (Show)
 
 data OBJInfo = OBJInfo {
+  mtlLib :: FilePath,
+  mtlName :: String,
   numVerts :: Int,
   numTexCoords :: Int,
   numNormals :: Int,
   numFaces :: Int
 } deriving (Show, Ord, Eq)
+
+data OBJOutput a = OBJOutput {
+  objMtlLib :: FilePath,
+  objMeshes :: [(String, Mesh a)]
+}
 
 convertNegativeFaces :: OBJInfo -> OBJFace -> OBJFace
 convertNegativeFaces geomLen = map (convertNegativeIndex geomLen)
@@ -72,7 +80,7 @@ convertNegativeFaces geomLen = map (convertNegativeIndex geomLen)
     convert len x
       | x < 0 = len + x + 1
       | otherwise = x
-    
+
     convertNegativeIndex :: OBJInfo -> OBJIndex -> OBJIndex
     convertNegativeIndex info (p, tc, n) =
       (convert (numVerts info) p,
@@ -98,12 +106,6 @@ triangulate fs = let
         _ -> error "Wat"
   in
    concat . concat $ map (flip tglte []) fs
-
-simpleObj2Mesh :: OBJVertexList -> OBJFaceList -> Mesh Vertex3
-simpleObj2Mesh verts faces = Mesh {
-  vertices = map mkVertex3 verts,
-  indices = map (\(x, _, _) -> fromIntegral (x - 1)) $ triangulate faces
-}
 
 mkVec2fLookup :: [Vec2f] -> (Int -> Vec2f)
 mkVec2fLookup vecs = let
@@ -132,8 +134,8 @@ genIdxMap' f (idx : rest) m nVerts =
 genIdxMap :: Vertex a => (OBJIndex -> a) -> OBJIndexList -> Map.Map OBJIndex (Int, a)
 genIdxMap f idxs = genIdxMap' f idxs Map.empty 0
 
-genMesh :: Vertex a => OBJIndexList -> (OBJIndex -> a) -> Mesh a
-genMesh idxs f = let
+genMesh :: Vertex a => (OBJIndex -> a) -> OBJIndexList -> Mesh a
+genMesh f idxs = let
   idxMap = genIdxMap f idxs
   in Mesh {
     vertices = map snd $ sortBy (comparing fst) $ Map.elems idxMap,
@@ -147,9 +149,9 @@ normalObj2Mesh verts normals faces = let
 
   idx2Vertex :: OBJIndex -> OVertex3
   idx2Vertex (x, _, Just n) = mkNormVertex3 (vs x) (ns n)
-  idx2Vertex i = error $ "Ill formatted index: " ++ (show i)
+  idx2Vertex i = error $ "Ill formatted OV3 index: " ++ (show i)
 
-  in genMesh (triangulate faces) idx2Vertex
+  in genMesh idx2Vertex (triangulate faces)
 
 texturedObj2Mesh :: OBJVertexList -> OBJTexCoordList -> OBJFaceList -> Mesh TVertex3
 texturedObj2Mesh verts texcoords faces = let
@@ -158,9 +160,9 @@ texturedObj2Mesh verts texcoords faces = let
 
   idx2Vertex :: OBJIndex -> TVertex3
   idx2Vertex (x, Just tc, _) = mkTexVertex3 (vs x) (tcs tc)
-  idx2Vertex i = error $ "Ill formatted index: " ++ (show i)
+  idx2Vertex i = error $ "Ill formatted TV3 index: " ++ (show i)
 
-  in genMesh (triangulate faces) idx2Vertex
+  in genMesh idx2Vertex (triangulate faces)
 
 normTexturedObj2Mesh :: OBJVertexList -> OBJTexCoordList -> OBJNormalList -> OBJFaceList ->
                         Mesh OTVertex3
@@ -171,13 +173,15 @@ normTexturedObj2Mesh verts texcoords normals faces = let
 
   idx2Vertex :: OBJIndex -> OTVertex3
   idx2Vertex (x, Just tc, Just n) = mkNormTexVertex3 (vs x) (ns n) (tcs tc)
-  idx2Vertex i = error $ "Ill formatted index: " ++ (show i)
+  idx2Vertex i = error $ "Ill formatted OTV3 index: " ++ (show i)
 
-  in genMesh (triangulate faces) idx2Vertex
+  in genMesh idx2Vertex (triangulate faces)
 
 obj2V3Mesh :: OBJGeometry -> Mesh Vertex3
 obj2V3Mesh (OBJGeometry {objVerts=vs, objTexCoords=_, objNormals=_, objFaces=fs}) =
-  simpleObj2Mesh vs fs
+  let vfn = mkVec3fLookup vs
+      idx2Vertex (x, _, _) = mkVertex3 (vfn x)
+  in genMesh idx2Vertex (triangulate fs)
 
 obj2OV3Mesh :: OBJGeometry -> Mesh OVertex3
 obj2OV3Mesh (OBJGeometry {objVerts=vs, objTexCoords=_, objNormals=ns, objFaces = fs})
@@ -202,9 +206,73 @@ data Command = Normal Vec3f
              | Position Vec3f
              | TexCoord Vec2f
              | Face OBJFace
+             | MtlLib FilePath
+             | Group String
+             | MtlName String
              deriving (Show, Eq, Ord)
 
-parseFile :: Parser (OBJGeometry, OBJInfo)
+initialGeom :: OBJGeometry
+initialGeom = OBJGeometry [] [] [] []
+
+initialInfo :: OBJInfo
+initialInfo = OBJInfo "" "" 0 0 0 0
+
+addCommand :: Command -> State.State (OBJInfo, OBJGeometry) [(OBJInfo, OBJGeometry)]
+addCommand (Normal n) = do
+  (info, geom) <- get
+  let newInfo = info { numNormals = numNormals info + 1 }
+      newGeom = geom { objNormals = signorm n : (objNormals geom) }
+  put (newInfo, newGeom)
+  return []
+
+addCommand (Position p) = do
+  (info, geom) <- get
+  let newInfo = info { numVerts = numVerts info + 1 }
+      newGeom = geom { objVerts = p : (objVerts geom) }
+  put (newInfo, newGeom)
+  return []
+
+addCommand (TexCoord tc) = do
+  (info, geom) <- get
+  let newInfo = info { numTexCoords = numTexCoords info + 1 }
+      newGeom = geom { objTexCoords = tc : (objTexCoords geom) }
+  put (newInfo, newGeom)
+  return []
+
+addCommand (Face f) = do
+  (info, geom) <- get
+  let newInfo = info { numFaces = numFaces info + 1 }
+      newGeom = geom { objFaces = convertNegativeFaces info f : (objFaces geom) }
+  put (newInfo, newGeom)
+  return []
+
+addCommand (MtlLib lib) = do
+  (info, geom) <- get
+  let newInfo = info { mtlLib = lib }
+  put (newInfo, geom)
+  return []
+
+addCommand (Group _) = return []
+
+addCommand (MtlName mtl) = do
+  (info, geom) <- get
+  let newInfo = info { mtlName = mtl }
+  case objFaces geom of
+    [] -> put (newInfo, geom) >> return []
+    _ -> do
+      let newGeom = geom { objFaces = [] }
+          newInfo' = newInfo { numFaces = 0 }
+      put (newInfo', newGeom)
+      return [(info, reverseGeometry geom)]
+
+-- addCommand c = error $ "Lambency.Loaders.OBJLoader (addCommand): Unable to handle command " ++ show c
+
+runCommands :: [Command] -> [(OBJInfo, OBJGeometry)]
+runCommands cmds =
+  let (pairs, (lastInfo, lastGeom)) = State.runState (mapM addCommand cmds) (initialInfo, initialGeom)
+  in (lastInfo, reverseGeometry lastGeom) : (concat pairs)
+
+parseFile :: Parser [(OBJInfo, OBJGeometry)]
 parseFile = let
 
   float :: Parser Float
@@ -229,20 +297,18 @@ parseFile = let
   vector3 = V3 <$> float <*> float <*> float
 
   ignoreRestOfLine :: Parser ()
-  ignoreRestOfLine = many (noneOf "\r\n") >> newline >> return ()
+  ignoreRestOfLine = many (noneOf "\r\n") >> endOfLine >> return ()
 
   comment :: Parser ()
   comment = char '#' >> ignoreRestOfLine
 
   -- FIXME -- 
   errata :: Parser ()
-  errata = try (string "mtllib" >> ignoreRestOfLine) <|>
-           try (string "usemtl" >> ignoreRestOfLine) <|>
-           (oneOf "osg" >> ignoreRestOfLine)
+  errata = (oneOf "os" >> ignoreRestOfLine)
 
   blankLine :: Parser ()
-  blankLine = (newline <|>
-               (skipMany1 (tab <|> char ' ') >> newline)) >> return ()
+  blankLine = (endOfLine <|>
+               (skipMany1 (tab <|> char ' ') >> endOfLine)) >> return ()
 
   vert :: Parser Command
   vert = do
@@ -281,8 +347,17 @@ parseFile = let
     _ <- many (noneOf "\r\n")
     return $ Face idxs
 
+  mtllib :: Parser Command
+  mtllib = MtlLib <$> (string "mtllib" >> spaces >> many1 (noneOf " #\n\r\t"))
+
+  usemtl :: Parser Command
+  usemtl = MtlName <$> (string "usemtl" >> spaces >> many1 (noneOf " #\n\r\t"))
+
+  meshGroup :: Parser Command
+  meshGroup = Group <$> (char 'g' >> spaces >> many1 (noneOf " #\n\r\t"))
+
   command :: Parser Command
-  command = vert <|> face
+  command = vert <|> face <|> mtllib <|> usemtl <|> meshGroup
 
   ignorableLines :: Parser ()
   ignorableLines = many (errata <|> comment <|> blankLine) >> return ()
@@ -293,57 +368,55 @@ parseFile = let
     ignorableLines
     return v
 
-  initialGeom = OBJGeometry [] [] [] []
-  initialInfo = OBJInfo 0 0 0 0
-
-  addCommand :: OBJGeometry -> Command -> State.State OBJInfo OBJGeometry
-  addCommand g (Normal n) = do
-    State.modify $ \info -> info { numNormals = numNormals info + 1 }
-    return $ g { objNormals = signorm n : (objNormals g) }
-
-  addCommand g (Position p) = do
-    State.modify $ \info -> info { numVerts = numVerts info + 1 }
-    return $ g { objVerts = p : (objVerts g) }
-
-  addCommand g (TexCoord tc) = do
-    State.modify $ \info -> info { numTexCoords = numTexCoords info + 1 }
-    return $ g { objTexCoords = tc : (objTexCoords g) }
-
-  addCommand g (Face f) = do
-    info <- State.get
-    put $ info { numFaces = numFaces info + 1 }
-    return $ g { objFaces = convertNegativeFaces info f : (objFaces g) }
-
-  runCommands :: [Command] -> State.State OBJInfo OBJGeometry
-  runCommands cmds = reverseGeometry <$> foldM addCommand initialGeom cmds
-
   in do
     ignorableLines
-    vals <- many1 parseLine
+    cmds <- many1 parseLine
     _ <- try (ignorableLines >> eof) >> return ()
-    return $ State.runState (runCommands vals) initialInfo
+    return $ runCommands cmds
 
-parseOBJ :: ((OBJGeometry, OBJInfo) -> a) -> FilePath -> IO a
+parseOBJ :: ([(OBJInfo, OBJGeometry)] -> a) -> FilePath -> IO a
 parseOBJ fn filepath = do
   s <- readFile filepath
   case parse parseFile filepath (pack s) of
     Left x -> error $ show x
-    Right x -> return $ fn x
+    Right [] -> error "Lambency.Loaders.OBJLoader (parseOBJ): OBJ file had no meshes!"
+    Right xs -> return $ fn xs
 
-getOBJInfo :: FilePath -> IO (OBJInfo)
-getOBJInfo = parseOBJ snd
+getOBJInfo :: FilePath -> IO OBJInfo
+getOBJInfo fp = do
+  infos <- parseOBJ (map fst) fp
+  case infos of
+    [] -> return initialInfo
+    x:_ -> return x
 
-loadOBJ :: Vertex a => (OBJGeometry -> Mesh a) -> FilePath -> IO (Mesh a)
-loadOBJ gen = liftM gen . parseOBJ fst
+genOutput :: (OBJGeometry -> Mesh a) -> [(OBJInfo, OBJGeometry)] -> OBJOutput a
+genOutput _ [] = OBJOutput "" []
+genOutput fn o@((info', _):_) =
+  let mtllib = mtlLib info'
 
-loadV3 :: FilePath -> IO (Mesh Vertex3)
+      pruneOutput (info, _) = mtlLib info /= mtllib
+
+      addMesh (info, geom) = (mtlName info, fn geom)
+
+      addOutput [] result = result
+      addOutput (x : rest) result =
+        if pruneOutput x
+        then addOutput rest result
+        else addOutput rest (addMesh x : result)
+
+  in OBJOutput mtllib (addOutput o [])
+
+loadOBJ :: Vertex a => (OBJGeometry -> Mesh a) -> FilePath -> IO (OBJOutput a)
+loadOBJ gen = parseOBJ (genOutput gen)
+
+loadV3 :: FilePath -> IO (OBJOutput Vertex3)
 loadV3 = loadOBJ obj2V3Mesh
 
-loadOV3 :: FilePath -> IO (Mesh OVertex3)
+loadOV3 :: FilePath -> IO (OBJOutput OVertex3)
 loadOV3 = loadOBJ obj2OV3Mesh
 
-loadTV3 :: FilePath -> IO (Mesh TVertex3)
+loadTV3 :: FilePath -> IO (OBJOutput TVertex3)
 loadTV3 = loadOBJ obj2TV3Mesh
 
-loadOTV3 :: FilePath -> IO (Mesh OTVertex3)
+loadOTV3 :: FilePath -> IO (OBJOutput OTVertex3)
 loadOTV3 = loadOBJ obj2OTV3Mesh

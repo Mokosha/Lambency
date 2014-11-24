@@ -6,6 +6,7 @@ import qualified Control.Wire as W
 
 import Control.Monad.Writer
 
+import Data.Traversable (sequenceA)
 import Data.List (intercalate)
 
 import qualified Graphics.UI.GLFW as GLFW
@@ -13,7 +14,7 @@ import qualified Graphics.UI.GLFW as GLFW
 import FRP.Netwire.Input
 
 import qualified Lambency as L
-import Linear
+import Linear hiding (trace)
 
 import System.Directory (doesFileExist)
 import System.Environment
@@ -37,32 +38,33 @@ wireframeToggle = (keyDebounced GLFW.Key'W W.>>> toggleWireframe True) W.<|> W.m
       tell [L.WireframeAction wireframe]
       return (Right x, toggleWireframe $ not wireframe)
 
-mkOBJ :: FilePath -> IO (L.RenderObject)
+mkOBJ :: FilePath -> IO [L.RenderObject]
 mkOBJ objfile = do
   exists <- doesFileExist objfile
   if not exists then error ("OBJ file " ++ objfile ++ " not found") else return ()
   objInfo <- L.getOBJInfo objfile
   let material = L.diffuseColoredMaterial $ V3 0.26 0.5 0.26
   case objInfo of
-    (L.OBJInfo _ 0 0 _) -> do
-      mesh <- L.genTexCoords . L.genNormalsV3 <$> L.loadV3 objfile
-      L.createRenderObject mesh material
-    (L.OBJInfo _ _ 0 _) -> do
-      mesh <- L.genNormalsTV3 <$> L.loadTV3 objfile
-      L.createRenderObject mesh material
-    (L.OBJInfo _ 0 _ _) -> do
-      mesh <- L.genTexCoords <$> L.loadOV3 objfile
-      L.createRenderObject mesh material
+    L.OBJInfo _ _ _ 0 0 _ -> do
+      meshes <- fmap (L.genTexCoords . L.genNormalsV3) <$> L.loadV3 objfile
+      mapM (flip L.createRenderObject material) meshes
+    L.OBJInfo _ _ _ _ 0 _ -> do
+      meshes <- fmap L.genNormalsTV3 <$> L.loadTV3 objfile
+      mapM (flip L.createRenderObject material) meshes
+    L.OBJInfo _ _ _ 0 _ _-> do
+      meshes <- fmap L.genTexCoords <$> L.loadOV3 objfile
+      mapM (flip L.createRenderObject material) meshes
     _ -> do
-      mesh <- L.loadOTV3 objfile
-      L.createRenderObject mesh material
+      meshes <- L.loadOTV3 objfile
+      mapM (flip L.createRenderObject material) meshes
 
-controlWire :: L.RenderObject -> L.GameWire a a
-controlWire ro = L.mkObject ro (pure L.identity) W.>>> wireframeToggle
+controlWire :: [L.RenderObject] -> L.GameWire a [a]
+controlWire ros = sequenceA $ (\ro -> L.mkObject ro (pure L.identity) W.>>> wireframeToggle) <$> ros
 
 loadGame :: FilePath -> IO (L.Game ())
 loadGame objfile = do
   obj <- mkOBJ objfile
+  putStrLn $ "OBJ contained " ++ (show $ length obj) ++ " meshes."
   let lightPos = 10 *^ (V3 0 1 (-1))
       lightParams = L.mkLightParams (V3 0.5 0.5 0.5) (V3 1.0 1.0 1.0) 1.0
       light = L.spotlight lightParams lightPos (negate lightPos) (pi/2)
@@ -70,7 +72,7 @@ loadGame objfile = do
                     L.staticGeometry = [],
                     L.mainCamera = cam,
                     L.dynamicLights = [],
-                    L.gameLogic = controlWire obj W.>>> (L.quitWire GLFW.Key'Q) }
+                    L.gameLogic = controlWire obj W.>>> (L.quitWire GLFW.Key'Q) W.>>> pure () }
 
 handleArgs :: [FilePath] -> Either String FilePath
 handleArgs [] = Left "Usage: lobjview OBJFILE"

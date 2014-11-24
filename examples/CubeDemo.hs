@@ -1,7 +1,10 @@
 module Main (main) where
 
 --------------------------------------------------------------------------------
+import Control.Applicative
 import Control.Monad.Reader
+
+import Data.Traversable (sequenceA)
 
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Lambency as L
@@ -37,11 +40,11 @@ mkPlane = do
                 L.translate (V3 0 (-2) 0) $
                 L.identity
 
-mkBunny:: IO (L.Transform, L.RenderObject)
+mkBunny:: IO [(L.Transform, L.RenderObject)]
 mkBunny = do
-  mesh <- getDataFileName ("examples" </> "bunnyN" <.> "obj") >>= L.loadOTV3
-  ro <- L.createRenderObject mesh (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
-  return (xform, ro)
+  meshes <- getDataFileName ("examples" </> "bunnyN" <.> "obj") >>= L.loadOTV3
+  ros <- mapM (flip L.createRenderObject (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)) meshes
+  return $ (\ro -> (xform, ro)) <$> ros
   where xform = L.rotate (Quat.axisAngle (V3 0 1 0) pi) $
                 L.translate (V3 (-4) (-4.8) (-5)) $
                 L.identity
@@ -50,9 +53,12 @@ cubeWire :: IO (L.GameWire () ())
 cubeWire = do
   sound <- getDataFileName ("examples" </> "stereol" <.> "wav") >>= L.loadSound
   (Just tex) <- getDataFileName ("examples" </> "crate" <.> "png") >>= L.loadTexture
-  mesh <- getDataFileName ("examples" </> "cube" <.> "obj") >>= L.loadOTV3
-  ro <- L.createRenderObject mesh (L.diffuseTexturedMaterial tex)
-  return $ playSound sound 3.0 W.>>> (L.mkObject ro (rotate initial))
+  meshes <- getDataFileName ("examples" </> "cube" <.> "obj") >>= L.loadOTV3
+  ros <- mapM (flip L.createRenderObject (L.diffuseTexturedMaterial tex)) meshes
+  return $
+    playSound sound 3.0 W.>>>
+    (sequenceA $ (\ro -> L.mkObject ro (rotate initial)) <$> ros) W.>>>
+    (pure ())
   where
     playSound :: L.Sound -> Float -> L.GameWire a a
     playSound sound p = L.pulseSound sound W.>>> (W.for p) W.-->
@@ -103,7 +109,7 @@ loadGame = do
       lightParams = L.mkLightParams (V3 0.15 0.15 0.15) (V3 1.0 1.0 1.0) 1.0
   shadowLight <- L.addShadowMap $ L.spotlight lightParams lightPos (negate lightPos) (pi/4)
   return $ L.Game { L.staticLights = [],
-                    L.staticGeometry = [plane, bunny],
+                    L.staticGeometry = plane : bunny,
                     L.mainCamera = demoCam,
                     L.dynamicLights = [lightWire shadowLight],
                     L.gameLogic = gameWire}
