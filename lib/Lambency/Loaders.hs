@@ -13,13 +13,18 @@ import Control.Applicative
 import Control.Monad
 
 import Lambency.Mesh
+import Lambency.Types
 import Lambency.Vertex
 
 import qualified Lambency.Loaders.OBJLoader as OBJ
+import qualified Lambency.Loaders.MTLLoader as MTL
 --------------------------------------------------------------------------------
 
 getOBJMeshes :: OBJ.OBJOutput a -> [Mesh a]
 getOBJMeshes (OBJ.OBJOutput _ ms) = snd <$> ms
+
+loadOBJ :: FilePath -> IO (RenderObject)
+loadOBJ fp = print fp
 
 loadV3 :: FilePath -> IO [Mesh Vertex3]
 loadV3 = liftM getOBJMeshes . OBJ.loadV3
