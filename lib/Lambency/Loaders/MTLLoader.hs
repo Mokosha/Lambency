@@ -287,7 +287,7 @@ finishLine = many (whitespace <|> comment) >> endMarker >> return ()
     comment = char '#' >> manyTill anyChar (try $ lookAhead endMarker) >> return '_'
 
 parseTexOpts :: Parser [TextureInfoCommand]
-parseTexOpts = many texOpt
+parseTexOpts = many $ try texOpt
   where
 
     parseBoolOpt :: String -> Parser Bool
