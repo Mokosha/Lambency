@@ -13,11 +13,10 @@ import Data.Text (pack)
 import qualified Lambency.Material as L
 import qualified Lambency.Types as L
 
-import Linear
+import Linear hiding (trace)
 
 import Text.Parsec
 import Text.Parsec.Text (Parser)
-
 --------------------------------------------------------------------------------
 
 type Vec2f = V2 Float
@@ -232,53 +231,46 @@ data TextureInfoCommand
   | TextureInfoCommand'ReflectionType ReflectionType
     deriving (Show, Eq, Ord)
 
-finishLine :: Parser ()
-finishLine = many (space <|> comment) >> endOfLine >> return ()
-  where
-    comment :: Parser Char
-    comment = char '#' >> manyTill anyChar endOfLine >> return '_'
+whitespace :: Parser Char
+whitespace = tab <|> char ' '
 
-parseReflectionType :: Parser ReflectionType
-parseReflectionType = do
-  _ <- spaces >> string "-type"
-  spaces >>
-    ((string "sphere" >> return ReflectionType'Sphere) <|>
-     (string "cube_top" >> return ReflectionType'CubeTop) <|>
-     (string "cube_bottom" >> return ReflectionType'CubeBottom) <|>
-     (string "cube_front" >> return ReflectionType'CubeFront) <|>
-     (string "cube_back" >> return ReflectionType'CubeBack) <|>
-     (string "cube_left" >> return ReflectionType'CubeLeft) <|>
-     (string "cube_right" >> return ReflectionType'CubeRight))
+whitespaces :: Parser [Char]
+whitespaces = many whitespace
+
+finishLine :: Parser ()
+finishLine = many (whitespace <|> comment) >> endMarker >> return ()
+  where
+    endMarker = endOfLine
+    
+    comment :: Parser Char
+    comment = char '#' >> manyTill anyChar (try $ lookAhead endMarker) >> return '_'
 
 parseTexOpts :: Parser [TextureInfoCommand]
 parseTexOpts = many texOpt
   where
 
     parseBoolOpt :: String -> Parser Bool
-    parseBoolOpt s = spaces >> char '-' >> string s >> spaces >>
+    parseBoolOpt s = try $ whitespaces >> char '-' >> string s >> whitespaces >>
                      ((string "on" >> return True) <|> (string "off" >> return False))
 
     parsePartialV3Opt :: Char -> Parser Vec3f
-    parsePartialV3Opt c = do
-      _ <- spaces >> char '-' >> char c
+    parsePartialV3Opt c = try $ whitespaces >> char '-' >> char c >> (do
       x <- float
       y <- option x float
       z <- option x float
-      return $ V3 x y z
+      return $ V3 x y z)
 
     parseFloatOpt :: String -> Parser Float
-    parseFloatOpt s = spaces >> char '-' >> string s >> float
+    parseFloatOpt s = try $ whitespaces >> char '-' >> string s >> float
 
     parseValueRange :: Parser (Float, Float)
-    parseValueRange = do
-      _ <- spaces >> string "-mm"
+    parseValueRange = try $ whitespaces >> string "-mm" >> (do
       base <- float
       gain <- float
-      return (base, gain)
+      return (base, gain))
 
     parseBumpChannel :: Parser ColorChannel
-    parseBumpChannel = do
-      _ <- spaces >> string "-imfchan"
+    parseBumpChannel = try $ whitespaces >> string "-imfchan" >>
       ((char 'r' >> return ColorChannel'Red) <|>
        (char 'g' >> return ColorChannel'Green) <|>
        (char 'b' >> return ColorChannel'Blue) <|>
@@ -286,27 +278,37 @@ parseTexOpts = many texOpt
        (char 'l' >> return ColorChannel'Luma) <|>
        (char 'z' >> return ColorChannel'Depth))
 
+    parseReflectionType :: Parser ReflectionType
+    parseReflectionType = try $ whitespaces >> string "-type" >> whitespaces >>
+      ((string "sphere" >> return ReflectionType'Sphere) <|>
+       (string "cube_top" >> return ReflectionType'CubeTop) <|>
+       (string "cube_bottom" >> return ReflectionType'CubeBottom) <|>
+       (string "cube_front" >> return ReflectionType'CubeFront) <|>
+       (string "cube_back" >> return ReflectionType'CubeBack) <|>
+       (string "cube_left" >> return ReflectionType'CubeLeft) <|>
+       (string "cube_right" >> return ReflectionType'CubeRight))
+
     texOpt :: Parser TextureInfoCommand
-    texOpt = finishLine >>
-      ((TextureInfoCommand'HorizBlend <$> parseBoolOpt "blendu") <|>
-       (TextureInfoCommand'VertBlend <$> parseBoolOpt "blendv") <|>
-       (TextureInfoCommand'ClampUV <$> parseBoolOpt "clamp") <|>
-       (TextureInfoCommand'ColorCorrection <$> parseBoolOpt "cc") <|>
+    texOpt =
+      (TextureInfoCommand'HorizBlend <$> parseBoolOpt "blendu")
+      <|> (TextureInfoCommand'VertBlend <$> parseBoolOpt "blendv")
+      <|> (TextureInfoCommand'ClampUV <$> parseBoolOpt "clamp")
+      <|> (TextureInfoCommand'ColorCorrection <$> parseBoolOpt "cc")
 
-       (TextureInfoCommand'Translate <$> parsePartialV3Opt 'o') <|>
-       (TextureInfoCommand'Scale <$> parsePartialV3Opt 's') <|>
-       (TextureInfoCommand'Turbulence <$> parsePartialV3Opt 't') <|>
+      <|> (TextureInfoCommand'Translate <$> parsePartialV3Opt 'o')
+      <|> (TextureInfoCommand'Scale <$> parsePartialV3Opt 's')
+      <|> (TextureInfoCommand'Turbulence <$> parsePartialV3Opt 't')
 
-       (TextureInfoCommand'BumpMultiplier <$> parseFloatOpt "bm") <|>
+      <|> (TextureInfoCommand'BumpMultiplier <$> parseFloatOpt "bm")
 
-       (TextureInfoCommand'ValueRange <$> parseValueRange) <|>
+      <|> (TextureInfoCommand'ValueRange <$> parseValueRange)
 
-       (TextureInfoCommand'ReflectionType <$> parseReflectionType) <|>
+      <|> (TextureInfoCommand'ReflectionType <$> parseReflectionType)
 
-       (TextureInfoCommand'ChannelRestriction <$> parseBumpChannel) <|>
+      <|> (TextureInfoCommand'ChannelRestriction <$> parseBumpChannel)
 
-       (spaces >> string "-texres" >> float >>=
-        (\x -> error "Lambency.Loaders.MTLLoader (parseTexOpts): Unsupported token (texres)")))
+      <|> (try $ string "-texres" >> float >>=
+           (\x -> error $ "Lambency.Loaders.MTLLoader (parseTexOpts): Unsupported token (texres)" ++ show x))
 
 handleTexInfo :: [TextureInfoCommand] -> TextureInfo
 handleTexInfo =
@@ -393,40 +395,41 @@ constructMaterial name illumCmds = foldr handleTexMapCmd illumMtl
     handleTexMapCmd (TextureMapCommand'Bump x) mtl = mtl { textureMaps = x : (textureMaps mtl) }
 
 parseFile :: Parser [MTL]
-parseFile = many material
+parseFile = many material >>= (\x -> many finishLine >> eof >> return x)
   where
     readReflectance :: String -> Parser (V3 Float)
-    readReflectance s = spaces >> string s >> vector3
+    readReflectance s = try $ whitespaces >> string s >> vector3
 
     parseFloatCmd :: String -> Parser Float
-    parseFloatCmd s = spaces >> string s >> float
+    parseFloatCmd s = try $ whitespaces >> string s >> float
 
     parseDissolve :: Parser DissolveInfo
-    parseDissolve = do
-      _ <- spaces >> char 'd'
-      isHalo <- spaces >> ((string "-halo" >> return True) <|> return False)
+    parseDissolve = try $ do
+      _ <- whitespaces >> char 'd'
+      isHalo <- whitespaces >> ((string "-halo" >> return True) <|> return False)
       val <- float
       return $ DissolveInfo isHalo val
 
     illum :: Parser IllumCommand
-    illum = finishLine >>
-      ((IllumCommand'AmbientReflectivity <$> (readReflectance "Ka")) <|>
-       (IllumCommand'DiffuseReflectivity <$> (readReflectance "Kd")) <|>
-       (IllumCommand'SpecularReflectivity <$> (readReflectance "Ks")) <|>
-       (IllumCommand'Emissive <$> (readReflectance "Ke")) <|>
-       (IllumCommand'Transferrence <$> (readReflectance "Tf")) <|>
-       (IllumCommand'Dissolve <$> parseDissolve) <|>
-       (IllumCommand'Mode . toEnum . round <$> parseFloatCmd "illum") <|>
-       (IllumCommand'SpecularExponent <$> parseFloatCmd "Ns") <|>
-       (IllumCommand'Sharpness <$> parseFloatCmd "sharpness") <|>
-       (IllumCommand'IndexOfRefraction <$> parseFloatCmd "Ni"))
+    illum =
+      (IllumCommand'AmbientReflectivity <$> (readReflectance "Ka")) <|>
+      (IllumCommand'DiffuseReflectivity <$> (readReflectance "Kd")) <|>
+      (IllumCommand'SpecularReflectivity <$> (readReflectance "Ks")) <|>
+      (IllumCommand'Emissive <$> (readReflectance "Ke")) <|>
+      (IllumCommand'Transferrence <$> (readReflectance "Tf")) <|>
+      (IllumCommand'Dissolve <$> parseDissolve) <|>
+      (IllumCommand'Dissolve . DissolveInfo False . (1.0 -) <$> parseFloatCmd "Tr") <|>
+      (IllumCommand'Mode . toEnum . round <$> parseFloatCmd "illum") <|>
+      (IllumCommand'SpecularExponent <$> parseFloatCmd "Ns") <|>
+      (IllumCommand'Sharpness <$> parseFloatCmd "sharpness") <|>
+      (IllumCommand'IndexOfRefraction <$> parseFloatCmd "Ni")
 
     parseIllum :: Parser [IllumCommand]
-    parseIllum = many illum
+    parseIllum = many $ illum >>= (\x -> finishLine >> return x)
 
     colorMap :: String -> Parser (FilePath, TextureMap)
-    colorMap n = do
-      infoCmds <- spaces >> string n >> parseTexOpts
+    colorMap n = try $ do
+      infoCmds <- whitespaces >> string n >> parseTexOpts
       let isColorCorrection (TextureInfoCommand'ColorCorrection _) = True
           isColorCorrection _ = False
 
@@ -437,12 +440,12 @@ parseFile = many material
 
           revisedInfoCmds = filter (not . isColorCorrection) infoCmds
 
-      filename <- manyTill anyChar endOfLine
-      return (filename, ColorMap (handleTexInfo revisedInfoCmds) correction)
+      filename <- whitespaces >> manyTill anyChar (try $ lookAhead space)
+      return $ (filename, ColorMap (handleTexInfo revisedInfoCmds) correction)
 
     reflectionMap :: Parser (FilePath, TextureMap)
-    reflectionMap = do
-      infoCmds <- spaces >> string "refl" >> parseTexOpts
+    reflectionMap = try $ do
+      infoCmds <- whitespaces >> string "refl" >> parseTexOpts
       let isReflectionType (TextureInfoCommand'ReflectionType _) = True
           isReflectionType _ = False
 
@@ -462,12 +465,12 @@ parseFile = many material
           revisedInfoCmds = filter (not . isReflectionType) $
                             filter (not . isColorCorrection) infoCmds
 
-      filename <- manyTill anyChar endOfLine
+      filename <- manyTill anyChar (try $ lookAhead space)
       return (filename, ReflectionMap (handleTexInfo revisedInfoCmds) correction refl)
 
     bumpMap :: Parser (FilePath, TextureMap)
-    bumpMap = do
-      infoCmds <- spaces >> string "bump" >> parseTexOpts
+    bumpMap = try $ do
+      infoCmds <- whitespaces >> string "bump" >> parseTexOpts
       let isBumpMultiplier (TextureInfoCommand'BumpMultiplier _) = True
           isBumpMultiplier _ = False
 
@@ -477,23 +480,23 @@ parseFile = many material
               _ -> 1.0
 
           revisedInfoCmds = filter (not . isBumpMultiplier) infoCmds
-      filename <- manyTill anyChar endOfLine
+      filename <- manyTill anyChar (try $ lookAhead space)
       return (filename, BumpMap (handleTexInfo revisedInfoCmds) bumpMultiplier)
 
     decalMap :: Parser (FilePath, TextureMap)
-    decalMap = do
-      texture <- DecalMap . handleTexInfo <$> (spaces >> string "decal" >> parseTexOpts)
-      filename <- manyTill anyChar endOfLine
+    decalMap = try $ do
+      texture <- DecalMap . handleTexInfo <$> (whitespaces >> string "decal" >> parseTexOpts)
+      filename <- manyTill anyChar (try $ lookAhead space)
       return (filename, texture)
 
     dispMap :: Parser (FilePath, TextureMap)
-    dispMap = do
-      texture <- DisplacementMap . handleTexInfo <$> (spaces >> string "disp" >> parseTexOpts)
-      filename <- manyTill anyChar endOfLine
+    dispMap = try $ do
+      texture <- DisplacementMap . handleTexInfo <$> (whitespaces >> string "disp" >> parseTexOpts)
+      filename <- manyTill anyChar (try $ lookAhead space)
       return (filename, texture)
 
     texMap :: Parser TextureMapCommand
-    texMap = finishLine >> (
+    texMap =
       (TextureMapCommand'Ambient <$> colorMap "map_Ka") <|>
       (TextureMapCommand'Diffuse <$> colorMap "map_Kd") <|>
       (TextureMapCommand'Specular <$> colorMap "map_Ks") <|>
@@ -502,17 +505,16 @@ parseFile = many material
       (TextureMapCommand'Reflection  <$> reflectionMap) <|>
       (TextureMapCommand'Decal <$> decalMap) <|>
       (TextureMapCommand'Disp <$> dispMap) <|>
-      (TextureMapCommand'Bump <$> bumpMap))
+      (TextureMapCommand'Bump <$> bumpMap)
 
     parseTexMaps :: Parser [TextureMapCommand]
-    parseTexMaps = many texMap
+    parseTexMaps = many $ texMap >>= (\x -> finishLine >> return x)
 
     material :: Parser MTL
-    material = do
-      name <- many finishLine >> string "newmtl" >> spaces >> manyTill anyChar finishLine
+    material = try $ do
+      name <- many finishLine >> string "newmtl" >> whitespaces >> manyTill anyChar (try finishLine)
       illumCmds <- parseIllum
       texMapCmds <- parseTexMaps
-
       return $ constructMaterial name illumCmds texMapCmds
 
 parseMTL :: FilePath -> IO [MTL]
@@ -523,4 +525,6 @@ parseMTL filepath = do
     Right x -> return $ x
 
 loadMTL :: FilePath -> IO ()
-loadMTL fp = print =<< parseMTL fp
+loadMTL fp = do
+  putStrLn $ "Loading MTL: " ++ fp
+  parseMTL fp >>= print
