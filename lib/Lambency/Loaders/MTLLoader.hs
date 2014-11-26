@@ -511,7 +511,7 @@ parseFile = many material >>= (\x -> many finishLine >> eof >> return x)
 
     bumpMap :: Parser (FilePath, TextureMap)
     bumpMap = try $ do
-      infoCmds <- whitespaces >> string "bump" >> parseTexOpts
+      infoCmds <- whitespaces >> (string "bump" <|> string "map_bump") >> parseTexOpts
       let isBumpMultiplier (TextureInfoCommand'BumpMultiplier _) = True
           isBumpMultiplier _ = False
 
