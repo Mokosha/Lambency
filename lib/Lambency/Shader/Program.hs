@@ -184,6 +184,23 @@ addVertexOutputs = zipWith setCopyStmt
     setCopyStmt :: ShaderVarRep -> ShaderVarRep -> Statement
     setCopyStmt new old = Assignment new (VarExpr old)
 
+removeUnusedStmts :: [ShaderVarRep] -> [Statement] -> [Statement]
+removeUnusedStmts _ [] = []
+removeUnusedStmts [] s = s
+removeUnusedStmts (v:vars) stmts = removeUnusedStmts vars $ removeUnusedVar v stmts
+  where
+    removeUnusedVar :: ShaderVarRep -> [Statement] -> [Statement]
+    removeUnusedVar _ [] = []
+    removeUnusedVar v (s@(LocalDecl v' _) : stmts)
+      | v == v' = removeUnusedVar v stmts
+      | otherwise = s : removeUnusedVar v stmts
+    removeUnusedVar v (s@(Assignment v' _) : stmts)
+      | v == v' = removeUnusedVar v stmts
+      | otherwise = s : removeUnusedVar v stmts
+    removeUnusedVar v (s@(SpecialAssignment _ _) : stmts) = s : removeUnusedVar v stmts
+    removeUnusedVar v ((IfThenElse e s1 s2) : stmts) =
+      (IfThenElse e (removeUnusedVar v s1) (removeUnusedVar v s2)) : removeUnusedVar v stmts
+
 compileProgram :: ShaderCode -> ShaderCode -> Shader
 compileProgram (ShdrCode vertexPrg) (ShdrCode fragmentPrg) =
   let Just (vs_output, varID, (vs_decls, vs_stmts)) = runRWST
@@ -216,10 +233,14 @@ compileProgram (ShdrCode vertexPrg) (ShdrCode fragmentPrg) =
                                                   (fs_input, FragmentShaderTy)
                                                   (varID + length fs_input_vars)
 
-      final_vs_stmts = extra_vs_stmts ++ updateStmts vs_stmts vs_output
       final_fs_stmts = updateStmts fs_stmts fs_output
 
-      varyingDecls = map Varying $ filter (flip isShaderVarUsed final_fs_stmts) fs_input_vars
+      used_fs_inputs = filter (flip isShaderVarUsed final_fs_stmts) fs_input_vars
+      unused_fs_inputs = filter (not . flip isShaderVarUsed final_fs_stmts) fs_input_vars
+
+      final_vs_stmts = removeUnusedStmts unused_fs_inputs $ extra_vs_stmts ++ updateStmts vs_stmts vs_output
+
+      varyingDecls = map Varying used_fs_inputs
       -- attribDecls = map Attribute $ filter (flip isShaderVarUsed final_vs_stmts) vs_input_vars
   in
    Shader {
