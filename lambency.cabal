@@ -41,6 +41,7 @@ library
                        Lambency.Loaders
                        Lambency.Loaders.OBJLoader
                        Lambency.Loaders.MTLLoader
+                       Lambency.Loaders.Utils
 
                        Lambency.Shader
                        Lambency.Shader.Base

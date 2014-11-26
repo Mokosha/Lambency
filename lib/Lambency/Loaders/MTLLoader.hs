@@ -15,6 +15,8 @@ import qualified Lambency.Texture as L
 import qualified Lambency.Material as L
 import qualified Lambency.Types as L
 
+import Lambency.Loaders.Utils
+
 import Linear hiding (trace)
 
 import System.FilePath
@@ -22,8 +24,6 @@ import System.FilePath
 import Text.Parsec
 import Text.Parsec.Text (Parser)
 --------------------------------------------------------------------------------
-
-type Vec3f = V3 Float
 
 {--
   Ft Fresnel reflectance
@@ -230,23 +230,6 @@ mkMaterial baseDir mtl = do
 
 ----------------------------------------------------------------------
 -- Parser
-
-float :: Parser Float
-float = do
-  spaces
-  sign <- option 1 $ (\s -> if s == '-' then (-1.0) else 1.0) <$> oneOf "+-"
-  t <- option "0" $ many digit
-  _ <- if t == [] then (char '.') else ((try $ char '.') <|> (return ' '))
-  d <- option "0" $ many1 digit
-  let
-    denom :: Float
-    denom = if d == "0" then 1.0 else (fromIntegral $ length d)
-  e <- option "0" $ char 'e' >> (many1 digit)
-
-  return $ ((read t) + ((read d) / (10 ** denom))) * (10 ** (read e)) * sign
-
-vector3 :: Parser Vec3f
-vector3 = V3 <$> float <*> float <*> float
 
 data IllumCommand
   = IllumCommand'AmbientReflectivity (V3 Float)
