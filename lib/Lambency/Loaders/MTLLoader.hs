@@ -506,7 +506,7 @@ parseFile = many material >>= (\x -> many finishLine >> eof >> return x)
           revisedInfoCmds = filter (not . isReflectionType) $
                             filter (not . isColorCorrection) infoCmds
 
-      filename <- manyTill anyChar (try $ lookAhead space)
+      filename <- whitespaces >> manyTill anyChar (try $ lookAhead space)
       return (filename, ReflectionMap (handleTexInfo revisedInfoCmds) correction refl)
 
     bumpMap :: Parser (FilePath, TextureMap)
@@ -521,19 +521,19 @@ parseFile = many material >>= (\x -> many finishLine >> eof >> return x)
               _ -> 1.0
 
           revisedInfoCmds = filter (not . isBumpMultiplier) infoCmds
-      filename <- manyTill anyChar (try $ lookAhead space)
+      filename <- whitespaces >> manyTill anyChar (try $ lookAhead space)
       return (filename, BumpMap (handleTexInfo revisedInfoCmds) bumpMultiplier)
 
     decalMap :: Parser (FilePath, TextureMap)
     decalMap = try $ do
       texture <- DecalMap . handleTexInfo <$> (whitespaces >> string "decal" >> parseTexOpts)
-      filename <- manyTill anyChar (try $ lookAhead space)
+      filename <- whitespaces >> manyTill anyChar (try $ lookAhead space)
       return (filename, texture)
 
     dispMap :: Parser (FilePath, TextureMap)
     dispMap = try $ do
       texture <- DisplacementMap . handleTexInfo <$> (whitespaces >> string "disp" >> parseTexOpts)
-      filename <- manyTill anyChar (try $ lookAhead space)
+      filename <- whitespaces >> manyTill anyChar (try $ lookAhead space)
       return (filename, texture)
 
     texMap :: Parser TextureMapCommand
