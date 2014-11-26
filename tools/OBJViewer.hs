@@ -40,16 +40,25 @@ wireframeToggle = (keyDebounced GLFW.Key'W W.>>> toggleWireframe True) W.<|> W.m
 controlWire :: [L.RenderObject] -> L.GameWire a [a]
 controlWire ros = sequenceA $ (\ro -> L.mkObject ro (pure L.identity) W.>>> wireframeToggle) <$> ros
 
+camLight :: L.GameWire L.Camera L.Light
+camLight = W.mkSF_ $ \c ->
+  let dir = L.getCamDir c
+      up = L.getCamUp c
+      right = dir `cross` up
+
+      lightParams = L.mkLightParams (V3 0.5 0.5 0.5) (V3 1.0 1.0 1.0) 1.0
+      lightDir = negate $ signorm $ right ^+^ up
+
+  in L.dirlight lightParams lightDir
+
 loadGame :: FilePath -> IO (L.Game ())
 loadGame objfile = do
   obj <- L.loadOBJWithDefaultMaterial objfile $ Just (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
   putStrLn $ "OBJ contained " ++ (show $ length obj) ++ " meshes."
-  let lightParams = L.mkLightParams (V3 0.5 0.5 0.5) (V3 1.0 1.0 1.0) 1.0
-      light = L.dirlight lightParams (V3 0 (-1) 1)
-  return $ L.Game { L.staticLights = [light],
+  return $ L.Game { L.staticLights = [],
                     L.staticGeometry = [],
                     L.mainCamera = cam,
-                    L.dynamicLights = [],
+                    L.dynamicLights = [cam W.>>> camLight],
                     L.gameLogic = controlWire obj W.>>> (L.quitWire GLFW.Key'Q) W.>>> pure () }
 
 handleArgs :: [FilePath] -> Either String FilePath
