@@ -110,8 +110,8 @@ shinyTexturedMaterial tex =
 diffuseTexturedMaterial :: Texture -> Material
 diffuseTexturedMaterial tex =
   defaultBlinnPhong { diffuseMap = updateMaterialVarTex tex $ diffuseMap defaultBlinnPhong,
-                      specularExponent =
-                        let MaterialVar (name, _) = specularExponent defaultBlinnPhong
+                      specularReflectivity =
+                        let MaterialVar (name, _) = specularReflectivity defaultBlinnPhong
                         in MaterialVar (name, Nothing)}
 
 shinyColoredMaterial :: V3 Float -> Material
@@ -121,8 +121,8 @@ shinyColoredMaterial color =
 diffuseColoredMaterial :: V3 Float -> Material
 diffuseColoredMaterial color =
   defaultBlinnPhong { diffuseReflectivity = updateMaterialVar3vf color $ diffuseReflectivity defaultBlinnPhong,
-                      specularExponent =
-                        let MaterialVar (name, _) = specularExponent defaultBlinnPhong
+                      specularReflectivity =
+                        let MaterialVar (name, _) = specularReflectivity defaultBlinnPhong
                         in MaterialVar (name, Nothing) }
 
 maskedSpriteMaterial :: Texture -> Material

@@ -11,7 +11,8 @@ module Lambency (
   Mesh,
   genNormalsV3,
   genNormalsTV3,
-  genTexCoords,
+  genTexCoordsV3,
+  genTexCoordsOV3,
   triangle, cube, plane, quad,
 
   module Lambency.Render,

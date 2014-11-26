@@ -16,7 +16,6 @@ import FRP.Netwire.Input
 import qualified Lambency as L
 import Linear hiding (trace)
 
-import System.Directory (doesFileExist)
 import System.Environment
 ---------------------------------------------------------------------------------
 
@@ -38,36 +37,15 @@ wireframeToggle = (keyDebounced GLFW.Key'W W.>>> toggleWireframe True) W.<|> W.m
       tell [L.WireframeAction wireframe]
       return (Right x, toggleWireframe $ not wireframe)
 
-mkOBJ :: FilePath -> IO [L.RenderObject]
-mkOBJ objfile = do
-  exists <- doesFileExist objfile
-  if not exists then error ("OBJ file " ++ objfile ++ " not found") else return ()
-  objInfo <- L.getOBJInfo objfile
-  let material = L.diffuseColoredMaterial $ V3 0.26 0.5 0.26
-  case objInfo of
-    L.OBJInfo _ _ _ 0 0 _ -> do
-      meshes <- fmap (L.genTexCoords . L.genNormalsV3) <$> L.loadV3 objfile
-      mapM (flip L.createRenderObject material) meshes
-    L.OBJInfo _ _ _ _ 0 _ -> do
-      meshes <- fmap L.genNormalsTV3 <$> L.loadTV3 objfile
-      mapM (flip L.createRenderObject material) meshes
-    L.OBJInfo _ _ _ 0 _ _-> do
-      meshes <- fmap L.genTexCoords <$> L.loadOV3 objfile
-      mapM (flip L.createRenderObject material) meshes
-    _ -> do
-      meshes <- L.loadOTV3 objfile
-      mapM (flip L.createRenderObject material) meshes
-
 controlWire :: [L.RenderObject] -> L.GameWire a [a]
 controlWire ros = sequenceA $ (\ro -> L.mkObject ro (pure L.identity) W.>>> wireframeToggle) <$> ros
 
 loadGame :: FilePath -> IO (L.Game ())
 loadGame objfile = do
-  obj <- mkOBJ objfile
+  obj <- L.loadOBJ objfile
   putStrLn $ "OBJ contained " ++ (show $ length obj) ++ " meshes."
-  let lightPos = 10 *^ (V3 0 1 (-1))
-      lightParams = L.mkLightParams (V3 0.5 0.5 0.5) (V3 1.0 1.0 1.0) 1.0
-      light = L.spotlight lightParams lightPos (negate lightPos) (pi/2)
+  let lightParams = L.mkLightParams (V3 0.5 0.5 0.5) (V3 1.0 1.0 1.0) 1.0
+      light = L.dirlight lightParams (V3 0 (-1) 1)
   return $ L.Game { L.staticLights = [light],
                     L.staticGeometry = [],
                     L.mainCamera = cam,

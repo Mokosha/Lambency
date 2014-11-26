@@ -42,8 +42,8 @@ mkPlane = do
 
 mkBunny:: IO [(L.Transform, L.RenderObject)]
 mkBunny = do
-  meshes <- getDataFileName ("examples" </> "bunnyN" <.> "obj") >>= L.loadOTV3
-  ros <- mapM (flip L.createRenderObject (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)) meshes
+  objFile <- getDataFileName ("examples" </> "bunnyN" <.> "obj")
+  ros <- L.loadOBJWithDefaultMaterial objFile $ Just (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
   return $ (\ro -> (xform, ro)) <$> ros
   where xform = L.rotate (Quat.axisAngle (V3 0 1 0) pi) $
                 L.translate (V3 (-4) (-4.8) (-5)) $
@@ -53,8 +53,8 @@ cubeWire :: IO (L.GameWire () ())
 cubeWire = do
   sound <- getDataFileName ("examples" </> "stereol" <.> "wav") >>= L.loadSound
   (Just tex) <- getDataFileName ("examples" </> "crate" <.> "png") >>= L.loadTexture
-  meshes <- getDataFileName ("examples" </> "cube" <.> "obj") >>= L.loadOTV3
-  ros <- mapM (flip L.createRenderObject (L.diffuseTexturedMaterial tex)) meshes
+  objFile <- getDataFileName ("examples" </> "cube" <.> "obj")
+  ros <- L.loadOBJWithDefaultMaterial objFile $ Just (L.diffuseTexturedMaterial tex)
   return $
     playSound sound 3.0 W.>>>
     (sequenceA $ (\ro -> L.mkObject ro (rotate initial)) <$> ros) W.>>>

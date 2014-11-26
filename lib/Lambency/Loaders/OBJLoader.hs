@@ -1,13 +1,15 @@
 module Lambency.Loaders.OBJLoader (
   OBJInfo(..),
-  getOBJInfo,
 
+  OBJGeometry,
   OBJOutput(..),
 
-  loadV3,
-  loadOV3,
-  loadTV3,
-  loadOTV3,
+  obj2V3Mesh,
+  obj2OV3Mesh,
+  obj2TV3Mesh,
+  obj2OTV3Mesh,
+
+  loadOBJ,
 ) where
 
 --------------------------------------------------------------------------------
@@ -16,6 +18,7 @@ import Lambency.Vertex
 
 import qualified Data.Map as Map
 
+import Data.Char (toLower)
 import Data.List (sortBy)
 import Data.Ord (comparing)
 import Data.Text (pack)
@@ -68,9 +71,9 @@ data OBJInfo = OBJInfo {
   numFaces :: Int
 } deriving (Show, Ord, Eq)
 
-data OBJOutput a = OBJOutput {
+data OBJOutput = OBJOutput {
   objMtlLib :: FilePath,
-  objMeshes :: [(String, Mesh a)]
+  objMeshes :: [(OBJInfo, OBJGeometry)]
 }
 
 convertNegativeFaces :: OBJInfo -> OBJFace -> OBJFace
@@ -256,7 +259,7 @@ addCommand (Group _) = return []
 
 addCommand (MtlName mtl) = do
   (info, geom) <- get
-  let newInfo = info { mtlName = mtl }
+  let newInfo = info { mtlName = map toLower mtl }
   case objFaces geom of
     [] -> put (newInfo, geom) >> return []
     _ -> do
@@ -382,41 +385,20 @@ parseOBJ fn filepath = do
     Right [] -> error "Lambency.Loaders.OBJLoader (parseOBJ): OBJ file had no meshes!"
     Right xs -> return $ fn xs
 
-getOBJInfo :: FilePath -> IO OBJInfo
-getOBJInfo fp = do
-  infos <- parseOBJ (map fst) fp
-  case infos of
-    [] -> return initialInfo
-    x:_ -> return x
-
-genOutput :: (OBJGeometry -> Mesh a) -> [(OBJInfo, OBJGeometry)] -> OBJOutput a
-genOutput _ [] = OBJOutput "" []
-genOutput fn o@((info', _):_) =
+genOutput :: [(OBJInfo, OBJGeometry)] -> OBJOutput
+genOutput [] = OBJOutput "" []
+genOutput o@((info', _):_) =
   let mtllib = mtlLib info'
 
       pruneOutput (info, _) = mtlLib info /= mtllib
-
-      addMesh (info, geom) = (mtlName info, fn geom)
 
       addOutput [] result = result
       addOutput (x : rest) result =
         if pruneOutput x
         then addOutput rest result
-        else addOutput rest (addMesh x : result)
+        else addOutput rest (x : result)
 
   in OBJOutput mtllib (addOutput o [])
 
-loadOBJ :: Vertex a => (OBJGeometry -> Mesh a) -> FilePath -> IO (OBJOutput a)
-loadOBJ gen = parseOBJ (genOutput gen)
-
-loadV3 :: FilePath -> IO (OBJOutput Vertex3)
-loadV3 = loadOBJ obj2V3Mesh
-
-loadOV3 :: FilePath -> IO (OBJOutput OVertex3)
-loadOV3 = loadOBJ obj2OV3Mesh
-
-loadTV3 :: FilePath -> IO (OBJOutput TVertex3)
-loadTV3 = loadOBJ obj2TV3Mesh
-
-loadOTV3 :: FilePath -> IO (OBJOutput OTVertex3)
-loadOTV3 = loadOBJ obj2OTV3Mesh
+loadOBJ :: FilePath -> IO OBJOutput
+loadOBJ = parseOBJ genOutput

@@ -6,7 +6,8 @@ module Lambency.Mesh (
   genNormalsV3,
   genNormalsTV3,
 
-  genTexCoords,
+  genTexCoordsV3,
+  genTexCoordsOV3,
 
   triangle,
   cube,
@@ -178,5 +179,8 @@ genNormalsTV3 mesh =
 
 -- !FIXME! Actually properly generate texture coordinates... this is kind
 -- of embarassing
-genTexCoords :: Mesh OVertex3 -> Mesh OTVertex3
-genTexCoords (Mesh verts idxs) = Mesh (map (flip addTexCoordOV3 zero) verts) idxs
+genTexCoordsOV3 :: Mesh OVertex3 -> Mesh OTVertex3
+genTexCoordsOV3 (Mesh verts idxs) = Mesh (map (flip addTexCoordOV3 zero) verts) idxs
+
+genTexCoordsV3 :: Mesh Vertex3 -> Mesh TVertex3
+genTexCoordsV3 (Mesh verts idxs) = Mesh (map (flip addTexCoordV3 zero) verts) idxs

@@ -1,25 +1,28 @@
 module Lambency.Loaders.MTLLoader (
   MTL(..),
-
+  mkMaterial,
   loadMTL,
 ) where
 
 --------------------------------------------------------------------------------
 import Control.Applicative hiding ((<|>), many)
 
+import Data.Char (toLower)
 import Data.List (find)
 import Data.Text (pack)
 
+import qualified Lambency.Texture as L
 import qualified Lambency.Material as L
 import qualified Lambency.Types as L
 
 import Linear hiding (trace)
 
+import System.FilePath
+
 import Text.Parsec
 import Text.Parsec.Text (Parser)
 --------------------------------------------------------------------------------
 
-type Vec2f = V2 Float
 type Vec3f = V3 Float
 
 {--
@@ -110,23 +113,23 @@ data ReflectionType
 
 data TextureMap
   = ColorMap {
-    colorTexInfo :: TextureInfo,
-    colorCorrection :: Bool
+    _colorTexInfo :: TextureInfo,
+    _colorCorrection :: Bool
   }
   | BumpMap {
-    bumpTexInfo :: TextureInfo,
-    multiplier :: Float
+    _bumpTexInfo :: TextureInfo,
+    _multiplier :: Float
   }
   | DecalMap {
-    decalMapInfo :: TextureInfo
+    _decalMapInfo :: TextureInfo
   }
   | DisplacementMap {
-    dispMapInfo :: TextureInfo
+    _dispMapInfo :: TextureInfo
   }
   | ReflectionMap {
-    reflMapInfo :: TextureInfo,
-    colorCorrection :: Bool,
-    reflTy :: ReflectionType
+    _reflMapInfo :: TextureInfo,
+    _colorCorrection :: Bool,
+    _reflTy :: ReflectionType
   }
  deriving (Show, Eq, Ord)
 
@@ -137,8 +140,8 @@ data ReflectivityInfo = ReflectivityInfo {
  deriving (Show, Eq, Ord)
 
 data DissolveInfo = DissolveInfo {
-  dissolveHalo :: Bool,
-  dissolveFactor :: Float
+  _dissolveHalo :: Bool,
+  _dissolveFactor :: Float
 }
  deriving (Show, Eq, Ord)
 
@@ -170,6 +173,64 @@ data MTL = MTL {
 }
  deriving (Show, Eq, Ord)
 
+----------------------------------------------------------------------
+-- Interface with Lambency
+
+type LReflectivity = (L.MaterialVar (V3 Float), L.MaterialVar L.Texture)
+
+updateReflectivity :: FilePath -> ReflectivityInfo -> LReflectivity -> IO (LReflectivity)
+updateReflectivity baseDir reflInfo (v1, v2) = do
+  let v1n = L.getMatVarName v1
+      v2n = L.getMatVarName v2
+
+      v1' = case reflColor reflInfo of
+        Nothing -> Nothing
+        Just v -> Just $ L.Vector3Val v
+
+  v2' <- case reflMap reflInfo of
+    Nothing -> return Nothing
+    Just (fp, _) -> do
+      tex <- L.loadTexture $ baseDir </> fp
+      case tex of
+        Nothing -> return Nothing
+        Just t -> return . Just $ L.TextureVal t
+
+  return (L.MaterialVar (v1n, v1'), L.MaterialVar (v2n, v2'))
+
+mkMaterial :: FilePath -> MTL -> IO (L.Material)
+mkMaterial baseDir mtl = do
+  let initialMat = L.defaultBlinnPhong
+
+  (dRefl, dMap) <- updateReflectivity baseDir (diffuseInfo mtl)
+                   (L.diffuseReflectivity initialMat, L.diffuseMap initialMat)
+
+  (sRefl, sMap) <- updateReflectivity baseDir (specularInfo mtl)
+                   (L.specularReflectivity initialMat, L.specularMap initialMat)
+
+  let aRefl = case ambientInfo mtl of
+        ReflectivityInfo Nothing _ -> L.ambientReflectivity initialMat
+        ReflectivityInfo (Just c) _ ->
+          let (L.MaterialVar (n, _)) = L.ambientReflectivity initialMat
+          in L.MaterialVar (n, Just $ L.Vector3Val c)
+
+      sExp = let (L.MaterialVar (n, _)) = L.specularExponent initialMat
+              in (L.MaterialVar (n, Just $ L.FloatVal $ specularExponent mtl))
+
+  return $
+    initialMat {
+      L.diffuseReflectivity = dRefl,
+      L.diffuseMap = dMap,
+
+      L.specularExponent = sExp,
+      L.specularReflectivity = sRefl,
+      L.specularMap = sMap,
+
+      L.ambientReflectivity = aRefl
+      }
+
+----------------------------------------------------------------------
+-- Parser
+
 float :: Parser Float
 float = do
   spaces
@@ -183,9 +244,6 @@ float = do
   e <- option "0" $ char 'e' >> (many1 digit)
 
   return $ ((read t) + ((read d) / (10 ** denom))) * (10 ** (read e)) * sign
-
-vector2 :: Parser Vec2f
-vector2 = V2 <$> float <*> float
 
 vector3 :: Parser Vec3f
 vector3 = V3 <$> float <*> float <*> float
@@ -343,7 +401,7 @@ constructMaterial name illumCmds = foldr handleTexMapCmd illumMtl
     illumMtl = foldr handleIllumCmd defaultMTL illumCmds
 
     defaultMTL = MTL {
-      mtlName = name,
+      mtlName = map toLower name,
 
       ambientInfo = ReflectivityInfo Nothing Nothing,
       diffuseInfo = ReflectivityInfo Nothing Nothing,
@@ -524,7 +582,5 @@ parseMTL filepath = do
     Left x -> error $ show x
     Right x -> return $ x
 
-loadMTL :: FilePath -> IO ()
-loadMTL fp = do
-  putStrLn $ "Loading MTL: " ++ fp
-  parseMTL fp >>= print
+loadMTL :: FilePath -> IO [MTL]
+loadMTL = parseMTL

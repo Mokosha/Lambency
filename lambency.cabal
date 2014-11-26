@@ -33,12 +33,14 @@ library
                        Lambency.Camera
                        Lambency.Font
                        Lambency.Light
-                       Lambency.Loaders
-                       Lambency.Loaders.OBJLoader
                        Lambency.Material
                        Lambency.Mesh
                        Lambency.GameObject
                        Lambency.Render
+
+                       Lambency.Loaders
+                       Lambency.Loaders.OBJLoader
+                       Lambency.Loaders.MTLLoader
 
                        Lambency.Shader
                        Lambency.Shader.Base
