@@ -210,7 +210,9 @@ determineImageType filename = do
     fromExtension _ = Nothing
 
 loadTextureWithType :: FilePath -> Maybe ImageType -> IO (Maybe Texture)
-loadTextureWithType _ Nothing = return Nothing
+loadTextureWithType fp Nothing = do
+  putStrLn $ "WARNING: Unsupported image type: " ++ fp
+  return Nothing
 loadTextureWithType filename (Just ImageType'PNG) = loadTextureFromPNG filename
 
 loadTexture :: FilePath -> IO (Maybe Texture)
