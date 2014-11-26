@@ -42,7 +42,7 @@ controlWire ros = sequenceA $ (\ro -> L.mkObject ro (pure L.identity) W.>>> wire
 
 loadGame :: FilePath -> IO (L.Game ())
 loadGame objfile = do
-  obj <- L.loadOBJ objfile
+  obj <- L.loadOBJWithDefaultMaterial objfile $ Just (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
   putStrLn $ "OBJ contained " ++ (show $ length obj) ++ " meshes."
   let lightParams = L.mkLightParams (V3 0.5 0.5 0.5) (V3 1.0 1.0 1.0) 1.0
       light = L.dirlight lightParams (V3 0 (-1) 1)
