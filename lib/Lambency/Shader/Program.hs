@@ -187,7 +187,7 @@ addVertexOutputs = zipWith setCopyStmt
 removeUnusedStmts :: [ShaderVarRep] -> [Statement] -> [Statement]
 removeUnusedStmts _ [] = []
 removeUnusedStmts [] s = s
-removeUnusedStmts (v:vars) stmts = removeUnusedStmts vars $ removeUnusedVar v stmts
+removeUnusedStmts (x:xs) ys = removeUnusedStmts xs $ removeUnusedVar x ys
   where
     removeUnusedVar :: ShaderVarRep -> [Statement] -> [Statement]
     removeUnusedVar _ [] = []
