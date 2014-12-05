@@ -209,9 +209,19 @@ mkMaterial baseDir mtl = do
 
   let aRefl = case ambientInfo mtl of
         ReflectivityInfo Nothing _ -> L.ambientReflectivity initialMat
+        -- !HACK! -- If the reflectivity is zero but there's a texture map,
+        -- then just assume that the texture map is the same as the diffuse map
+        -- and set the ambient reflectivity to full...
+        ReflectivityInfo (Just c) (Just _)
+          | c == (V3 0 0 0) ->
+            let (L.MaterialVar (n, _)) = L.ambientReflectivity initialMat
+            in L.MaterialVar (n, Just $ L.Vector3Val $ V3 1 1 1)
+          | otherwise ->
+            let (L.MaterialVar (n, _)) = L.ambientReflectivity initialMat
+            in L.MaterialVar (n, Just $ L.Vector3Val c)
         ReflectivityInfo (Just c) _ ->
-          let (L.MaterialVar (n, _)) = L.ambientReflectivity initialMat
-          in L.MaterialVar (n, Just $ L.Vector3Val c)
+            let (L.MaterialVar (n, _)) = L.ambientReflectivity initialMat
+            in L.MaterialVar (n, Just $ L.Vector3Val c)
 
       sExp = let (L.MaterialVar (n, _)) = L.specularExponent initialMat
               in (L.MaterialVar (n, Just $ L.FloatVal $ specularExponent mtl))
