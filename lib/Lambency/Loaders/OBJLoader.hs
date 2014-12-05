@@ -21,6 +21,7 @@ import qualified Data.Map as Map
 
 import Data.Char (toLower)
 import Data.List (sortBy)
+import Data.Maybe (isJust)
 import Data.Ord (comparing)
 import Data.Text (pack)
 
@@ -218,6 +219,22 @@ initialGeom = OBJGeometry [] [] [] []
 initialInfo :: OBJInfo
 initialInfo = OBJInfo "" "" 0 0 0 0
 
+checkInfo :: OBJFaceList -> OBJInfo -> OBJInfo
+checkInfo [] x = x
+checkInfo faces info =
+  let hasTexCoords = any (any (\(_, x, _) -> isJust x)) faces
+      hasNormals = any (any (\(_, _, x) -> isJust x)) faces
+
+      fixedTCInfo
+        | hasTexCoords = info
+        | otherwise = info { numTexCoords = 0 }
+
+      fixedInfo
+        | hasNormals = fixedTCInfo
+        | otherwise = fixedTCInfo { numNormals = 0 }
+
+  in fixedInfo
+
 addCommand :: Command -> State.State (OBJInfo, OBJGeometry) [(OBJInfo, OBJGeometry)]
 addCommand (Normal n) = do
   (info, geom) <- get
@@ -260,18 +277,18 @@ addCommand (MtlName mtl) = do
   let newInfo = info { mtlName = map toLower mtl }
   case objFaces geom of
     [] -> put (newInfo, geom) >> return []
-    _ -> do
+    faces -> do
       let newGeom = geom { objFaces = [] }
           newInfo' = newInfo { numFaces = 0 }
       put (newInfo', newGeom)
-      return [(info, reverseGeometry geom)]
+      return [(checkInfo faces info, reverseGeometry geom)]
 
 -- addCommand c = error $ "Lambency.Loaders.OBJLoader (addCommand): Unable to handle command " ++ show c
 
 runCommands :: [Command] -> [(OBJInfo, OBJGeometry)]
 runCommands cmds =
   let (pairs, (lastInfo, lastGeom)) = State.runState (mapM addCommand cmds) (initialInfo, initialGeom)
-  in (lastInfo, reverseGeometry lastGeom) : (concat pairs)
+  in (checkInfo (objFaces lastGeom) lastInfo, reverseGeometry lastGeom) : (concat pairs)
 
 parseFile :: Parser [(OBJInfo, OBJGeometry)]
 parseFile = let
