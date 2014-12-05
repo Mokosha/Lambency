@@ -17,6 +17,7 @@ cabal-version:       >=1.8
 data-files:          font.png
                      examples/*.obj
                      examples/*.png
+                     examples/*.jpg
                      examples/*.wav
                      examples/*.ttf
 data-dir:            assets
