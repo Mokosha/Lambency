@@ -19,6 +19,7 @@ import qualified Graphics.UI.GLFW as GLFW
 import Lambency.Types
 
 import qualified Codec.Picture as JP
+import qualified Codec.Picture.Types as JP
 
 import Control.Monad (unless)
 
@@ -164,6 +165,26 @@ loadTextureFromPNG filename = do
           return $ Just tex
         _ -> return Nothing
 
+loadTextureFromJPG :: FilePath -> IO(Maybe Texture)
+loadTextureFromJPG filename = do
+  jpgBytes <- BS.readFile filename
+  jpgImg <- case JP.decodeJpeg jpgBytes of
+    Left str -> do
+      putStrLn $ "Error loading JPG file: " ++ str
+      return Nothing
+    Right img -> return (Just img)
+  case jpgImg of
+    Nothing -> return Nothing
+    Just img -> do
+      case img of
+        (JP.ImageYCbCr8 i) ->
+          let (JP.ImageRGB8 (JP.Image width height dat)) = JP.ImageRGB8 (JP.convertImage i)
+          in do
+            tex <- Vector.unsafeWith dat $ \ptr ->
+              initializeTexture ptr (fromIntegral width, fromIntegral height) RGB8
+            return $ Just tex
+        _ -> return Nothing
+
 createDepthTexture :: IO (Texture)
 createDepthTexture = do
   handle <- GL.genObjectName
@@ -196,8 +217,9 @@ createSolidTexture (r, g, b, a) = do
   carr <- newListArray (0 :: Integer, 3) [r, g, b, a]
   withStorableArray carr (\ptr -> initializeTexture ptr (1, 1) RGBA8)
 
-data ImageType =
-  ImageType'PNG
+data ImageType
+  = ImageType'PNG
+  | ImageType'JPG
   deriving (Show, Eq, Ord, Enum)
 
 determineImageType :: FilePath -> IO (Maybe ImageType)
@@ -207,6 +229,11 @@ determineImageType filename = do
   return $ fromExtension $ takeExtension filename
   where
     fromExtension ".png" = Just ImageType'PNG
+    fromExtension ".PNG" = Just ImageType'PNG
+    fromExtension ".jpg" = Just ImageType'JPG
+    fromExtension ".JPG" = Just ImageType'JPG
+    fromExtension ".jpeg" = Just ImageType'JPG
+    fromExtension ".JPEG" = Just ImageType'JPG
     fromExtension _ = Nothing
 
 loadTextureWithType :: FilePath -> Maybe ImageType -> IO (Maybe Texture)
@@ -214,6 +241,7 @@ loadTextureWithType fp Nothing = do
   putStrLn $ "WARNING: Unsupported image type: " ++ fp
   return Nothing
 loadTextureWithType filename (Just ImageType'PNG) = loadTextureFromPNG filename
+loadTextureWithType filename (Just ImageType'JPG) = loadTextureFromJPG filename
 
 loadTexture :: FilePath -> IO (Maybe Texture)
 loadTexture filename = determineImageType filename >>= (loadTextureWithType filename)
