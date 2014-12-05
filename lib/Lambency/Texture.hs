@@ -165,6 +165,13 @@ loadTextureFromPNG filename = do
           return $ Just tex
         _ -> return Nothing
 
+flipY :: JP.Pixel a => JP.Image a -> JP.Image a
+flipY img =
+  let w = JP.imageWidth img
+      h = JP.imageHeight img
+      genPixel x y = JP.pixelAt img x (h - y - 1)
+  in JP.generateImage genPixel w h
+
 loadTextureFromJPG :: FilePath -> IO(Maybe Texture)
 loadTextureFromJPG filename = do
   jpgBytes <- BS.readFile filename
@@ -178,7 +185,7 @@ loadTextureFromJPG filename = do
     Just img -> do
       case img of
         (JP.ImageYCbCr8 i) ->
-          let (JP.ImageRGB8 (JP.Image width height dat)) = JP.ImageRGB8 (JP.convertImage i)
+          let (JP.ImageRGB8 (JP.Image width height dat)) = JP.ImageRGB8 (JP.convertImage $ flipY i)
           in do
             tex <- Vector.unsafeWith dat $ \ptr ->
               initializeTexture ptr (fromIntegral width, fromIntegral height) RGB8
