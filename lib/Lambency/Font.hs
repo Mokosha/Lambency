@@ -4,6 +4,7 @@ module Lambency.Font (
   loadTTFont,
   renderUIString,
   stringWidth,
+  setFontColor,
 ) where
 
 --------------------------------------------------------------------------------
@@ -30,7 +31,7 @@ import Lambency.Texture
 import Lambency.Types
 import Lambency.Utils
 
-import Linear
+import Linear hiding (trace)
 
 import Paths_lambency
 import System.FilePath
@@ -94,6 +95,11 @@ loadSystemFont (V3 r g b) = let
     Just tex <- getDataFileName ("font" <.> "png") >>= loadTexture 
     Just s <- loadAnimatedSpriteWithMask tex systemSizes systemOffsets
     return $ mkFont (changeSpriteColor (V4 r g b 1) s) charString (repeat zero) (repeat zero)
+
+setFontColor :: V3 Float -> Font -> Font
+setFontColor (V3 r g b) fnt = Font $ \c -> do
+  (f, x) <- getGlyph fnt c
+  return (changeSpriteFrameColor (V4 r g b 1) f, x)
 
 --------------------------------------------------------------------------------
 -- Freetype fonts
