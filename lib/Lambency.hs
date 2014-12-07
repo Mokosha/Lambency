@@ -223,7 +223,10 @@ runLoop lastFrameTime = do
     Right gobj -> do
       ls <- get
       put $ GameLoopState gobj nextGame nextsession accum (lastFramePicoseconds ls)
-      runLoop thisFrameTime
+      needsQuit <- snd <$> ask >>= (liftIO . GLFW.windowShouldClose)
+      case needsQuit of
+        True -> return ()
+        False -> runLoop thisFrameTime
     Left _ -> return ()
 
 type TimeStepper = (GameSession, NominalDiffTime)
