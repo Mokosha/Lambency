@@ -143,6 +143,9 @@ physicsDeltaTime = 1.0 / 60.0
 physicsDeltaUTC :: NominalDiffTime
 physicsDeltaUTC = fromRational . toRational $ physicsDeltaTime
 
+maximumFramerate :: NominalDiffTime
+maximumFramerate = fromRational . toRational $ (1.0 / 10.0 :: Double)
+
 playSounds :: [OutputAction] -> IO ([OutputAction])
 playSounds [] = return []
 playSounds (SoundAction sound cmd : rest) = handleCommand sound cmd >> return rest
@@ -213,7 +216,7 @@ runLoop lastFrameTime = do
   -- Step
   thisFrameTime <- liftIO getCurrentTime
   let newAccum = accumulator + (diffUTCTime thisFrameTime lastFrameTime)
-  modify $ \ls -> ls { currentPhysicsAccum = newAccum }
+  modify $ \ls -> ls { currentPhysicsAccum = min newAccum maximumFramerate }
   (go, (nextsession, accum), (nextGame, _)) <- stepGame emptyRenderActions
 
   case go of
@@ -288,7 +291,7 @@ runGame gs = do
       -- !FIXME! This should be moved to the camera...
       GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
       clearBuffers
-      _ <- evalStateT renderPrg initialRenderState
+      () <- evalStateT renderPrg initialRenderState
       GL.flush
       GLFW.swapBuffers win
 
