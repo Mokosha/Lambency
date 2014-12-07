@@ -2,6 +2,7 @@
 module Lambency.Sprite (
   SpriteFrame(..),
   Sprite(..),
+  changeSpriteFrameColor,
   changeSpriteColor,
   loadStaticSprite,
   loadStaticSpriteWithTexture,
@@ -33,7 +34,7 @@ import Lambency.Transform
 import Lambency.Types
 import Lambency.Utils
 
-import Linear
+import Linear hiding (trace)
 --------------------------------------------------------------------------------
 
 data SpriteFrame = SpriteFrame {
@@ -86,8 +87,11 @@ mapFrameRO fn sf = sf { frameRO = fn (frameRO sf) }
 addTextFlag :: SpriteFrame -> SpriteFrame
 addTextFlag = mapFrameRO $ \ro -> ro { flags = nub $ Text : (flags ro) }
 
+changeSpriteFrameColor :: V4 Float -> SpriteFrame -> SpriteFrame
+changeSpriteFrameColor c = mapFrameRO $ mapROMaterial $ updateColor c
+
 changeSpriteColor :: V4 Float -> Sprite -> Sprite
-changeSpriteColor c = Sprite . fmap (mapFrameRO $ mapROMaterial $ updateColor c) . getFrames
+changeSpriteColor c = Sprite . fmap (changeSpriteFrameColor c) . getFrames
 
 initStaticSprite :: Bool -> Texture -> IO (Sprite)
 initStaticSprite isMask tex = do
