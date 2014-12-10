@@ -115,4 +115,4 @@ loadGame = do
                     L.gameLogic = gameWire}
 
 main :: IO ()
-main = L.runWindow 640 480 "Cube Demo" () loadGame
+main = L.withWindow 640 480 "Cube Demo" $ L.loadAndRun () loadGame

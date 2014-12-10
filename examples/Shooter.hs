@@ -144,4 +144,4 @@ loadGame = do
                     L.gameLogic = w >>> L.quitWire GLFW.Key'Q}
 
 main :: IO ()
-main = L.runWindow screenWidth screenHeight "Space Shooter Demo" () loadGame
+main = L.withWindow screenWidth screenHeight "Space Shooter Demo" $ L.loadAndRun () loadGame

@@ -30,7 +30,8 @@ module Lambency (
   Game(..), GameWire, GameMonad,
   module Lambency.Utils,
 
-  makeWindow, destroyWindow, run, runWindow,
+  makeWindow, destroyWindow, withWindow,
+  run, loadAndRun, runSimple,
   quitWire,
   module Lambency.Sound
 ) where
@@ -135,6 +136,18 @@ destroyWindow m = do
     Nothing -> return ()
   GLFW.terminate
   freeSound
+
+withWindow :: Int -> Int -> String -> (GLFW.Window -> IO a) -> IO a
+withWindow width height title f = do
+  mwin <- makeWindow width height title
+  x <- case mwin of
+    Just w -> f w
+    Nothing -> do
+      putStrLn $ concat ["Lambency.hs (withWindow): Could not create window (",
+                         show width, ", ", show height, ", ", title, ")"]
+      return undefined
+  destroyWindow mwin
+  return x
 
 -- The physics framerate in frames per second
 physicsDeltaTime :: Double
@@ -316,8 +329,8 @@ runGame gs = do
       stepGame emptyRenderActions
     Left _ -> return (result, (nextSess, accum), (nextGame, gs))
 
-run :: GLFW.Window -> a -> Game a -> IO ()
-run win initialGameObject initialGame = do
+run :: a -> Game a -> GLFW.Window -> IO ()
+run initialGameObject initialGame win = do
   oldBuffering <- hGetBuffering stdout
   hSetBuffering stdout NoBuffering
 
@@ -334,11 +347,16 @@ run win initialGameObject initialGame = do
 
   hSetBuffering stdout oldBuffering
 
-runWindow :: Int -> Int -> String -> a -> IO (Game a) -> IO ()
-runWindow width height title initialGameObject loadGamePrg = do
-  Just win <- makeWindow width height title
-  loadGamePrg >>= run win initialGameObject
-  destroyWindow (Just win)
+loadAndRun :: a -> IO (Game a) -> GLFW.Window -> IO ()
+loadAndRun initialGameObject loadGamePrg win = loadGamePrg >>= (\g -> run initialGameObject g win)
+
+runSimple :: Camera -> (Float -> a -> GameMonad a) -> a -> GLFW.Window -> IO ()
+runSimple cam f x win = do
+  let gameWire = W.mkGen $ \ts obj -> do
+        result <- f (W.dtime ts) obj
+        return (Right result, gameWire)
+
+  run x (Game [] [] (W.pure cam) [] gameWire) win
 
 -- Wire that behaves like the identity wire until the given key
 -- is pressed, then inhibits forever.

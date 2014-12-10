@@ -246,7 +246,7 @@ loadGame = do
                     L.gameLogic = w >>> renderStatic staticSprites >>> L.quitWire GLFW.Key'Q}
 
 main :: IO ()
-main = L.runWindow screenWidth screenHeight "Pong Demo" 0 loadGame
+main = L.withWindow screenWidth screenHeight "Pong Demo" $ L.loadAndRun 0 loadGame
 
 --------------------------------------------------
 -- Utils

@@ -70,5 +70,6 @@ main :: IO ()
 main = do
   objfile <- handleArgs <$> getArgs
   case objfile of
-    Right file -> L.runWindow 640 480 "OBJ Viewer" () (loadGame file)
+    Right file -> L.withWindow 640 480 "OBJ Viewer" $
+                  L.loadAndRun () (loadGame file)
     Left err -> putStrLn err
