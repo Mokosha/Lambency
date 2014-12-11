@@ -249,14 +249,17 @@ generateShader prg ty = do
   let shdrSrc = buildOpenGLSource prg
   GL.shaderSourceBS shdr GL.$= shdrSrc
   GL.compileShader shdr
-  shaderLog <- GL.get $ GL.shaderInfoLog shdr
+  success <- GL.get $ GL.compileStatus shdr
   -- printShaderSrc shdrSrc
-  if null (filter (/= '\0') $ shaderLog)
-    then return ()
-    else do
-    putStrLn shaderLog
-    printShaderSrc shdrSrc
-    error "Internal Error: OpenGL shader compilation failed!"
+  case success of
+    True -> return ()
+    False -> do
+      putStrLn (replicate 80 '-')
+      shaderLog <- GL.get $ GL.shaderInfoLog shdr
+      putStrLn shaderLog
+      printShaderSrc shdrSrc
+      putStrLn (replicate 80 '-')
+      error "Internal Error: OpenGL shader compilation failed!"
   return shdr
 
 toHighLevelTy :: Int -> ShaderVarTyRep -> L.ShaderVarTy
