@@ -88,7 +88,7 @@ addUnlitShader h shdr = do
   atomically $ modifyTVar' shaderCache $ \cache ->
     cache { unlitShaders = Map.insert h shdr (unlitShaders cache) }
 
-lookupLitShader :: Material -> Light -> Maybe Texture -> IO (Shader)
+lookupLitShader :: Material -> Light -> Maybe ShadowMap -> IO (Shader)
 lookupLitShader mat light shadowmap = do
   let litHash = hash (mat, light, (\_ -> "__has_shadowmap__") <$> shadowmap)
   cache <- readTVarIO shaderCache
@@ -213,13 +213,13 @@ renderROsWithShader ros shdr shdrmap = do
     (render ro) shdr $ Map.union matVars shdrmap
   afterRender shdr
 
-renderLitROs :: [RenderObject] -> Light -> Maybe Texture -> ShaderMap -> IO ()
-renderLitROs ros light shadowmap shdrmap =
+renderLitROs :: [RenderObject] -> Light -> Maybe ShadowMap -> ShaderMap -> IO ()
+renderLitROs ros light sm shdrmap =
   let vars = Map.union shdrmap $ getLightShaderVars light
       renderWithShdr [] = return ()
       renderWithShdr rs@(ro : _) = do
         let m = material ro
-        shdr <- lookupLitShader m light shadowmap
+        shdr <- lookupLitShader m light sm
         -- !FIXME! Make sure that the ro's vertex type has the same attributes that
         -- the shader expects
         renderROsWithShader rs shdr vars
@@ -283,7 +283,7 @@ divideAndRenderROs ros cam light = let
         Nothing -> renderUnlitROs rs vars
         Just l -> do
           case Map.lookup "shadowMap" vars of
-            Just (TextureVal tex) -> renderLitROs rs l (Just tex) vars
+            Just (ShadowMapVal sm) -> renderLitROs rs l (Just sm) vars
             _ -> renderLitROs rs l Nothing vars
   in do
     addRenderVar "eyePos" (Vector3Val $ getCamPos cam)
@@ -325,9 +325,9 @@ mkLightCam (SpotLight dir' pos' cosCutoff') =
 mkLightCam c = error $ "Lambency.Render (mkLightCam): Camera for light type unsupported: " ++ show c
 
 renderLight :: RenderAction -> Camera -> Maybe Light -> RenderContext ()
-renderLight act cam (Just (Light params lightTy (Just (ShadowMap shadowMap)))) = do
+renderLight act cam (Just (Light params lightTy (Just (shadowMap, _)))) = do
   (lcam, shadowVP) <- liftIO $ do
-    bindRenderTexture shadowMap
+    bindRenderTexture $ getShadowmapTexture shadowMap
     clearBuffers
     -- Right now the MVP matrix of each object is for the main camera, so
     -- we need to replace it with the combination from the model matrix
@@ -336,7 +336,7 @@ renderLight act cam (Just (Light params lightTy (Just (ShadowMap shadowMap)))) =
     return (lightCam, Matrix4Val $ getViewProjMatrix lightCam)
   withRenderFlag RenderState'DepthOnly $ renderLight act lcam Nothing
   liftIO clearRenderTexture
-  addRenderVar "shadowMap" (TextureVal shadowMap)
+  addRenderVar "shadowMap" (ShadowMapVal shadowMap)
   addRenderVar "shadowVP" shadowVP
   renderLight act cam (Just $ Light params lightTy Nothing)
 

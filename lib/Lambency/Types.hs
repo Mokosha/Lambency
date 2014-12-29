@@ -1,7 +1,7 @@
 module Lambency.Types (
   Vec2f, Vec3f, Vec4f, Quatf, Mat2f, Mat3f, Mat4f,
   Camera(..), CameraType(..), CameraViewDistance(..),
-  LightVar(..), LightParams(..), LightType(..), Light(..), ShadowMap(..),
+  LightVar(..), LightParams(..), LightType(..), Light(..), ShadowMap(..), ShadowTechnique(..),
   Shader(..), ShaderVarTy(..), ShaderValue(..), ShaderVar(..), ShaderMap,
   Texture(..), TextureSize(..), TextureFormat(..), FBOHandle, TextureHandle(..),
   MaterialVar(..), NormalModulation(..), ReflectionInfo(..), Material(..),
@@ -97,6 +97,7 @@ data ShaderVarTy = Matrix2Ty
                  | FloatTy
                  | FloatListTy
                  | TextureTy GLRaw.GLuint
+                 | ShadowMapTy GLRaw.GLuint
                  deriving (Show, Eq, Ord)
 
 data ShaderVar = Uniform ShaderVarTy GL.UniformLocation
@@ -119,6 +120,7 @@ data ShaderValue = Matrix2Val (Mat2f)
                  | FloatVal Float
                  | FloatListVal [Float]
                  | TextureVal Texture
+                 | ShadowMapVal ShadowMap
                  deriving (Show, Eq, Ord)
 
 type ShaderMap = Map.Map String ShaderValue
@@ -183,14 +185,18 @@ instance Hashable LightType where
   hashWithSalt s (DirectionalLight x) = s `hashWithSalt` x
   hashWithSalt s (PointLight x) = s `hashWithSalt` x
 
-newtype ShadowMap = ShadowMap Texture
+newtype ShadowMap = ShadowMap { getShadowmapTexture :: Texture }
                   deriving (Show, Eq, Ord)
+
+data ShadowTechnique
+  = ShadowTechnique'Simple
+    deriving (Read, Show, Eq, Ord, Enum, Bounded)
 
 data Light
   = Light {
     lightParams :: LightParams,
     lightType :: LightType,
-    lightShadowMap :: Maybe ShadowMap
+    lightShadowMap :: Maybe (ShadowMap, ShadowTechnique)
     }
   deriving (Show, Eq, Ord)
 

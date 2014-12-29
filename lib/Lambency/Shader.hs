@@ -75,6 +75,9 @@ setUniformVar (Uniform (TextureTy unit) loc) (TextureVal tex) = do
   GL.textureBinding GL.Texture2D GL.$= Just (getGLTexObj tex)
   GL.uniform loc GL.$= (GL.TextureUnit unit)
 
+setUniformVar (Uniform (ShadowMapTy unit) loc) (ShadowMapVal sm) =
+  setUniformVar (Uniform (TextureTy unit) loc) (TextureVal $ getShadowmapTexture sm)
+
 setUniformVar (Uniform FloatTy loc) (FloatVal f) = do
   GL.uniform loc GL.$= GL.Index1 ((realToFrac f) :: GL.GLfloat)
 
@@ -612,7 +615,7 @@ genShadowedFragShader light mat = I.ShdrCode $ do
 
   return $ I.addFragmentColor outColor I.emptyO
 
-compileMaterial :: Light -> Material -> Maybe Texture -> IO (Shader)
+compileMaterial :: Light -> Material -> Maybe ShadowMap -> IO (Shader)
 compileMaterial light mat Nothing
   | isUnlit mat = compileUnlitMaterial mat
   | otherwise =

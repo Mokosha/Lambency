@@ -95,7 +95,7 @@ pointlight params pos =
 addShadowMap :: Light -> IO (Light)
 addShadowMap l = do
   depthTex <- createDepthTexture
-  return $ l { lightShadowMap = (Just $ ShadowMap depthTex) }
+  return $ l { lightShadowMap = (Just (ShadowMap depthTex, ShadowTechnique'Simple)) }
 
 getLightPosition :: Light -> Maybe (V3 Float)
 getLightPosition (Light _ (SpotLight {..}) _) =
