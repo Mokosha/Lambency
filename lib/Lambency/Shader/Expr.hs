@@ -174,6 +174,9 @@ sample2D = binaryExpr (BinaryFunOp Sample2D)
 sample3D :: Expr Sampler3D -> Expr (V3 Float) -> Expr (V4 Float)
 sample3D = binaryExpr (BinaryFunOp Sample3D)
 
+shadow2D :: Expr Shadow2D -> Expr (V3 Float) -> Expr (V4 Float)
+shadow2D = binaryExpr (BinaryFunOp Shadow2D)
+
 --------------------------------------------------
 
 ternaryExpr :: TernaryOp -> Expr a -> Expr b -> Expr c -> Expr d

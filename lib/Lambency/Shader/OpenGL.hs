@@ -97,6 +97,7 @@ binFnBS Dot = "dot"
 binFnBS Sample1D = "texture1D"
 binFnBS Sample2D = "texture2D"
 binFnBS Sample3D = "texture3D"
+binFnBS Shadow2D = "shadow2D"
 
 buildBinary :: BinaryOp -> ExprRep -> ExprRep -> BS.ByteString
 
@@ -192,6 +193,7 @@ varTy = BS.pack . cvtTyRep
     cvtTyRep Sampler1DTy = "sampler1D"
     cvtTyRep Sampler2DTy = "sampler2D"
     cvtTyRep Sampler3DTy = "sampler3D"
+    cvtTyRep Shadow2DTy = "sampler2DShadow"
     cvtTyRep _ = error "Lambency.Shader.OpenGL -- varTy -- cvtTyRep:  Not implemented!"
 
 {-- !FIXME! what was I thinking here?    
@@ -282,11 +284,13 @@ toHighLevelTy _ FloatListTy = L.FloatListTy
 toHighLevelTy n Sampler1DTy = L.TextureTy (toEnum n)
 toHighLevelTy n Sampler2DTy = L.TextureTy (toEnum n)
 toHighLevelTy n Sampler3DTy = L.TextureTy (toEnum n)
+toHighLevelTy n Shadow2DTy = L.ShadowMapTy (toEnum n)
 
 isSampler :: ShaderVarTyRep -> Bool
 isSampler Sampler1DTy = True
 isSampler Sampler2DTy = True
 isSampler Sampler3DTy = True
+isSampler Shadow2DTy = True
 isSampler _ = False
 
 toSamplerIdx :: Int -> Declaration -> Int

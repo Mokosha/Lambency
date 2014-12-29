@@ -16,6 +16,8 @@ data Sampler1D
 data Sampler2D
 data Sampler3D
 
+data Shadow2D
+
 data ShaderVarTyRep = Matrix2Ty
                     | Matrix3Ty
                     | Matrix4Ty
@@ -34,6 +36,7 @@ data ShaderVarTyRep = Matrix2Ty
                     | Sampler1DTy
                     | Sampler2DTy
                     | Sampler3DTy
+                    | Shadow2DTy
                     deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
 data ShaderVarRep = ShdrVarRep {
@@ -81,6 +84,7 @@ data BinaryFunction = Max
                     | Sample1D
                     | Sample2D
                     | Sample3D
+                    | Shadow2D
                     deriving(Show, Eq, Ord, Enum, Bounded)
 
 data BinaryOp = BinaryInfixOp BinaryInfix

@@ -47,3 +47,6 @@ sampler2DTy = ShaderVarTy Sampler2DTy
 
 sampler3DTy :: ShaderVarTy Sampler3D
 sampler3DTy = ShaderVarTy Sampler3DTy
+
+shadow2DTy :: ShaderVarTy Shadow2D
+shadow2DTy = ShaderVarTy Shadow2DTy
