@@ -231,10 +231,11 @@ buildDeclarations decls' =
 
 buildOpenGLSource :: ShaderProgram -> BS.ByteString
 buildOpenGLSource (ShaderProgram decls stmts) =
-  BS.append (buildDeclarations decls) $ BS.concat [
-    BS.pack "void main() {\n",
-    buildStatements 2 stmts,
-    BS.pack "}"]
+  BS.concat [BS.pack "#version 120\n",
+             buildDeclarations decls,
+             BS.pack "void main() {\n",
+             buildStatements 2 stmts,
+             BS.pack "}"]
 
 printShaderSrc :: BS.ByteString -> IO ()
 printShaderSrc shdrSrc = putStrLn $ BS.unpack numberedSrc
