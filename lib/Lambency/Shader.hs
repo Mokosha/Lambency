@@ -535,12 +535,21 @@ genShadowFragment :: I.ShaderContext (I.ShaderVar Float)
 genShadowFragment = do
   pos <- I.getInput3f "position"
   
-  shadowMap <- I.newUniformVar "shadowMap" I.sampler2DTy
+  shadowMap <- I.newUniformVar "shadowMap" I.shadow2DTy
   shadowVP <- I.newUniformVar "shadowVP" I.matrix4Ty
 
   lightPersp <- I.setE I.vector4fTy $
                 I.xform4f (I.mkVarExpr shadowVP) $
                 I.mkVec4f_31 (I.mkVarExpr pos) (I.mkConstf 1)
+
+  -- !FIXME! Do a better bias here...
+  I.assignE lightPersp $
+    I.mkVec4f_211
+    (I.finishSwizzleV . I._y_ . I._x_ . I.swizzle4D $ I.mkVarExpr lightPersp)
+    (I.subf
+     (I.finishSwizzleS . I._z_ . I.swizzle4D $ I.mkVarExpr lightPersp)
+     (I.mkConstf 0.001))
+    (I.finishSwizzleS . I._w_ . I.swizzle4D $ I.mkVarExpr lightPersp)
 
   I.assignE lightPersp $
     I.div4f (I.mkVarExpr lightPersp) $
@@ -551,16 +560,11 @@ genShadowFragment = do
     I.add4f (I.mkVec4f_1111 (I.mkConstf 0.5) (I.mkConstf 0.5) (I.mkConstf 0.5) (I.mkConstf 0.5)) $
     I.scale4f (I.mkVarExpr lightPersp) (I.mkConstf 0.5)
 
-  -- !FIXME! Do a better bias here...
-  objDepth <- I.setE I.floatTy $
-              I.subf (I.finishSwizzleS . I._z_ . I.swizzle4D $ I.mkVarExpr lightPersp) (I.mkConstf 0.0001)
-  shdwDepth <- I.setE I.floatTy $
-               I.finishSwizzleS . I._z_ . I.swizzle4D $
-               I.sample2D (I.mkVarExpr shadowMap) $
-               I.finishSwizzleV . I._y_ . I._x_ . I.swizzle4D $
-               I.mkVarExpr lightPersp
-
-  I.setE I.floatTy $ I.castBoolToFloat $ I.gtf (I.mkVarExpr shdwDepth) (I.mkVarExpr objDepth)
+  I.setE I.floatTy $
+    I.finishSwizzleS . I._z_ . I.swizzle4D $
+    I.shadow2D (I.mkVarExpr shadowMap) $
+    I.finishSwizzleV . I._z_ . I._y_ . I._x_ . I.swizzle4D $
+    I.mkVarExpr lightPersp
 
 genLitFragShader :: Light -> Material -> I.ShaderCode
 genLitFragShader light mat = I.ShdrCode $ do
