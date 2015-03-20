@@ -44,7 +44,7 @@ import GHC.Exts (groupWith)
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 
-import Linear hiding (trace)
+import Linear hiding (trace, identity)
 
 import System.IO.Unsafe
 --------------------------------------------------------------------------------

@@ -78,7 +78,7 @@ containsPoint (RotatedVolume q bv) v = containsPoint bv (Quat.rotate (negate q) 
 type Orientation = (Vec3f, Mat3f, Vec3f)
 
 io :: Orientation
-io = (zero, eye3, V3 1 1 1)
+io = (zero, Linear.Matrix.identity, V3 1 1 1)
 
 data OrientedVolume = Box Orientation
                     | Ellipse Orientation

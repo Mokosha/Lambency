@@ -9,7 +9,7 @@ module Lambency.Transform (
 
 --------------------------------------------------------------------------------
 
-import Linear.Matrix
+import Linear.Matrix hiding (identity)
 import Linear.Metric
 import Linear.Vector
 import Linear.V3

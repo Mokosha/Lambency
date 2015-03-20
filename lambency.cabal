@@ -66,7 +66,7 @@ library
                        OpenGL >=2.9.2.0,
                        OpenGLRaw,
                        JuicyPixels,
-                       linear >= 1.15,
+                       linear >= 1.18,
                        parsec >= 3.1.7,
                        text,
                        stm >= 2.4,

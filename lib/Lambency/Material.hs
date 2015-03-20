@@ -127,12 +127,12 @@ diffuseColoredMaterial color =
 
 maskedSpriteMaterial :: Texture -> Material
 maskedSpriteMaterial tex =
-  defaultMaskedSprite { spriteMaskMatrix = MaterialVar ("spriteMaskMatrix", Just $ Matrix3Val $ eye3),
+  defaultMaskedSprite { spriteMaskMatrix = MaterialVar ("spriteMaskMatrix", Just $ Matrix3Val $ identity),
                         spriteMask = MaterialVar ("spriteMask", Just $ TextureVal tex) }
 
 texturedSpriteMaterial :: Texture -> Material
 texturedSpriteMaterial tex =
-  TexturedSpriteMaterial { spriteTextureMatrix = MaterialVar ("spriteMaskMatrix", Just $ Matrix3Val $ eye3),
+  TexturedSpriteMaterial { spriteTextureMatrix = MaterialVar ("spriteMaskMatrix", Just $ Matrix3Val $ identity),
                            spriteTexture = MaterialVar ("spriteMask", Just $ TextureVal tex),
                            spriteAlpha = MaterialVar ("spriteAlpha", Just $ FloatVal 1) }
 

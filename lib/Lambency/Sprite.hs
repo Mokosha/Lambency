@@ -34,7 +34,7 @@ import Lambency.Transform
 import Lambency.Types
 import Lambency.Utils
 
-import Linear hiding (trace)
+import Linear hiding (trace, identity)
 --------------------------------------------------------------------------------
 
 data SpriteFrame = SpriteFrame {
