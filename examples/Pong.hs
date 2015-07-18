@@ -1,8 +1,9 @@
 module Main where
 
 --------------------------------------------------------------------------------
+import Prelude hiding ((.), id)
 import Control.Monad.Writer (tell)
-import Control.Wire hiding ((.))
+import Control.Wire
 import FRP.Netwire.Input
 import FRP.Netwire.Move
 
@@ -78,7 +79,8 @@ startBall = Ball (0.5 *^ (vi2f2 $ V2 screenWidth screenHeight)) ballStartSpeed
 -- Rendering
 
 renderPaddle :: L.Sprite -> Bool -> Float -> L.GameMonad ()
-renderPaddle s b f = L.renderSprite s (V2 paddleWidth paddleHeight) (-1) (paddleLoc b f)
+renderPaddle s b f =
+  L.renderSprite s (V2 paddleWidth paddleHeight) (-1) (paddleLoc b f)
 
 renderBall :: L.Sprite -> Ball -> L.GameMonad ()
 renderBall s (Ball (V2 x y) _) = L.renderSprite s sc (-1) pp
@@ -88,21 +90,15 @@ renderBall s (Ball (V2 x y) _) = L.renderSprite s sc (-1) pp
 
 renderScore :: L.Font -> Int -> Int -> L.GameMonad ()
 renderScore f p1 p2 =
-  let score1 = show p1
-      score2 = show p2
-      scoreLen = L.stringWidth f score1
-      scoreCenter = vi2f2 $ V2 (screenWidth `div` 2) wallHeight
-  in
-   do
-     L.renderUIString f score1 (scoreCenter + (V2 (-scoreOffset-scoreLen) scoreOffset))
-     L.renderUIString f score2 (scoreCenter + (V2 scoreOffset scoreOffset))
+  let scoreLen = L.stringWidth f score1
+      c = vi2f2 $ V2 (screenWidth `div` 2) wallHeight
+  in do
+    L.renderUIString f (show p1) (c + (V2 (-scoreOffset-scoreLen) scoreOffset))
+    L.renderUIString f (show p2) (c + (V2 scoreOffset scoreOffset))
 
 dashedMidsection :: L.Sprite -> [(V2 Float, V2 Int, L.Sprite)]
-dashedMidsection s = [(tr x, sc, s) | x <- [0,1..12]]
+dashedMidsection s = [(tr x, V2 4 20, s) | x <- [0,1..12]]
   where
-    sc :: V2 Int
-    sc = V2 4 20
-
     tr :: Int -> V2 Float
     tr x = 0.5 *^ (vi2f2 $ V2 screenWidth (80 * x)) ^-^ (V2 1.5 0)
 
@@ -114,7 +110,8 @@ mkWall True x = (vi2f2 $ V2 0 (screenHeight - wallHeight), wallScale, x)
 mkWall False x = (V2 0 0, wallScale, x)
 
 renderPaddleWire :: L.Sprite -> Bool -> L.GameWire Float Float
-renderPaddleWire s playerOne = mkGen_ $ \y -> renderPaddle s playerOne y >> return (Right y)
+renderPaddleWire s playerOne =
+  mkGen_ $ \y -> renderPaddle s playerOne y >> return (Right y)
 
 renderBallWire :: L.Sprite -> L.GameWire Ball Ball
 renderBallWire s = mkGen_ $ \b -> renderBall s b >> return (Right b)
@@ -129,10 +126,17 @@ renderStatic rs = mkGen_ $ \x -> mapM_ renderIt rs >> return (Right x)
 
 paddleFeedback :: L.GameWire (a, Float) Float -> L.GameWire (a, Float) (Float, Float)
 paddleFeedback handler =
-  ((when ((>= paddleMaxY) . snd) >>> handler >>> (when (< 0) <|> pure 0)) <|> -- Paddle is against top wall
-   (when ((<= paddleMinY) . snd) >>> handler >>> (when (> 0) <|> pure 0)) <|> -- Paddle is against bottom wall
-   handler
-  ) >>> integral paddleStartY >>> (mkId &&& mkId)
+  let againstTop = when ((>= paddleMaxY) . snd) >>>
+                   handler >>>
+                   (when (< 0) <|> pure 0)
+
+      againstBot = when ((<= paddleMinY) . snd) >>>
+                   handler >>>
+                   (when (> 0) <|> pure 0)
+  in
+   (againstTop <|> againstBot <|> handler) >>>
+   integral paddleStartY >>>
+   (mkId &&& mkId)
 
 paddleWire :: Bool -> L.Sprite ->  L.GameWire (a, Float) Float -> L.GameWire a Float
 paddleWire playerOne ro handler =
@@ -148,8 +152,8 @@ ballWire ro = integrateBall >>> renderBallWire ro
 
 keyHandler :: L.GameWire (a, Float) Float
 keyHandler =
-  (keyPressed GLFW.Key'Up >>> pure paddleSpeed) <|>
-  (keyPressed GLFW.Key'Down >>> pure (-paddleSpeed)) <|>
+  (pure paddleSpeed . keyPressed GLFW.Key'Up) <|>
+  (pure (-paddleSpeed) . keyPressed GLFW.Key'Down) <|>
   pure 0
 
 collidePaddle :: Bool -> L.Sound -> L.GameWire (Ball, Float) Ball
@@ -180,11 +184,9 @@ collideWall = mkSF_ collide
        else Ball p v
 
 aiHandler :: L.GameWire (Ball, Float) Float
-aiHandler = mkSF_ trackBall
-  where
-    trackBall (Ball p v, h) =
-      let dy = (p ^. _y) - (h + (fromIntegral $ paddleHeight `div` 2))
-      in L.clamp ((v ^. _y) + dy) (-paddleSpeed) paddleSpeed
+aiHandler = mkSF_ $ \(Ball p v, h) ->
+  let dy = (p ^. _y) - (h + (fromIntegral $ paddleHeight `div` 2))
+  in L.clamp ((v ^. _y) + dy) (-paddleSpeed) paddleSpeed
 
 handleScore :: L.Font -> L.GameWire (Int, Ball) (Int, Ball)
 handleScore f = scoreWire 0 0
@@ -212,7 +214,9 @@ handleScore f = scoreWire 0 0
 
 gameFeedback :: L.Sprite -> L.Sprite -> IO (L.GameWire (Int, Ball) (Int, Ball))
 gameFeedback quad circle = do
-  sysFont <- getDataFileName ("examples" </> "kenpixel.ttf") >>= L.loadTTFont 36 (V3 1 1 1)
+  fontFilename <- getDataFileName ("examples" </> "kenpixel.ttf")
+  sysFont <- L.loadTTFont 36 (V3 1 1 1) fontFilename
+  
   sound <- getDataFileName ("examples" </> "pong-bloop.wav") >>= L.loadSound
   return $ (second $
             (collideWith True sound keyHandler) >>>
@@ -221,9 +225,12 @@ gameFeedback quad circle = do
             ballWire circle) >>>
     handleScore sysFont
     where
-      collideWith :: Bool -> L.Sound -> L.GameWire (Ball, Float) Float -> L.GameWire Ball Ball
-      collideWith playerOne s handler = (mkId &&& paddleWire playerOne quad handler) >>>
-                                        collidePaddle playerOne s
+      collideWith :: Bool -> L.Sound ->
+                     L.GameWire (Ball, Float) Float ->
+                     L.GameWire Ball Ball
+      collideWith playerOne s handler =
+        (mkId &&& paddleWire playerOne quad handler) >>>
+        collidePaddle playerOne s
 
 gameWire :: L.Sprite -> L.Sprite -> IO (L.GameWire Int Int)
 gameWire quad circle = do
@@ -239,14 +246,16 @@ pongCam = pure zero >>> (L.mk2DCam screenWidth screenHeight)
 loadGame :: IO (L.Game Int)
 loadGame = do
   white <- L.createSolidTexture (255, 255, 255, 255)
-  quad <- L.changeSpriteColor (V4 0.4 0.6 0.2 1.0) <$> L.loadStaticSpriteWithMask white
+  quad <- L.changeSpriteColor (V4 0.4 0.6 0.2 1.0) <$>
+          L.loadStaticSpriteWithMask white
   w <- gameWire quad quad
   let staticSprites = [mkWall False quad, mkWall True quad] ++ dashedMidsection quad
+      mainWire = w >>> renderStatic staticSprites >>> L.quitWire GLFW.Key'Q
   return $ L.Game { L.staticLights = [],
                     L.staticGeometry = [],
                     L.mainCamera = pongCam,
                     L.dynamicLights = [],
-                    L.gameLogic = w >>> renderStatic staticSprites >>> L.quitWire GLFW.Key'Q}
+                    L.gameLogic = mainWire }
 
 main :: IO ()
 main = L.withWindow screenWidth screenHeight "Pong Demo" $ L.loadAndRun 0 loadGame
