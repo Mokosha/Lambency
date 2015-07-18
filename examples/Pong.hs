@@ -155,6 +155,7 @@ keyHandler =
 collidePaddle :: Bool -> L.Sound -> L.GameWire (Ball, Float) Ball
 collidePaddle playerOne sound = mkGen_ collide
   where
+    collide :: (Ball, Float) -> L.GameMonad (Either String Ball)
     collide (Ball p v, h) = 
       let paddleSz = vi2f2 $ V2 paddleWidth paddleHeight
           paddleRect = (paddleLoc playerOne h, paddleSz)

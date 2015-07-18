@@ -33,6 +33,7 @@ cam = L.mkViewerCam initialCam zero
 wireframeToggle :: L.GameWire a a
 wireframeToggle = (keyDebounced GLFW.Key'W W.>>> toggleWireframe True) W.<|> W.mkId
   where
+    toggleWireframe :: Bool -> L.GameWire a a
     toggleWireframe wireframe = W.mkGenN $ \x -> do
       tell [L.WireframeAction wireframe]
       return (Right x, toggleWireframe $ not wireframe)
