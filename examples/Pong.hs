@@ -182,7 +182,9 @@ collideWall = mkSF_ collide
 aiHandler :: L.GameWire (Ball, Float) Float
 aiHandler = mkSF_ trackBall
   where
-    trackBall (Ball p _, h) = L.clamp ((p ^. _y) - h) (-paddleSpeed) paddleSpeed
+    trackBall (Ball p v, h) =
+      let dy = (p ^. _y) - (h + (fromIntegral $ paddleHeight `div` 2))
+      in L.clamp ((v ^. _y) + dy) (-paddleSpeed) paddleSpeed
 
 handleScore :: L.Font -> L.GameWire (Int, Ball) (Int, Ball)
 handleScore f = scoreWire 0 0
