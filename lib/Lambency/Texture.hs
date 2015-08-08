@@ -143,27 +143,31 @@ updateTexture tex ptr (x, y) (w, h) = do
       pos = GL.TexturePosition2D (fromIntegral x) (fromIntegral y)
   GL.texSubImage2D GL.Texture2D 0 pos size pd
 
-loadTextureFromPNG :: FilePath -> IO(Maybe Texture)
+loadTextureFromPNGorTGA :: JP.DynamicImage -> IO (Texture)
+loadTextureFromPNGorTGA (JP.ImageRGBA8 (JP.Image width height dat)) = do
+  Vector.unsafeWith dat $ \ptr ->
+    initializeTexture ptr (fromIntegral width, fromIntegral height) RGBA8
+loadTextureFromPNGorTGA (JP.ImageRGB8 (JP.Image width height dat)) = do
+  Vector.unsafeWith dat $ \ptr ->
+    initializeTexture ptr (fromIntegral width, fromIntegral height) RGB8
+
+loadTextureFromPNG :: FilePath -> IO (Maybe Texture)
 loadTextureFromPNG filename = do
   pngBytes <- BS.readFile filename
-  pngImg <- case JP.decodePng pngBytes of
+  case JP.decodePng pngBytes of
     Left str -> do
       putStrLn $ "Error loading PNG file: " ++ str
       return Nothing
-    Right img -> return (Just img)
-  case pngImg of
-    Nothing -> return Nothing
-    Just img -> do
-      case img of
-        (JP.ImageRGBA8 (JP.Image width height dat)) -> do
-          tex <- Vector.unsafeWith dat $ \ptr ->
-            initializeTexture ptr (fromIntegral width, fromIntegral height) RGBA8
-          return $ Just tex
-        (JP.ImageRGB8 (JP.Image width height dat)) -> do
-          tex <- Vector.unsafeWith dat $ \ptr ->
-            initializeTexture ptr (fromIntegral width, fromIntegral height) RGB8
-          return $ Just tex
-        _ -> return Nothing
+    Right img -> Just <$> loadTextureFromPNGorTGA img
+
+loadTextureFromTGA :: FilePath -> IO (Maybe Texture)
+loadTextureFromTGA filename = do
+  tgaBytes <- BS.readFile filename
+  case JP.decodeTga tgaBytes of
+    Left str -> do
+      putStrLn $ "Error loading TGA file: " ++ str
+      return Nothing
+    Right img -> Just <$> loadTextureFromPNGorTGA img
 
 flipY :: JP.Pixel a => JP.Image a -> JP.Image a
 flipY img =
@@ -228,6 +232,7 @@ createSolidTexture (r, g, b, a) = do
 data ImageType
   = ImageType'PNG
   | ImageType'JPG
+  | ImageType'TGA
   deriving (Show, Eq, Ord, Enum)
 
 determineImageType :: FilePath -> IO (Maybe ImageType)
@@ -242,6 +247,8 @@ determineImageType filename = do
     fromExtension ".JPG" = Just ImageType'JPG
     fromExtension ".jpeg" = Just ImageType'JPG
     fromExtension ".JPEG" = Just ImageType'JPG
+    fromExtension ".tga" = Just ImageType'TGA
+    fromExtension ".TGA" = Just ImageType'TGA
     fromExtension _ = Nothing
 
 loadTextureWithType :: FilePath -> Maybe ImageType -> IO (Maybe Texture)
@@ -250,6 +257,7 @@ loadTextureWithType fp Nothing = do
   return Nothing
 loadTextureWithType filename (Just ImageType'PNG) = loadTextureFromPNG filename
 loadTextureWithType filename (Just ImageType'JPG) = loadTextureFromJPG filename
+loadTextureWithType filename (Just ImageType'TGA) = loadTextureFromTGA filename
 
 loadTexture :: FilePath -> IO (Maybe Texture)
 loadTexture filename = determineImageType filename >>= (loadTextureWithType filename)
