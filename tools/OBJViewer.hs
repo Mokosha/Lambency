@@ -25,13 +25,29 @@ initialCam = L.mkPerspCamera
              ((-15) *^ L.localForward) (L.localForward) (L.localUp)
              (pi / 4) (4.0 / 3.0)
              -- near far
-             0.1 1000.0
+             0.1 10000.0
 
 cam :: L.GameWire () L.Camera
-cam = L.mkViewerCam initialCam zero
+cam = startCam (makeViewer initialCam) makeViewer makeDebug
+  where
+    makeViewer cam = L.mkViewerCam cam zero
+    makeDebug cam = L.mkDebugCam cam
+    startCam :: L.GameWire a L.Camera
+                -> (L.Camera -> L.GameWire a L.Camera)
+                -> (L.Camera -> L.GameWire a L.Camera)
+                -> (L.GameWire a L.Camera)
+    startCam camWire mkThisCam mkThatCam = W.mkGen $ \dt _ -> do
+      (Right nextCam, nextCamWire) <- W.stepWire camWire dt (Right undefined)
+      toggle <- keyIsPressed GLFW.Key'F
+      if toggle then
+        do
+          setCursorMode CursorMode'Enabled
+          releaseKey GLFW.Key'F
+          return (Right nextCam, startCam (mkThatCam nextCam) mkThatCam mkThisCam)
+        else return (Right nextCam, startCam nextCamWire mkThisCam mkThatCam)
 
 wireframeToggle :: L.GameWire a a
-wireframeToggle = (keyDebounced GLFW.Key'W W.>>> toggleWireframe True) W.<|> W.mkId
+wireframeToggle = (keyDebounced GLFW.Key'V W.>>> toggleWireframe True) W.<|> W.mkId
   where
     toggleWireframe :: Bool -> L.GameWire a a
     toggleWireframe wireframe = W.mkGenN $ \x -> do
