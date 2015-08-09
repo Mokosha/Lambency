@@ -90,7 +90,7 @@ renderBall s (Ball (V2 x y) _) = L.renderSprite s sc (-1) pp
 
 renderScore :: L.Font -> Int -> Int -> L.GameMonad ()
 renderScore f p1 p2 =
-  let scoreLen = L.stringWidth f score1
+  let scoreLen = L.stringWidth f (show p1)
       c = vi2f2 $ V2 (screenWidth `div` 2) wallHeight
   in do
     L.renderUIString f (show p1) (c + (V2 (-scoreOffset-scoreLen) scoreOffset))

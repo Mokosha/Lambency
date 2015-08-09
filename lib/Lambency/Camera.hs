@@ -23,7 +23,7 @@ module Lambency.Camera (
 
   mkFixedCam,
   mkViewerCam,
-  mkDebugCam,
+  mkFreeCam,
   mk2DCam,
 ) where
 --------------------------------------------------------------------------------
@@ -269,8 +269,8 @@ mkViewerCam initialCam initialFocus =
      (mouseScroll W.&&& W.mkId) W.>>> (W.arr handleScroll))
    W.>>> (W.arr $ \(_, c@(cam, _)) -> (cam, c))
 
-mkDebugCam :: Camera -> GameWire a Camera
-mkDebugCam initCam = W.loop ((W.second (W.delay initCam W.>>> updCam)) W.>>> feedback)
+mkFreeCam :: Camera -> GameWire a Camera
+mkFreeCam initCam = W.loop ((W.second (W.delay initCam W.>>> updCam)) W.>>> feedback)
   where
   feedback :: GameWire (a, b) (b, b)
   feedback = W.mkPure_ $ \(_, x) -> Right (x, x)

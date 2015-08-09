@@ -30,7 +30,7 @@ initialCam = L.mkPerspCamera
              0.1 1000.0
 
 demoCam :: L.GameWire () L.Camera
-demoCam = L.mkDebugCam initialCam
+demoCam = L.mkFreeCam initialCam
 
 mkPlane :: IO (L.Transform, L.RenderObject)
 mkPlane = do

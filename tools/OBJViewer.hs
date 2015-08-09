@@ -28,10 +28,10 @@ initialCam = L.mkPerspCamera
              0.1 10000.0
 
 cam :: L.GameWire () L.Camera
-cam = startCam (makeViewer initialCam) makeViewer makeDebug
+cam = startCam (makeViewer initialCam) makeViewer makeFree
   where
     makeViewer cam = L.mkViewerCam cam zero
-    makeDebug cam = L.mkDebugCam cam
+    makeFree cam = L.mkFreeCam cam
     startCam :: L.GameWire a L.Camera
                 -> (L.Camera -> L.GameWire a L.Camera)
                 -> (L.Camera -> L.GameWire a L.Camera)
