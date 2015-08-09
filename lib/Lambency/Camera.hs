@@ -223,7 +223,8 @@ mkViewerCam initialCam initialFocus =
         (setCamPos c (oldPos ^+^ dx), focus ^+^ dx)
         where
           oldPos = XForm.position xform
-          dx = (dxScale oldPos focus *^) $ (-mx *^ (XForm.right xform)) ^+^ (my *^ (XForm.up xform))
+          dx = (dxScale oldPos focus *^) $
+               (-mx *^ (XForm.right xform)) ^+^ (my *^ (XForm.up xform))
 
       {-- !TODO! This might be good to add to netwire-input --}
       mouseIfThen :: GLFW.MouseButton -> GameWire a b -> GameWire a b -> GameWire a b
@@ -252,10 +253,14 @@ mkViewerCam initialCam initialFocus =
             (W.arr $ \((x, y), (x', y')) -> ((x - x', y - y'), (x, y)))
 
       rotationalDeltas :: GameWire a (Float, Float)
-      rotationalDeltas = mouseDeltas GLFW.MouseButton'1
+      rotationalDeltas =
+        (keyPressed GLFW.Key'LeftShift W.>>> W.pure (0, 0))
+        W.<|> mouseDeltas GLFW.MouseButton'1
 
       panningDeltas :: GameWire a (Float, Float)
-      panningDeltas = mouseDeltas GLFW.MouseButton'3
+      panningDeltas =
+        (keyPressed GLFW.Key'LeftShift W.>>> mouseDeltas GLFW.MouseButton'1)
+        W.<|> mouseDeltas GLFW.MouseButton'3
   in
    W.loop $ W.second (
      W.delay (initialCam, initialFocus) W.>>>
