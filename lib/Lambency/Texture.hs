@@ -13,6 +13,8 @@ module Lambency.Texture (
 ) where
 
 --------------------------------------------------------------------------------
+import Control.Applicative
+
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 
@@ -150,6 +152,7 @@ loadTextureFromPNGorTGA (JP.ImageRGBA8 (JP.Image width height dat)) = do
 loadTextureFromPNGorTGA (JP.ImageRGB8 (JP.Image width height dat)) = do
   Vector.unsafeWith dat $ \ptr ->
     initializeTexture ptr (fromIntegral width, fromIntegral height) RGB8
+loadTextureFromPNGorTGA _ = error "Unknown PNG or TGA color type"
 
 loadTextureFromPNG :: FilePath -> IO (Maybe Texture)
 loadTextureFromPNG filename = do
