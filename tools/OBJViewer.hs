@@ -30,8 +30,8 @@ initialCam = L.mkPerspCamera
 cam :: L.GameWire () L.Camera
 cam = startCam (makeViewer initialCam) makeViewer makeFree
   where
-    makeViewer cam = L.mkViewerCam cam zero
-    makeFree cam = L.mkFreeCam cam
+    makeViewer c = L.mkViewerCam c zero
+    makeFree c = L.mkFreeCam c
     startCam :: L.GameWire a L.Camera
                 -> (L.Camera -> L.GameWire a L.Camera)
                 -> (L.Camera -> L.GameWire a L.Camera)
