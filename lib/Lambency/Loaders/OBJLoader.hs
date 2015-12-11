@@ -28,7 +28,10 @@ import Data.Text (pack)
 import Data.Array.Unboxed (UArray, listArray, (!))
 
 import Control.Monad.State.Strict as State
+
+#if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative hiding (many, (<|>))
+#endif
 
 import Text.Parsec
 import Text.Parsec.Text (Parser)

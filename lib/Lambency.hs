@@ -58,7 +58,9 @@ import Lambency.Transform
 import Lambency.Types
 import Lambency.Utils
 
+#if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
+#endif
 import Control.Monad.RWS.Strict
 import Control.Monad.Reader
 import Control.Monad.State

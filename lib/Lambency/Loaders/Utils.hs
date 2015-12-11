@@ -1,7 +1,9 @@
 module Lambency.Loaders.Utils where
 
 --------------------------------------------------------------------------------
+#if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative hiding ((<|>), many)
+#endif
 
 import Text.Parsec
 import Text.Parsec.Text (Parser)

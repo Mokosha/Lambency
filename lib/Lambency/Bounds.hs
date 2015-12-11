@@ -18,8 +18,9 @@ import qualified Linear.Quaternion as Quat
 import Linear.Vector
 import Linear.V3
 
+#if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
-
+#endif
 --------------------------------------------------------------------------------
 
 -- Bounding Volumes

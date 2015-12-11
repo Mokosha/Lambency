@@ -20,7 +20,6 @@ Try the examples:
 
 From the source directory:
 
-    cabal sandbox init
-    cabal install . --only-dependencies
-    cabal configure -fexamples
-    cabal build
+    stack init --solver
+    stack build
+    stack exec lambcubedemo

@@ -1,10 +1,15 @@
 module Main (main) where
 
 --------------------------------------------------------------------------------
+#if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
+#endif
+
 import Control.Monad.Reader
 
+#if __GLASGOW_HASKELL__ <= 708
 import Data.Traversable (sequenceA)
+#endif
 
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Lambency as L

@@ -5,7 +5,9 @@ module Lambency.Loaders.MTLLoader (
 ) where
 
 --------------------------------------------------------------------------------
+#if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative hiding ((<|>), many)
+#endif
 
 import Data.Char (toLower)
 import Data.List (find)

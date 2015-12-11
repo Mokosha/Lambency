@@ -18,7 +18,9 @@ import Linear.Quaternion hiding (rotate)
 import qualified Linear.Quaternion as Quat
 
 import qualified Control.Wire as W
+#if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
+#endif
 
 --------------------------------------------------------------------------------
 

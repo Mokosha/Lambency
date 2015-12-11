@@ -24,7 +24,9 @@ import Lambency.Transform
 import Lambency.Types
 import Lambency.Vertex
 
+#if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
+#endif
 import Control.Monad.State
 import Control.Concurrent.STM
 

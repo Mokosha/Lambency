@@ -13,7 +13,9 @@ module Lambency.Texture (
 ) where
 
 --------------------------------------------------------------------------------
+#if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
+#endif
 
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW

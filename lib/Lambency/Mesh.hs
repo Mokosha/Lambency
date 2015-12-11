@@ -19,7 +19,10 @@ module Lambency.Mesh (
 
 import Lambency.Render
 import Lambency.Vertex
+
+#if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
+#endif
 
 import Data.Int
 import qualified Data.Map as Map

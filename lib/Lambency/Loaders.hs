@@ -4,7 +4,9 @@ module Lambency.Loaders (
 ) where
 
 --------------------------------------------------------------------------------
+#if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
+#endif
 
 import qualified Data.Map as Map
 

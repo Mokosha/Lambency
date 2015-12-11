@@ -2,7 +2,7 @@
 --  see http://haskell.org/cabal/users-guide/
 
 name:                lambency
-version:             0.1.0.0
+version:             0.0.1.0
 synopsis:            A Real-Time Rendering Framework written in Haskell
 -- description:      
 homepage:            none
@@ -28,6 +28,7 @@ flag                 examples
 
 library
   hs-source-dirs:      lib
+  extensions:          CPP
   exposed-modules:     Lambency
                        Lambency.Types
   other-modules:       Lambency.Bounds
@@ -97,6 +98,7 @@ library
 executable lobjview
   main-is:        OBJViewer.hs
   hs-source-dirs: tools
+  extensions:     CPP
   ghc-options:    -Wall -rtsopts -O3
   build-depends:  base > 4.5,
                   GLFW-b,
@@ -117,6 +119,7 @@ executable lambcubedemo
   main-is:        CubeDemo.hs
   hs-source-dirs: examples
   ghc-options:    -Wall -rtsopts -O3
+  extensions:     CPP
 
   if flag(examples)
     build-depends:  base > 4.5,
@@ -135,6 +138,7 @@ executable lambpong
   main-is:        Pong.hs
   hs-source-dirs: examples
   ghc-options:    -Wall -rtsopts -O3
+  extensions:     CPP
 
   if flag(examples)
     build-depends:  base > 4.5,
@@ -155,6 +159,7 @@ executable lambshooter
   main-is:        Shooter.hs
   hs-source-dirs: examples
   ghc-options:    -Wall -rtsopts -O3
+  extensions:     CPP
 
   if flag(examples)
     build-depends:  base > 4.5,
