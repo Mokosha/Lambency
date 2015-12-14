@@ -74,6 +74,7 @@ import FRP.Netwire.Input
 import FRP.Netwire.Input.GLFW
 
 import System.CPUTime
+import System.Exit
 import System.IO
 --------------------------------------------------------------------------------
 
@@ -317,7 +318,7 @@ runGame gs = do
 
       t' <- getCPUTime
 
-      GL.get GL.errors >>= foldM (\() e -> print e) ()
+      GL.get GL.errors >>= foldM (\() e -> print e >> exitFailure) ()
 
       return (t' - t)
     else return renderTime
