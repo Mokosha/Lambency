@@ -101,7 +101,7 @@ makeWindow width height title = do
   putStrLn "Done"
 
   GLFW.setErrorCallback $ Just errorCallback
-  putStr $ "Creating window of size (" ++ (show width) ++ ", " ++ (show height) ++ ")..."
+  putStr $ "Creating window of size " ++ show (width, height) ++ "..."
   GLFW.windowHint $ GLFW.WindowHint'Samples 4
   jm <- GLFW.createWindow width height title Nothing Nothing
   m <- case jm of
@@ -126,6 +126,8 @@ makeWindow width height title = do
   GL.dither GL.$= GL.Disabled
 
   GL.rowAlignment GL.Unpack GL.$= 1
+
+  GL.get GL.errors >>= foldM (\() e -> print e) ()
 
   -- !FIXME! Why is this Maybe?
   return (Just m)
@@ -314,6 +316,9 @@ runGame gs = do
       GLFW.swapBuffers win
 
       t' <- getCPUTime
+
+      GL.get GL.errors >>= foldM (\() e -> print e) ()
+
       return (t' - t)
     else return renderTime
 
