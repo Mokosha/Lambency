@@ -11,6 +11,7 @@ module Lambency.Font (
 import Control.Monad
 
 import Data.Array.Storable
+import Data.Bits
 import Data.List (mapAccumL, foldl')
 import qualified Data.Map as Map
 import Data.Word
@@ -168,7 +169,10 @@ loadTTFont fontSize (V3 fontR fontG fontB) filepath = do
   runFreeType $ ft_Set_Pixel_Sizes ft_face 0 (toEnum . fromEnum $ fontSize)
 
   -- Figure out the width and height of the bitmap that we need...
-  (texW, texH) <- foldM (analyzeGlyph ft_face) (0, 0) charString
+  (texW, texH) <- let logBase2 x = finiteBitSize x - 1 - countLeadingZeros x
+                      nextPower2 x = 1 `shiftL` (logBase2 x + 1)
+                      updateWH (x, y) = (nextPower2 x, nextPower2 y)
+                   in updateWH <$> foldM (analyzeGlyph ft_face) (0, 0) charString
 
   -- Create a texture to store all of the glyphs
   texZeroA <- ((newArray (1, texW*texH) 0) :: IO (StorableArray Int Word8))
