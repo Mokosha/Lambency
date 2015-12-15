@@ -8,6 +8,9 @@ module Lambency.Font (
 ) where
 
 --------------------------------------------------------------------------------
+#if __GLASGOW_HASKELL__ <= 708
+import Control.Applicative
+#endif
 import Control.Monad
 
 import Data.Array.Storable
@@ -38,6 +41,19 @@ import Paths_lambency
 import System.FilePath
 --------------------------------------------------------------------------------
 
+-- Helpers
+
+logBase2 :: Int -> Int
+#if __GLASGOW_HASKELL__ <= 708
+logBase2 1 = 0
+logBase2 x
+  | x <= 0 = error "Log is undefined!"
+  | otherwise = 1 + logBase2 (x `shiftR` 1)
+#else
+logBase2 x = finiteBitSize x - 1 - countLeadingZeros x
+#endif
+
+--------------------------------------------------------------------------------
 newtype Font = Font { getGlyph :: Char -> Maybe (SpriteFrame, (V2 Int, V2 Int)) }
 
 glyphSize :: Font -> Char -> (V2 Float, V2 Float)
@@ -169,8 +185,7 @@ loadTTFont fontSize (V3 fontR fontG fontB) filepath = do
   runFreeType $ ft_Set_Pixel_Sizes ft_face 0 (toEnum . fromEnum $ fontSize)
 
   -- Figure out the width and height of the bitmap that we need...
-  (texW, texH) <- let logBase2 x = finiteBitSize x - 1 - countLeadingZeros x
-                      nextPower2 x = 1 `shiftL` (logBase2 x + 1)
+  (texW, texH) <- let nextPower2 = (shiftL 1) . (+ 1) . logBase2
                       updateWH (x, y) = (nextPower2 x, nextPower2 y)
                    in updateWH <$> foldM (analyzeGlyph ft_face) (0, 0) charString
 
