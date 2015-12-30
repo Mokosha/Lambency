@@ -37,9 +37,26 @@ module Lambency (
 ) where
 
 --------------------------------------------------------------------------------
+import Prelude hiding ((.))
+
+#if __GLASGOW_HASKELL__ <= 708
+import Control.Applicative
+#endif
+import Control.Monad.RWS.Strict
+import Control.Monad.Reader
+import Control.Monad.State
+import Control.Wire ((.))
+import qualified Control.Wire as W
+
+import Data.Time
+
+import GHC.Float
 
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Graphics.Rendering.OpenGL as GL
+
+import FRP.Netwire.Input
+import FRP.Netwire.Input.GLFW
 
 import Lambency.Bounds
 import Lambency.Camera
@@ -58,21 +75,6 @@ import Lambency.Transform
 import Lambency.Types
 import Lambency.Utils
 
-#if __GLASGOW_HASKELL__ <= 708
-import Control.Applicative
-#endif
-import Control.Monad.RWS.Strict
-import Control.Monad.Reader
-import Control.Monad.State
-import qualified Control.Wire as W
-
-import Data.Time
-
-import GHC.Float
-
-import FRP.Netwire.Input
-import FRP.Netwire.Input.GLFW
-
 import System.CPUTime
 import System.Exit
 import System.IO
@@ -89,10 +91,10 @@ initLambency = do
   putStrLn "Done initializing..."
   where
     printInfo :: (GL.GettableStateVar String) -> String -> IO ()
-    printInfo sv s = (=<<) (putStrLn . ((++) s)) $ GL.get sv
+    printInfo sv s = GL.get sv >>= putStrLn . (s ++)
 
 errorCallback :: GLFW.Error -> String -> IO()
-errorCallback e s = putStrLn $ "GLFW Error: " ++ (show e ++ s)
+errorCallback e s = putStrLn $ concat ["GLFW Error: ", show e, " ", s]
 
 makeWindow :: Int -> Int -> String -> IO (Maybe GLFW.Window)
 makeWindow width height title = do
@@ -128,7 +130,7 @@ makeWindow width height title = do
 
   GL.rowAlignment GL.Unpack GL.$= 1
 
-  GL.get GL.errors >>= foldM (\() e -> print e) ()
+  GL.get GL.errors >>= mapM_ print
 
   -- !FIXME! Why is this Maybe?
   return (Just m)
@@ -136,8 +138,7 @@ makeWindow width height title = do
 destroyWindow :: Maybe GLFW.Window -> IO ()
 destroyWindow m = do
   case m of
-    (Just win) -> do
-      GLFW.destroyWindow win
+    (Just win) -> GLFW.destroyWindow win
     Nothing -> return ()
   GLFW.terminate
   freeSound
@@ -164,37 +165,19 @@ physicsDeltaUTC = fromRational . toRational $ physicsDeltaTime
 maximumFramerate :: NominalDiffTime
 maximumFramerate = fromRational . toRational $ (1.0 / 10.0 :: Double)
 
-playSounds :: [OutputAction] -> IO ([OutputAction])
-playSounds [] = return []
-playSounds (SoundAction sound cmd : rest) = handleCommand sound cmd >> return rest
-playSounds (act : acts) = pure (act :) <*> playSounds acts
-
-printLogs :: [OutputAction] -> IO ([OutputAction])
-printLogs [] = return []
-printLogs (LogAction s : rest) = putStrLn s >> printLogs rest
-printLogs (act : acts) = pure (act :) <*> printLogs acts
-
-handleWireframe :: [OutputAction] -> IO ([OutputAction])
-handleWireframe [] = return []
-handleWireframe (WireframeAction True : rest) = do
-  GL.polygonMode GL.$= (GL.Line, GL.Line)
-  handleWireframe rest
-handleWireframe (WireframeAction False : rest) = do
-  GL.polygonMode GL.$= (GL.Fill, GL.Fill)
-  handleWireframe rest
-handleWireframe (act : acts) = pure (act :) <*> handleWireframe acts
+handleAction :: OutputAction -> IO ()
+handleAction (SoundAction sound cmd) = handleCommand sound cmd
+handleAction (LogAction s) = putStrLn s
+handleAction (WireframeAction True) = GL.polygonMode GL.$= (GL.Line, GL.Line)
+handleAction (WireframeAction False) = GL.polygonMode GL.$= (GL.Fill, GL.Fill)
 
 -- When we handle actions, only really print logs and play any sounds
 -- that may need to start or stop.
 handleActions :: [OutputAction] -> IO ()
-handleActions actions =
-  foldM_ (\acts f -> f acts) actions [
-    printLogs,
-    playSounds,
-    handleWireframe
-  ]
+handleActions = mapM_ handleAction
 
-step :: a -> Game a -> TimeStep -> GameMonad (Either String a, Camera, [Light], Game a)
+step :: a -> Game a -> TimeStep ->
+        GameMonad (Either String a, Camera, [Light], Game a)
 step go game t = do
   (Right cam, nCamWire) <- W.stepWire (mainCamera game) t (Right ())
   (result, gameWire) <- W.stepWire (gameLogic game) t (Right go)
@@ -286,7 +269,8 @@ runGame gs = do
     -- main game wire, and uses the results to figure out what needs
     -- to be done.
     renderTime = lastFramePicoseconds gls
-    (((result, cam, lights, nextGame), newIpt), newGS, actions) = runRWS rwsPrg renderTime gs
+    (((result, cam, lights, nextGame), newIpt), newGS, actions) =
+      runRWS rwsPrg renderTime gs
 
     -- We need to render if we're going to fall below the physics threshold
     -- on the next frame. This simulates a while loop. If we don't fall
@@ -345,12 +329,14 @@ run initialGameObject initialGame win = do
   GLFW.pollEvents
 
   let statePrg = runReaderT (runLoop curTime) (ictl, win)
-  evalStateT statePrg $ GameLoopState initialGameObject initialGame session (toEnum 0) 0
+  evalStateT statePrg $
+    GameLoopState initialGameObject initialGame session (toEnum 0) 0
 
   hSetBuffering stdout oldBuffering
 
 loadAndRun :: a -> IO (Game a) -> GLFW.Window -> IO ()
-loadAndRun initialGameObject loadGamePrg win = loadGamePrg >>= (\g -> run initialGameObject g win)
+loadAndRun initialGameObject loadGamePrg win =
+  loadGamePrg >>= (\g -> run initialGameObject g win)
 
 runSimple :: Camera -> (Float -> a -> GameMonad a) -> a -> GLFW.Window -> IO ()
 runSimple cam f x win = do
@@ -364,6 +350,5 @@ runSimple cam f x win = do
 -- is pressed, then inhibits forever.
 quitWire :: GLFW.Key -> GameWire a a
 quitWire key =
-  (W.mkId W.&&& ((keyPressed key W.>>> W.pure W.mkEmpty W.>>> W.now) W.<|> W.never))
-  W.>>>
-  (W.rSwitch W.mkId)
+  W.rSwitch W.mkId .
+  (W.mkId W.&&& (W.now . W.pure W.mkEmpty . keyPressed key W.<|> W.never))
