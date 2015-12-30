@@ -137,11 +137,10 @@ shooterCam = pure zero >>> (L.mk2DCam screenWidth screenHeight)
 loadGame :: IO (L.Game ())
 loadGame = do
   w <- mkGameWire
-  return $ L.Game { L.staticLights = [],
-                    L.staticGeometry = [],
-                    L.mainCamera = shooterCam,
+  return $ L.Game { L.mainCamera = shooterCam,
                     L.dynamicLights = [],
                     L.gameLogic = w >>> L.quitWire GLFW.Key'Q}
 
 main :: IO ()
-main = L.withWindow screenWidth screenHeight "Space Shooter Demo" $ L.loadAndRun () loadGame
+main = L.withWindow screenWidth screenHeight "Space Shooter Demo" $
+       L.loadAndRun () loadGame

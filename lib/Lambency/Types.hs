@@ -299,8 +299,6 @@ data RenderObject = RenderObject {
   flags :: [RenderFlag]
 }
 
-type RenderInstance = (XForm.Transform, RenderObject)
-
 data RenderAction = RenderObjects [RenderObject]
                   | RenderClipped RenderAction RenderAction
                   | RenderTransformed XForm.Transform RenderAction
@@ -332,8 +330,6 @@ type GameState = RenderActions
 
 -- Game
 data Game a = Game {
-  staticLights :: [Light],
-  staticGeometry :: [RenderInstance],
   mainCamera :: GameWire () Camera,
   dynamicLights :: [GameWire () Light],
   gameLogic :: GameWire a a

@@ -251,9 +251,7 @@ loadGame = do
   w <- gameWire quad quad
   let staticSprites = [mkWall False quad, mkWall True quad] ++ dashedMidsection quad
       mainWire = w >>> renderStatic staticSprites >>> L.quitWire GLFW.Key'Q
-  return $ L.Game { L.staticLights = [],
-                    L.staticGeometry = [],
-                    L.mainCamera = pongCam,
+  return $ L.Game { L.mainCamera = pongCam,
                     L.dynamicLights = [],
                     L.gameLogic = mainWire }
 

@@ -1,5 +1,6 @@
 module Lambency.GameObject (
   mkObject,
+  staticObject,
   withVelocity,
   pulseSound
 ) where
@@ -11,7 +12,7 @@ import Lambency.Transform
 import Lambency.Types
 
 import Control.Arrow
-import Control.Wire
+import Control.Wire hiding ((.))
 import Control.Monad.Writer
 
 import Linear.Vector
@@ -26,6 +27,9 @@ mkObject ro xfw = mkGen $ \dt val -> do
       return (Right val, mkObject ro nextWire)
     Left i -> do
       return $ (Left i, mkObject ro nextWire)
+
+staticObject :: RenderObject -> Transform -> GameWire a a
+staticObject ro = mkObject ro . mkConst . Right
 
 withVelocity :: (Monad m, Monoid s) =>
                 Transform -> Wire (Timed Float s) e m a Vec3f ->

@@ -1,6 +1,8 @@
 module Main (main) where
 
 --------------------------------------------------------------------------------
+import Prelude hiding ((.))
+
 #if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
 #endif
@@ -22,6 +24,7 @@ import Linear.V2
 import Linear.V3
 import qualified Linear.Quaternion as Quat
 
+import Control.Wire ((.))
 import qualified Control.Wire as W
 import FRP.Netwire.Analyze
 ---------------------------------------------------------------------------------
@@ -37,19 +40,19 @@ initialCam = L.mkPerspCamera
 demoCam :: L.GameWire () L.Camera
 demoCam = L.mkFreeCam initialCam
 
-mkPlane :: IO (L.Transform, L.RenderObject)
+mkPlane :: IO (L.RenderObject, L.Transform)
 mkPlane = do
   ro <- L.createRenderObject L.plane (L.diffuseColoredMaterial $ V3 0.5 0.5 0.5)
-  return (xform, ro)
+  return (ro, xform)
   where xform = L.uniformScale 10 $
                 L.translate (V3 0 (-2) 0) $
                 L.identity
 
-mkBunny:: IO [(L.Transform, L.RenderObject)]
+mkBunny:: IO [(L.RenderObject, L.Transform)]
 mkBunny = do
   objFile <- getDataFileName ("examples" </> "bunnyN" <.> "obj")
   ros <- L.loadOBJWithDefaultMaterial objFile $ Just (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
-  return $ (\ro -> (xform, ro)) <$> ros
+  return $ (\ro -> (ro, xform)) <$> ros
   where xform = L.rotate (Quat.axisAngle (V3 0 1 0) pi) $
                 L.translate (V3 (-4) (-4.8) (-5)) $
                 L.identity
@@ -103,19 +106,17 @@ lightWire initial = (W.timeF W.>>>) $ W.mkSF_ $ \t ->
 
 loadGame :: IO (L.Game ())
 loadGame = do
-  sysFont <- getDataFileName ("examples" </> "kenpixel" <.> "ttf") >>= L.loadTTFont 18 (V3 1 0 0)
-  plane <- mkPlane
-  bunny <- mkBunny
+  sysFont <- L.loadTTFont 18 (V3 1 0 0) =<<
+             getDataFileName ("examples" </> "kenpixel" <.> "ttf")
+  plane <- uncurry L.staticObject <$> mkPlane
+  bunny <- foldl (W.>>>) W.mkId <$> map (uncurry L.staticObject) <$> mkBunny
   cube <- cubeWire
-  let gameWire = cube W.>>>
-                 (frameWire sysFont) W.>>>
-                 (L.quitWire GLFW.Key'Q)
+  let gameWire = L.quitWire GLFW.Key'Q . frameWire sysFont . cube . bunny . plane
       lightPos = 5 *^ (V3 (-2) 1 0)
       lightParams = L.mkLightParams (V3 0.15 0.15 0.15) (V3 1.0 1.0 1.0) 1.0
-  shadowLight <- L.addShadowMap $ L.spotlight lightParams lightPos (negate lightPos) (pi/4)
-  return $ L.Game { L.staticLights = [],
-                    L.staticGeometry = plane : bunny,
-                    L.mainCamera = demoCam,
+  shadowLight <- L.addShadowMap $
+                 L.spotlight lightParams lightPos (negate lightPos) (pi/4)
+  return $ L.Game { L.mainCamera = demoCam,
                     L.dynamicLights = [lightWire shadowLight],
                     L.gameLogic = gameWire}
 

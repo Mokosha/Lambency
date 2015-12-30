@@ -200,7 +200,7 @@ step go game t = do
   (result, gameWire) <- W.stepWire (gameLogic game) t (Right go)
   lightObjs <- mapM (\w -> W.stepWire w t $ Right ()) (dynamicLights game)
   let (lights, lwires) = collect lightObjs
-  return (result, cam, lights ++ (staticLights game), newGame nCamWire lwires gameWire)
+  return (result, cam, lights, newGame nCamWire lwires gameWire)
     where
       collect :: [(Either e b, GameWire a b)] -> ([b], [GameWire a b])
       collect [] = ([], [])
@@ -295,14 +295,8 @@ runGame gs = do
     accum = currentPhysicsAccum gls
     needsRender = ((accum - physicsDeltaUTC) < physicsDeltaUTC)
 
-    -- If we do render, we need to build the renderObjects and their
-    -- corresponding renderActions from the static geometry. These won't
-    -- get built or evaluated unless we actually render though.
-    sgRAs = map (uncurry xformObject) (staticGeometry g)
-
     -- The ReaderT RenderConfig IO program that will do the actual rendering
-    renderPrg = performRenderActions lights cam $
-                newGS { renderScene = RenderCons (RenderObjects sgRAs) (renderScene newGS) }
+    renderPrg = performRenderActions lights cam newGS
 
   frameTime <-
     if needsRender
@@ -364,11 +358,12 @@ runSimple cam f x win = do
         result <- f (W.dtime ts) obj
         return (Right result, gameWire)
 
-  run x (Game [] [] (W.pure cam) [] gameWire) win
+  run x (Game (W.pure cam) [] gameWire) win
 
 -- Wire that behaves like the identity wire until the given key
 -- is pressed, then inhibits forever.
 quitWire :: GLFW.Key -> GameWire a a
 quitWire key =
-  (W.mkId W.&&& ((keyPressed key W.>>> W.pure W.mkEmpty W.>>> W.now) W.<|> W.never)) W.>>>
+  (W.mkId W.&&& ((keyPressed key W.>>> W.pure W.mkEmpty W.>>> W.now) W.<|> W.never))
+  W.>>>
   (W.rSwitch W.mkId)

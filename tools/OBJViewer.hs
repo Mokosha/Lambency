@@ -4,6 +4,8 @@ module Main (main) where
 #if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
 #endif
+import Prelude hiding ((.))
+import Control.Wire ((.))
 import qualified Control.Wire as W
 
 import Control.Monad.Writer
@@ -74,13 +76,12 @@ camLight = W.mkSF_ $ \c ->
 
 loadGame :: FilePath -> IO (L.Game ())
 loadGame objfile = do
-  obj <- L.loadOBJWithDefaultMaterial objfile $ Just (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
+  obj <- L.loadOBJWithDefaultMaterial objfile $
+         Just (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
   putStrLn $ "OBJ contained " ++ (show $ length obj) ++ " meshes."
-  return $ L.Game { L.staticLights = [],
-                    L.staticGeometry = [],
-                    L.mainCamera = cam,
+  return $ L.Game { L.mainCamera = cam,
                     L.dynamicLights = [cam W.>>> camLight],
-                    L.gameLogic = controlWire obj W.>>> (L.quitWire GLFW.Key'Q) W.>>> pure () }
+                    L.gameLogic = pure () . L.quitWire GLFW.Key'Q . controlWire obj }
 
 handleArgs :: [FilePath] -> Either String FilePath
 handleArgs [] = Left "Usage: lobjview OBJFILE"
