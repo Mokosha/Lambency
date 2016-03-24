@@ -39,7 +39,7 @@ import Foreign.Marshal.Utils
 import Foreign.Ptr
 
 import qualified Graphics.Rendering.OpenGL as GL
-import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
+import qualified Graphics.GL as GLRaw
 --------------------------------------------------------------------------------
 
 type ShaderVarMap = Map.Map String ShaderVar
@@ -133,7 +133,7 @@ vertMinimal = I.ShdrCode $ do
              I.xform4f (I.mkVarExpr mvpMatrix) $
              I.mkVec4f_31 (I.mkVarExpr position) (I.mkConstf 1)
   return $ I.addVertexPosition out_pos I.emptyO
-  
+
 fragMinimal :: I.ShaderCode
 fragMinimal = I.ShdrCode $ return I.emptyO
 
@@ -396,7 +396,7 @@ getAmbientColor (LightParams{..}) (BlinnPhongMaterial {..}) = do
 
   color <- I.newUniformVar (getLightVarName ambientColor) I.vector3fTy
   I.setE I.vector3fTy $
-    I.mult3f (I.mkVarExpr color) (I.mkVarExpr reflectivity)  
+    I.mult3f (I.mkVarExpr color) (I.mkVarExpr reflectivity)
 
 getAmbientColor _ _ = error "Lambency.Material (getAmbientColor): Only Blinn-Phong materials contain ambient!"
 
@@ -481,7 +481,7 @@ blinnPhongLighting (Light params (SpotLight {..}) _) diffuseColor specularInfo p
         I.assignE outColor $ I.add3f (I.mkVarExpr diffuseLight) (I.mkVarExpr specularLight)
 
   return outColor
-  
+
 blinnPhongLighting (Light params (DirectionalLight {..}) _) diffuseColor specularInfo pos norm = do
   lightDir <- I.newUniformVar (getLightVarName dirLightDir) I.vector3fTy
 
@@ -530,11 +530,11 @@ blinnPhongLighting (Light params (PointLight {..}) _) diffuseColor specularInfo 
       I.setE I.vector3fTy $
         I.add3f (I.mkVarExpr diffuseLight) $
         I.mkVarExpr specularLight
-  
+
 genShadowFragment :: I.ShaderContext (I.ShaderVar Float)
 genShadowFragment = do
   pos <- I.getInput3f "position"
-  
+
   shadowMap <- I.newUniformVar "shadowMap" I.shadow2DTy
   shadowVP <- I.newUniformVar "shadowVP" I.matrix4Ty
 

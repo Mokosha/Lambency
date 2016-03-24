@@ -65,7 +65,7 @@ library
   build-depends:       base > 4.5,
                        GLFW-b,
                        OpenGL >=2.9.2.0,
-                       OpenGLRaw,
+                       OpenGLRaw >= 3.1,
                        JuicyPixels >= 3.2,
                        linear >= 1.18,
                        parsec >= 3.1.7,
