@@ -64,7 +64,7 @@ library
                        Paths_lambency
 
   ghc-options:         -Wall -O3
-  build-depends:       base                 >  4.5,
+  build-depends:       base                 >  4,
                        GLFW-b,
                        OpenGL               >= 2.9.2.0,
                        OpenGLRaw            >= 3.1,
@@ -102,10 +102,10 @@ executable lobjview
   hs-source-dirs: tools
   extensions:     CPP
   ghc-options:    -Wall -rtsopts -O3
-  build-depends:  base            >  4.5,
+  build-depends:  base            >  4,
                   GLFW-b,
                   lambency,
-                  linear,
+                  linear          >= 1.20,
                   netwire         >= 5.0.0,
                   netwire-input,
                   mtl             >= 2.1.2,
@@ -123,8 +123,8 @@ executable lambcubedemo
   other-modules:  Paths_lambency
   ghc-options:    -Wall -rtsopts -O3
   extensions:     CPP
-  build-depends:  base         >  4.5,
-                  netwire      >= 5,
+  build-depends:  base         >  4,
+                  netwire      >= 5.0.0,
                   GLFW-b,
                   lambency,
                   linear       >= 1.20,
@@ -144,8 +144,8 @@ executable lambpong
   other-modules:  Paths_lambency
   ghc-options:    -Wall -rtsopts -O3
   extensions:     CPP
-  build-depends:  base          >  4.5,
-                  netwire       >= 5,
+  build-depends:  base          >  4,
+                  netwire       >= 5.0.0,
                   netwire-input >= 0.0.3,
                   GLFW-b,
                   lambency,
@@ -166,12 +166,12 @@ executable lambshooter
   hs-source-dirs: examples
   ghc-options:    -Wall -rtsopts -O3
   extensions:     CPP
-  build-depends:  base          >  4.5,
-                  netwire       >= 5,
+  build-depends:  base          >  4,
+                  netwire       >= 5.0.0,
                   netwire-input >= 0.0.3,
                   GLFW-b,
                   lambency,
-                  linear        >= 1.15,
+                  linear        >= 1.20,
                   mtl,
                   containers,
                   directory,
