@@ -60,25 +60,27 @@ library
                        Lambency.Vertex
                        Lambency.Utils
                        Lambency.Sound
+
                        Paths_lambency
+
   ghc-options:         -Wall -O3
-  build-depends:       base > 4.5,
+  build-depends:       base                 >  4.5,
                        GLFW-b,
-                       OpenGL >=2.9.2.0,
-                       OpenGLRaw >= 3.1,
-                       JuicyPixels >= 3.2,
-                       linear >= 1.18,
-                       parsec >= 3.1.7,
+                       OpenGL               >= 2.9.2.0,
+                       OpenGLRaw            >= 3.1,
+                       JuicyPixels          >= 3.2,
+                       linear               >= 1.20,
+                       parsec               >= 3.1.7,
                        text,
-                       stm >= 2.4,
-                       mtl >= 2.1.2,
-                       netwire >= 5.0.0,
-                       netwire-input >= 0.0.3,
+                       stm                  >= 2.4,
+                       mtl                  >= 2.1.2,
+                       netwire              >= 5.0.0,
+                       netwire-input        >= 0.0.3,
                        netwire-input-glfw,
                        OpenAL,
                        HCodecs,
                        freetype2,
-                       hashable >= 1.2.2.0 && < 1.3,
+                       hashable             >= 1.2.2.0 && < 1.3,
                        time,
                        containers,
                        bytestring,
@@ -100,13 +102,13 @@ executable lobjview
   hs-source-dirs: tools
   extensions:     CPP
   ghc-options:    -Wall -rtsopts -O3
-  build-depends:  base > 4.5,
+  build-depends:  base            >  4.5,
                   GLFW-b,
                   lambency,
                   linear,
-                  netwire >= 5.0.0,
+                  netwire         >= 5.0.0,
                   netwire-input,
-                  mtl >= 2.1.2,
+                  mtl             >= 2.1.2,
                   directory
 
 --------------------------------------------------------------------------------
@@ -121,19 +123,20 @@ executable lambcubedemo
   other-modules:  Paths_lambency
   ghc-options:    -Wall -rtsopts -O3
   extensions:     CPP
+  build-depends:  base         >  4.5,
+                  netwire      >= 5,
+                  GLFW-b,
+                  lambency,
+                  linear       >= 1.20,
+                  mtl,
+                  containers,
+                  directory,
+                  filepath
 
   if flag(examples)
-    build-depends:  base > 4.5,
-                    netwire >= 5,
-                    GLFW-b,
-                    lambency,
-                    linear >= 1.15,
-                    mtl,
-                    containers,
-                    directory,
-                    filepath
+    buildable:    True
   else
-    buildable:      False
+    buildable:    False
 
 executable lambpong
   main-is:        Pong.hs
@@ -141,38 +144,40 @@ executable lambpong
   other-modules:  Paths_lambency
   ghc-options:    -Wall -rtsopts -O3
   extensions:     CPP
+  build-depends:  base          >  4.5,
+                  netwire       >= 5,
+                  netwire-input >= 0.0.3,
+                  GLFW-b,
+                  lambency,
+                  linear        >= 1.20,
+                  lens,
+                  mtl,
+                  containers,
+                  directory,
+                  filepath
 
   if flag(examples)
-    build-depends:  base > 4.5,
-                    netwire >= 5,
-                    netwire-input >= 0.0.3,
-                    GLFW-b,
-                    lambency,
-                    linear >= 1.15,
-                    lens,
-                    mtl,
-                    containers,
-                    directory,
-                    filepath
+    buildable:    True
   else
-    buildable:      False
+    buildable:    False
 
 executable lambshooter
   main-is:        Shooter.hs
   hs-source-dirs: examples
   ghc-options:    -Wall -rtsopts -O3
   extensions:     CPP
+  build-depends:  base          >  4.5,
+                  netwire       >= 5,
+                  netwire-input >= 0.0.3,
+                  GLFW-b,
+                  lambency,
+                  linear        >= 1.15,
+                  mtl,
+                  containers,
+                  directory,
+                  filepath
 
   if flag(examples)
-    build-depends:  base > 4.5,
-                    netwire >= 5,
-                    netwire-input >= 0.0.3,
-                    GLFW-b,
-                    lambency,
-                    linear >= 1.15,
-                    mtl,
-                    containers,
-                    directory,
-                    filepath
+    buildable:    True
   else
-    buildable:      False
+    buildable:    False
