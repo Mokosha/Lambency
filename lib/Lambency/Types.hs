@@ -15,7 +15,7 @@ module Lambency.Types (
 --------------------------------------------------------------------------------
 
 import qualified Graphics.Rendering.OpenGL as GL
-import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
+import qualified Graphics.GL as GLRaw
 
 import Lambency.Sound
 
@@ -163,7 +163,7 @@ data LightParams = LightParams {
 } deriving(Show, Eq, Ord)
 
 instance Hashable LightParams where
-  hashWithSalt s (LightParams x y z) = 
+  hashWithSalt s (LightParams x y z) =
     s `hashWithSalt` x `hashWithSalt` y `hashWithSalt` z
 
 data LightType
