@@ -118,6 +118,7 @@ executable lobjview
 executable lambcubedemo
   main-is:        CubeDemo.hs
   hs-source-dirs: examples
+  other-modules:  Paths_lambency
   ghc-options:    -Wall -rtsopts -O3
   extensions:     CPP
 
@@ -137,6 +138,7 @@ executable lambcubedemo
 executable lambpong
   main-is:        Pong.hs
   hs-source-dirs: examples
+  other-modules:  Paths_lambency
   ghc-options:    -Wall -rtsopts -O3
   extensions:     CPP
 
