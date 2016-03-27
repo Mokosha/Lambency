@@ -48,13 +48,15 @@ matrix:
 
   # The Stack builds. We can pass in arbitrary Stack arguments via the ARGS
   # variable, such as using --stack-yaml to point to a different file.
-  - env: BUILD=stack ARGS="--resolver lts-2"
-    compiler: ": #stack 7.8.4"
-    addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, ghc-7.8.4], sources: [hvr-ghc]}}
 
-  - env: BUILD=stack ARGS="--resolver lts-3"
-    compiler: ": #stack 7.10.2"
-    addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, ghc-7.10.2], sources: [hvr-ghc]}}
+  # We don't support any resolver before lts-5 because otherwise the dependencies aren't found
+  #- env: BUILD=stack ARGS="--resolver lts-2"
+  #  compiler: ": #stack 7.8.4"
+  #  addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, ghc-7.8.4], sources: [hvr-ghc]}}
+  #
+  #- env: BUILD=stack ARGS="--resolver lts-3"
+  #  compiler: ": #stack 7.10.2"
+  #  addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, ghc-7.10.2], sources: [hvr-ghc]}}
 
   - env: BUILD=stack ARGS="--resolver lts-5"
     compiler: ": #stack 7.10.3"
@@ -66,13 +68,15 @@ matrix:
     addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, libgmp-dev]}}
 
   # Build on OS X in addition to Linux
-  - env: BUILD=stack ARGS="--resolver lts-2"
-    compiler: ": #stack 7.8.4 osx"
-    os: osx
 
-  - env: BUILD=stack ARGS="--resolver lts-3"
-    compiler: ": #stack 7.10.2 osx"
-    os: osx
+  # We don't support any resolver before lts-5 because otherwise the dependencies aren't found
+  #- env: BUILD=stack ARGS="--resolver lts-2"
+  #  compiler: ": #stack 7.8.4 osx"
+  #  os: osx
+  #
+  #- env: BUILD=stack ARGS="--resolver lts-3"
+  #  compiler: ": #stack 7.10.2 osx"
+  #  os: osx
 
   - env: BUILD=stack ARGS="--resolver lts-5"
     compiler: ": #stack 7.10.3 osx"
