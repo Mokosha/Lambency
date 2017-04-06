@@ -115,7 +115,7 @@ install:
 - |
   case "$BUILD" in
     stack)
-      stack init --solver
+      stack --no-terminal --install-ghc $ARGS init --solver
       stack --no-terminal --install-ghc $ARGS test --only-dependencies
       ;;
     cabal)
