@@ -263,7 +263,7 @@ runGame gs = do
     -- RWS program that works with the passed in input.
     -- rwsPrg :: RWS () [OutputAction] RenderAction
     --           ((Either () a, Camera, [Light], Game a), GLFWInputState)
-    rwsPrg = runStateT gameStep ipt
+    rwsPrg = runGLFWInputT gameStep ipt
 
     -- This is the meat of the step routine. This calls runRWS on the
     -- main game wire, and uses the results to figure out what needs
