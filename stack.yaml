@@ -42,6 +42,10 @@ packages:
 # (e.g., acme-missiles-0.3)
 extra-deps:
 - freetype2-0.1.1
+- OpenAL-1.7.0.4
+- netwire-5.0.2
+- netwire-input-0.0.6
+- netwire-input-glfw-0.0.6
 
 # Override default flag values for local packages and extra-deps
 flags: {}
