@@ -74,7 +74,7 @@ library
                        text,
                        stm                  >= 2.4,
                        mtl                  >= 2.1.2,
-                       netwire              >= 5.0.0 && < 5.0.3,
+                       netwire              >= 5.0.0,
                        netwire-input        >= 0.0.3,
                        netwire-input-glfw,
                        OpenAL,
