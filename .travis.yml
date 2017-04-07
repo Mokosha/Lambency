@@ -14,6 +14,11 @@ cache:
   - $HOME/.cabal
   - $HOME/.stack
 
+addons:
+  apt:
+    packages:
+      - libxxf86vm-dev, libopenal-dev,
+  
 # The different configurations we want to test. We have BUILD=cabal which uses
 # cabal-install, and BUILD=stack which uses Stack. More documentation on each
 # of those below.
@@ -28,17 +33,12 @@ matrix:
   include:
   # We grab the appropriate GHC and cabal-install versions from hvr's PPA. See:
   # https://github.com/hvr/multi-ghc-travis
-
-  # We don't support 7.6 until netwire-input and netwire-input-glfw do...
-  # - env: BUILD=cabal GHCVER=7.6.3 CABALVER=1.16
-  #   compiler: ": #GHC 7.6.3"
-  #   addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, cabal-install-1.16, ghc-7.6.3], sources: [hvr-ghc]}}
-  - env: BUILD=cabal GHCVER=7.8.4 CABALVER=1.18
-    compiler: ": #GHC 7.8.4"
-    addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, cabal-install-1.18, ghc-7.8.4], sources: [hvr-ghc]}}
   - env: BUILD=cabal GHCVER=7.10.3 CABALVER=1.22
     compiler: ": #GHC 7.10.3"
     addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, cabal-install-1.22,ghc-7.10.3], sources: [hvr-ghc]}}
+  - env: BUILD=cabal GHCVER=8.0.2 CABALVER=1.24
+    compiler: ": #GHC 8.0.2"
+    addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, cabal-install-1.24,ghc-8.0.2], sources: [hvr-ghc]}}
 
   # Build with the newest GHC and cabal-install. This is an accepted failure,
   # see below.
@@ -48,38 +48,24 @@ matrix:
 
   # The Stack builds. We can pass in arbitrary Stack arguments via the ARGS
   # variable, such as using --stack-yaml to point to a different file.
-
-  # We don't support any resolver before lts-5 because otherwise the dependencies aren't found
-  #- env: BUILD=stack ARGS="--resolver lts-2"
-  #  compiler: ": #stack 7.8.4"
-  #  addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, ghc-7.8.4], sources: [hvr-ghc]}}
-  #
-  #- env: BUILD=stack ARGS="--resolver lts-3"
-  #  compiler: ": #stack 7.10.2"
-  #  addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, ghc-7.10.2], sources: [hvr-ghc]}}
-
-  - env: BUILD=stack ARGS="--resolver lts-5"
+  - env: BUILD=stack ARGS="--resolver lts-6"
     compiler: ": #stack 7.10.3"
-    addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, ghc-7.10.3], sources: [hvr-ghc]}}
+    addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, cabal-install-1.22, ghc-7.10.3], sources: [hvr-ghc]}}
+  - env: BUILD=stack ARGS="--resolver lts-8"
+    compiler: ": #stack 8.0.2"
+    addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, cabal-install-1.22, ghc-7.10.3], sources: [hvr-ghc]}}
 
   # Nightly builds are allowed to fail
   - env: BUILD=stack ARGS="--resolver nightly"
     compiler: ": #stack nightly"
-    addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, libgmp-dev]}}
+    addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, libgmp-dev, cabal-install]}}
 
   # Build on OS X in addition to Linux
-
-  # We don't support any resolver before lts-5 because otherwise the dependencies aren't found
-  #- env: BUILD=stack ARGS="--resolver lts-2"
-  #  compiler: ": #stack 7.8.4 osx"
-  #  os: osx
-  #
-  #- env: BUILD=stack ARGS="--resolver lts-3"
-  #  compiler: ": #stack 7.10.2 osx"
-  #  os: osx
-
-  - env: BUILD=stack ARGS="--resolver lts-5"
+  - env: BUILD=stack ARGS="--resolver lts-6"
     compiler: ": #stack 7.10.3 osx"
+    os: osx
+  - env: BUILD=stack ARGS="--resolver lts-8"
+    compiler: ": #stack 8.0.2 osx"
     os: osx
 
   - env: BUILD=stack ARGS="--resolver nightly"
@@ -115,7 +101,6 @@ install:
 - |
   case "$BUILD" in
     stack)
-      stack --no-terminal --install-ghc $ARGS init --solver
       stack --no-terminal --install-ghc $ARGS test --only-dependencies
       ;;
     cabal)
