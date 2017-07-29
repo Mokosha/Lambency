@@ -22,11 +22,8 @@ mkObject :: RenderObject -> GameWire a Transform -> GameWire a a
 mkObject ro xfw = mkGen $ \dt val -> do
   (xform, nextWire) <- stepWire xfw dt (Right val)
   case xform of
-    Right xf -> do
-      addRenderAction xf ro
-      return (Right val, mkObject ro nextWire)
-    Left i -> do
-      return $ (Left i, mkObject ro nextWire)
+    Right xf -> addRenderAction xf ro >> return (Right val, mkObject ro nextWire)
+    Left i -> return (Left i, mkObject ro nextWire)
 
 staticObject :: RenderObject -> Transform -> GameWire a a
 staticObject ro = mkObject ro . mkConst . Right
