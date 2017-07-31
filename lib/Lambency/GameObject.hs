@@ -1,4 +1,5 @@
 module Lambency.GameObject (
+  wireFrom,
   mkObject,
   staticObject,
   withVelocity,
@@ -17,6 +18,11 @@ import Control.Monad.Writer
 
 import Linear.Vector
 --------------------------------------------------------------------------------
+
+wireFrom :: GameMonad a -> (a -> GameWire b c) -> GameWire b c
+wireFrom prg fn = mkGen $ \dt val -> do
+  seed <- prg
+  stepWire (fn seed) dt (Right val)
 
 mkObject :: RenderObject -> GameWire a Transform -> GameWire a a
 mkObject ro xfw = mkGen $ \dt val -> do
