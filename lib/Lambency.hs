@@ -197,6 +197,12 @@ step go game t = do
         dynamicLights = lights,
         gameLogic = logic}
 
+data GameLoopConfig = GameLoopConfig {
+  simpleQuadSprite :: Sprite,
+  glfwInputControl :: GLFWInputControl,
+  glfwWin :: GLFW.Window
+}
+
 data GameLoopState a = GameLoopState {
   currentGameValue :: a,
   currentGameLogic :: Game a,
@@ -205,11 +211,7 @@ data GameLoopState a = GameLoopState {
   lastFramePicoseconds :: Integer
 }
 
-type GameLoopM a =
-  -- Reader
-  ReaderT (GLFWInputControl, GLFW.Window) (
-  -- State  (gameObject, logic, session and time)
-  StateT (GameLoopState a) IO)
+type GameLoopM a = ReaderT GameLoopConfig (StateT (GameLoopState a) IO)
 
 runLoop :: UTCTime -> GameLoopM a ()
 runLoop prevFrameTime = do
@@ -224,7 +226,7 @@ runLoop prevFrameTime = do
     Right gobj -> do
       ls <- get
       put $ GameLoopState gobj nextGame nextsession accum (lastFramePicoseconds ls)
-      needsQuit <- snd <$> ask >>= (liftIO . GLFW.windowShouldClose)
+      needsQuit <- glfwWin <$> ask >>= (liftIO . GLFW.windowShouldClose)
       case needsQuit of
         True -> return ()
         False -> runLoop thisFrameTime
@@ -242,10 +244,9 @@ stepGame gs = do
 
 runGame :: GameState -> GameLoopM a (Either String a, TimeStepper, StateStepper a)
 runGame gs = do
-  (ictl, win) <- ask
+  gameLoopConfig <- ask
   gls <- get
-
-  ipt <- liftIO $ getInput ictl
+  ipt <- liftIO $ getInput (glfwInputControl gameLoopConfig)
 
   -- Retreive the next time step from our game session
   (ts, nextSess) <- liftIO $ W.stepSession (currentGameSession gls)
@@ -255,8 +256,7 @@ runGame gs = do
     -- produces four values: Either inhibition or a new game value
     -- A new camera, a list of dynamic lights, and the next simulation
     -- wire
-    g = currentGameLogic gls
-    gameStep = step (currentGameValue gls) g ts
+    gameStep = step (currentGameValue gls) (currentGameLogic gls) ts
 
     -- In order to get at the underlying RWS monad, let's create an
     -- RWS program that works with the passed in input.
@@ -268,8 +268,9 @@ runGame gs = do
     -- main game wire, and uses the results to figure out what needs
     -- to be done.
     renderTime = lastFramePicoseconds gls
+    sprite = simpleQuadSprite gameLoopConfig
     (((result, cam, lights, nextGame), newIpt), newGS, actions) =
-      runRWS rwsPrg (GameConfig renderTime (0, 0)) gs
+      runRWS rwsPrg (GameConfig renderTime (0, 0) sprite) gs
 
     -- We need to render if we're going to fall below the physics threshold
     -- on the next frame. This simulates a while loop. If we don't fall
@@ -291,7 +292,7 @@ runGame gs = do
       clearBuffers
       () <- evalStateT renderPrg initialRenderState
       GL.flush
-      GLFW.swapBuffers win
+      GLFW.swapBuffers (glfwWin gameLoopConfig)
 
       t' <- getCPUTime
 
@@ -305,7 +306,7 @@ runGame gs = do
     handleActions actions
 
     -- Poll the input
-    pollGLFW newIpt ictl
+    pollGLFW newIpt (glfwInputControl gameLoopConfig)
 
   -- If our main wire inhibited, return immediately.
   case result of
@@ -327,7 +328,11 @@ run initialGameObject initialGame win = do
   -- Stick in an initial poll events call...
   GLFW.pollEvents
 
-  let statePrg = runReaderT (runLoop curTime) (ictl, win)
+  -- !FIXME! Use fully opaque 'mask' texture that we can change the color and
+  -- size for dynamically. This isn't the best way to do this, but it'll work.
+  sprite <- createSolidTexture (255, 255, 255, 255) >>= loadStaticSpriteWithMask
+
+  let statePrg = runReaderT (runLoop curTime) $ GameLoopConfig sprite ictl win
   evalStateT statePrg $
     GameLoopState initialGameObject initialGame session (toEnum 0) 0
 

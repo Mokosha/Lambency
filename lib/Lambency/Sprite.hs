@@ -37,21 +37,14 @@ import Lambency.Utils
 import Linear hiding (trace, identity)
 --------------------------------------------------------------------------------
 
-data SpriteFrame = SpriteFrame {
-  offset :: V2 Float,
-  spriteSize :: V2 Int,
-  frameRO :: RenderObject
-}
-
-newtype Sprite = Sprite { getFrames :: CyclicList SpriteFrame }
-
 curFrameOffset :: Sprite -> V2 Float
 curFrameOffset = offset . extract . getFrames
 
 updateColor :: V4 Float -> Material -> Material
 updateColor c mat@(MaskedSpriteMaterial {..}) =
   mat { spriteMaskColor = updateMaterialVar4vf c spriteMaskColor }
-updateColor _ m = error $ "Lambency.Sprite (updateColor): Unsupported material type: " ++ show m
+updateColor _ m =
+  error $ "Lambency.Sprite (updateColor): Unsupported material type: " ++ show m
 
 updateAlpha :: Float -> Material -> Material
 updateAlpha a' mat@(MaskedSpriteMaterial {..}) =
@@ -65,7 +58,8 @@ updateAlpha a' mat@(MaskedSpriteMaterial {..}) =
 
 updateAlpha a mat@(TexturedSpriteMaterial {..}) =
   mat { spriteAlpha = updateMaterialVarf a spriteAlpha }
-updateAlpha _ m = error $ "Lambency.Sprite (updateColor): Unsupported material type: " ++ show m
+updateAlpha _ m =
+  error $ "Lambency.Sprite (updateColor): Unsupported material type: " ++ show m
 
 genTexMatrix :: V2 Float -> V2 Float -> M33 Float
 genTexMatrix (V2 sx sy) (V2 tx ty) = V3 (V3 sx 0 0) (V3 0 sy 0) (V3 tx ty 1)
@@ -74,8 +68,10 @@ updateScale :: V2 Float -> V2 Float -> Material -> Material
 updateScale s t mat@(MaskedSpriteMaterial {..}) =
   mat { spriteMaskMatrix = updateMaterialVar3mf (genTexMatrix s t) spriteMaskMatrix }
 updateScale s t mat@(TexturedSpriteMaterial {..}) =
-  mat { spriteTextureMatrix = updateMaterialVar3mf (genTexMatrix s t) spriteTextureMatrix }
-updateScale _ _ m = error $ "Lambency.Sprite (updateScale): Unsupported material type: " ++ show m
+  mat { spriteTextureMatrix =
+           updateMaterialVar3mf (genTexMatrix s t) spriteTextureMatrix }
+updateScale _ _ m =
+  error $ "Lambency.Sprite (updateScale): Unsupported material type: " ++ show m
 
 -- !FIXME! This function shouldn't be here and we should really be using lenses
 mapROMaterial :: (Material -> Material) -> RenderObject -> RenderObject
@@ -115,7 +111,8 @@ initAnimatedSprite isMask frameSzs offsets tex = do
       in SpriteFrame {
         offset = texOff,
         spriteSize = sz,
-        frameRO = ro { material = updateScale (changeRange sz) texOff (material ro)}
+        frameRO = ro { material =
+                          updateScale (changeRange sz) texOff (material ro) }
         }
 
     changeRange :: V2 Int -> V2 Float
@@ -143,7 +140,8 @@ loadStaticSprite :: FilePath -> IO (Maybe Sprite)
 loadStaticSprite f = loadSpriteWith f (initStaticSprite False)
 
 loadAnimatedSprite :: FilePath -> [V2 Int] -> [V2 Int] -> IO (Maybe Sprite)
-loadAnimatedSprite f frameSzs offsets = loadSpriteWith f $ initAnimatedSprite False frameSzs offsets
+loadAnimatedSprite f frameSzs offsets =
+  loadSpriteWith f $ initAnimatedSprite False frameSzs offsets
 
 loadAnimatedSpriteWithTexture :: Texture -> [V2 Int] -> [V2 Int] -> IO (Maybe Sprite)
 loadAnimatedSpriteWithTexture t frameSzs offsets =
@@ -152,17 +150,19 @@ loadAnimatedSpriteWithTexture t frameSzs offsets =
 loadAnimatedSpriteWithMask :: Texture -> [V2 Int] -> [V2 Int] -> IO (Maybe Sprite)
 loadAnimatedSpriteWithMask t frameSzs offsets =
   -- !HACK! Not all animated (multi-frame) mask sprites are fonts...
-  initAnimatedSprite True frameSzs offsets t >>= (return . Just . Sprite . fmap addTextFlag . getFrames)
+  initAnimatedSprite True frameSzs offsets t >>=
+  (return . Just . Sprite . fmap addTextFlag . getFrames)
 
 loadFixedSizeAnimatedSprite :: FilePath -> V2 Int -> [V2 Int] -> IO (Maybe Sprite)
-loadFixedSizeAnimatedSprite f frameSz offsets = loadAnimatedSprite f (repeat frameSz) offsets
+loadFixedSizeAnimatedSprite f frameSz = loadAnimatedSprite f (repeat frameSz)
 
 renderUISprite :: Sprite -> V2 Float -> GameMonad ()
 renderUISprite s pos = addRenderUIAction pos ro
   where
     currentFrame = extract $ getFrames s
     (V2 sx sy) = spriteSize currentFrame
-    ro = xformObject (nonuniformScale (fmap fromIntegral $ V3 sx sy 1) identity) $ frameRO currentFrame
+    sc = nonuniformScale (fmap fromIntegral $ V3 sx sy 1) identity
+    ro = xformObject sc $ frameRO currentFrame
 
 renderFrameAt :: RenderObject -> V2 Int -> Float -> V2 Float -> GameMonad ()
 renderFrameAt ro sc depth (V2 x y) = addRenderAction xf ro
@@ -174,8 +174,10 @@ renderFrameAt ro sc depth (V2 x y) = addRenderAction xf ro
 renderSprite :: Sprite -> V2 Int -> Float -> V2 Float -> GameMonad ()
 renderSprite s = renderSpriteWithAlpha s 1.0
 
-renderSpriteWithAlpha :: Sprite -> Float -> V2 Int -> Float -> V2 Float -> GameMonad ()
-renderSpriteWithAlpha s a = renderFrameAt (setAlpha $ frameRO $ extract . getFrames $ s)
+renderSpriteWithAlpha :: Sprite -> Float -> V2 Int -> Float -> V2 Float ->
+                         GameMonad ()
+renderSpriteWithAlpha s a =
+  renderFrameAt (setAlpha $ frameRO $ extract . getFrames $ s)
   where
     setAlpha ro = ro { material = updateAlpha a (material ro),
                        flags = nub $ Transparent : (flags ro) }
@@ -188,7 +190,8 @@ data SpriteAnimationType
   | SpriteAnimationType'PingPong
     deriving(Eq, Ord, Show, Enum)
 
-animatedWire :: Sprite -> V2 Int -> SpriteAnimationType -> GameWire (V2 Float) (V2 Float)
+animatedWire :: Sprite -> V2 Int -> SpriteAnimationType ->
+                GameWire (V2 Float) (V2 Float)
 animatedWire sprite sz SpriteAnimationType'Forward = loop $ second (delay sprite) >>> loopW
   where
     loopW :: GameWire (V2 Float, Sprite) (V2 Float, Sprite)

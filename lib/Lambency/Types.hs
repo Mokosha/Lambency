@@ -7,6 +7,7 @@ module Lambency.Types (
   Texture(..), TextureSize(..), TextureFormat(..), FBOHandle, TextureHandle(..),
   MaterialVar(..), NormalModulation(..), ReflectionInfo(..), Material(..),
   RenderFlag(..), RenderObject(..), RenderAction(..), RenderActions(..),
+  SpriteFrame(..), Sprite(..),
   OutputAction(..),
   TimeStep,
   GameConfig(..), GameWire, GameMonad, GameState, GameSession, GameTime,
@@ -19,6 +20,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.GL as GLRaw
 
 import Lambency.Sound
+import Lambency.Utils
 
 import qualified Lambency.Transform as XForm
 
@@ -310,6 +312,14 @@ data RenderActions = RenderActions {
   renderUI :: RenderAction
 }
 
+data SpriteFrame = SpriteFrame {
+  offset :: V2 Float,
+  spriteSize :: V2 Int,
+  frameRO :: RenderObject
+}
+
+newtype Sprite = Sprite { getFrames :: CyclicList SpriteFrame }
+
 --------------------------------------------------------------------------------
 
 -- Output functions
@@ -325,7 +335,9 @@ data OutputAction = LogAction String
 
 data GameConfig = GameConfig {
   lastFrameTime :: Integer,  -- Picoseconds last frame took to render
-  windowSize :: (Int, Int)   -- Size of the rendering window in pixels
+  windowSize :: (Int, Int),  -- Size of the rendering window in pixels
+  simpleSprite :: Sprite     -- A simple single-color sprite useful for fade-ins
+                             -- and simple UI element backgrounds
   }
 
 type GameState = RenderActions
