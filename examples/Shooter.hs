@@ -56,10 +56,7 @@ type Ship = L.GameWire (V2 Float) [Bullet]
 inScreen :: V2 Float -> Bool
 inScreen (V2 px py) =
   let (V2 sx sy) = fmap fromIntegral (V2 screenWidth screenHeight)
-  in
-   if (px < 0 || px > sx || py < 0 || py > sy)
-   then False
-   else True
+  in px >= 0 && px <= sx && py >= 0 && py <= sy
 
 bulletWire :: V2 Float -> V2 Float -> L.Sprite -> Bullet
 bulletWire pos vel bullet = mkGen $ \dt _ -> do
@@ -87,7 +84,8 @@ shipWire pos' ship bullet = loop $ (second $ delay 0) >>> (shipFeedback pos')
           then return $ (Right ([b], 0 :: Float), nextSW) -- Spawn bullet
           else return $ (Right ([], t + (dtime dt)), nextSW)
 
-addVecWire :: L.GameWire () (V2 Float) -> L.GameWire () (V2 Float) -> L.GameWire () (V2 Float)
+addVecWire :: L.GameWire () (V2 Float) -> L.GameWire () (V2 Float) ->
+              L.GameWire () (V2 Float)
 addVecWire w1 w2 = w1 &&& w2 >>> (arr $ uncurry (^+^))
 
 inputWire :: L.GameWire () (V2 Float)
@@ -117,7 +115,7 @@ mkGameWire = do
       runBullets _ [] = return []
       runBullets dt (b:bs) = do
         bs' <- runBullets dt bs
-        runBullet dt b >>= (\b' -> return (b' ++ bs'))
+        runBullet dt b >>= liftM (++ bs')
 
       runShip :: L.GameWire () [Bullet] -> [Bullet] -> L.GameWire () ()
       runShip sw' bullets = mkGen $ \dt _ -> do
