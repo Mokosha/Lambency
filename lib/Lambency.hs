@@ -212,11 +212,11 @@ type GameLoopM a =
   StateT (GameLoopState a) IO)
 
 runLoop :: UTCTime -> GameLoopM a ()
-runLoop lastFrameTime = do
+runLoop prevFrameTime = do
   (GameLoopState _ _ _ accumulator _) <- get
   -- Step
   thisFrameTime <- liftIO getCurrentTime
-  let newAccum = accumulator + (diffUTCTime thisFrameTime lastFrameTime)
+  let newAccum = accumulator + (diffUTCTime thisFrameTime prevFrameTime)
   modify $ \ls -> ls { currentPhysicsAccum = min newAccum maximumFramerate }
   (go, (nextsession, accum), (nextGame, _)) <- stepGame emptyRenderActions
 
@@ -242,7 +242,6 @@ stepGame gs = do
 
 runGame :: GameState -> GameLoopM a (Either String a, TimeStepper, StateStepper a)
 runGame gs = do
-
   (ictl, win) <- ask
   gls <- get
 
@@ -270,7 +269,7 @@ runGame gs = do
     -- to be done.
     renderTime = lastFramePicoseconds gls
     (((result, cam, lights, nextGame), newIpt), newGS, actions) =
-      runRWS rwsPrg renderTime gs
+      runRWS rwsPrg (GameConfig renderTime (0, 0)) gs
 
     -- We need to render if we're going to fall below the physics threshold
     -- on the next frame. This simulates a while loop. If we don't fall

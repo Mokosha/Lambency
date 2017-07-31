@@ -1,14 +1,15 @@
 module Lambency.Types (
   Vec2f, Vec3f, Vec4f, Quatf, Mat2f, Mat3f, Mat4f,
   Camera(..), CameraType(..), CameraViewDistance(..),
-  LightVar(..), LightParams(..), LightType(..), Light(..), ShadowMap(..), ShadowTechnique(..),
+  LightVar(..), LightParams(..), LightType(..), Light(..),
+  ShadowMap(..), ShadowTechnique(..),
   Shader(..), ShaderVarTy(..), ShaderValue(..), ShaderVar(..), ShaderMap,
   Texture(..), TextureSize(..), TextureFormat(..), FBOHandle, TextureHandle(..),
   MaterialVar(..), NormalModulation(..), ReflectionInfo(..), Material(..),
   RenderFlag(..), RenderObject(..), RenderAction(..), RenderActions(..),
   OutputAction(..),
   TimeStep,
-  GameWire, GameMonad, GameState, GameSession, GameTime,
+  GameConfig(..), GameWire, GameMonad, GameState, GameSession, GameTime,
   Game(..)
 ) where
 
@@ -322,10 +323,11 @@ data OutputAction = LogAction String
 
 --------------------------------------------------------------------------------
 
--- !FIXME! Game config should be a list of configuration parameters like screen
--- size so that we can do raycasting from mouse coordinates and maybe some
--- other things...
-type GameConfig = Integer -- Picoseconds last frame took to render
+data GameConfig = GameConfig {
+  lastFrameTime :: Integer,  -- Picoseconds last frame took to render
+  windowSize :: (Int, Int)   -- Size of the rendering window in pixels
+  }
+
 type GameState = RenderActions
 
 -- Game
