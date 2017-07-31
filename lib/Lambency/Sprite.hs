@@ -1,7 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
 module Lambency.Sprite (
-  SpriteFrame(..),
-  Sprite(..),
   changeSpriteFrameColor,
   changeSpriteColor,
   loadStaticSprite,
@@ -15,6 +13,7 @@ module Lambency.Sprite (
   renderSprite,
   renderSpriteWithAlpha,
   renderUISprite,
+  renderUISpriteWithSize,
 
   SpriteAnimationType(..),
   animatedWire,
@@ -35,6 +34,7 @@ import Lambency.Types
 import Lambency.Utils
 
 import Linear hiding (trace, identity)
+import qualified Linear
 --------------------------------------------------------------------------------
 
 curFrameOffset :: Sprite -> V2 Float
@@ -61,17 +61,35 @@ updateAlpha a mat@(TexturedSpriteMaterial {..}) =
 updateAlpha _ m =
   error $ "Lambency.Sprite (updateColor): Unsupported material type: " ++ show m
 
-genTexMatrix :: V2 Float -> V2 Float -> M33 Float
-genTexMatrix (V2 sx sy) (V2 tx ty) = V3 (V3 sx 0 0) (V3 0 sy 0) (V3 tx ty 1)
+updateMatrixScale :: V2 Float -> M33 Float -> M33 Float
+updateMatrixScale (V2 sx sy) (V3 _ _ t) = V3 (V3 sx 0 0) (V3 0 sy 0) t
 
-updateScale :: V2 Float -> V2 Float -> Material -> Material
-updateScale s t mat@(MaskedSpriteMaterial {..}) =
-  mat { spriteMaskMatrix = updateMaterialVar3mf (genTexMatrix s t) spriteMaskMatrix }
-updateScale s t mat@(TexturedSpriteMaterial {..}) =
-  mat { spriteTextureMatrix =
-           updateMaterialVar3mf (genTexMatrix s t) spriteTextureMatrix }
-updateScale _ _ m =
+updateMatrixTranslation :: V2 Float -> M33 Float -> M33 Float
+updateMatrixTranslation (V2 tx ty) (V3 x y _) = V3 x y (V3 tx ty 1)
+
+getShaderVarMatrix :: MaterialVar Mat3f -> Mat3f
+getShaderVarMatrix (MaterialVar (_, (Just (Matrix3Val mat)))) = mat
+getShaderVarMatrix _ = Linear.identity
+
+updateScale :: V2 Float -> Material -> Material
+updateScale s mat@(MaskedSpriteMaterial {..}) =
+  let newMatrix = updateMatrixScale s $ getShaderVarMatrix spriteMaskMatrix
+  in mat { spriteMaskMatrix = updateMaterialVar3mf newMatrix spriteMaskMatrix }
+updateScale s mat@(TexturedSpriteMaterial {..}) =
+  let newMatrix = updateMatrixScale s $ getShaderVarMatrix spriteTextureMatrix
+  in mat { spriteTextureMatrix = updateMaterialVar3mf newMatrix spriteTextureMatrix }
+updateScale _ m =
   error $ "Lambency.Sprite (updateScale): Unsupported material type: " ++ show m
+
+updateTranslation :: V2 Float -> Material -> Material
+updateTranslation t mat@(MaskedSpriteMaterial {..}) =
+  let newMatrix = updateMatrixTranslation t $ getShaderVarMatrix spriteMaskMatrix
+  in mat { spriteMaskMatrix = updateMaterialVar3mf newMatrix spriteMaskMatrix }
+updateTranslation t mat@(TexturedSpriteMaterial {..}) =
+  let newMatrix = updateMatrixTranslation t $ getShaderVarMatrix spriteTextureMatrix
+  in mat { spriteTextureMatrix = updateMaterialVar3mf newMatrix spriteTextureMatrix }
+updateTranslation _ m =
+  error $ "Lambency.Sprite (updateTranslation): Unsupported material type: " ++ show m
 
 -- !FIXME! This function shouldn't be here and we should really be using lenses
 mapROMaterial :: (Material -> Material) -> RenderObject -> RenderObject
@@ -112,7 +130,9 @@ initAnimatedSprite isMask frameSzs offsets tex = do
         offset = texOff,
         spriteSize = sz,
         frameRO = ro { material =
-                          updateScale (changeRange sz) texOff (material ro) }
+                          updateScale (changeRange sz) $
+                          updateTranslation texOff $
+                          material ro }
         }
 
     changeRange :: V2 Int -> V2 Float
@@ -156,13 +176,16 @@ loadAnimatedSpriteWithMask t frameSzs offsets =
 loadFixedSizeAnimatedSprite :: FilePath -> V2 Int -> [V2 Int] -> IO (Maybe Sprite)
 loadFixedSizeAnimatedSprite f frameSz = loadAnimatedSprite f (repeat frameSz)
 
-renderUISprite :: Sprite -> V2 Float -> GameMonad ()
-renderUISprite s pos = addRenderUIAction pos ro
+renderUISpriteWithSize :: Sprite -> V2 Float -> V2 Float -> GameMonad ()
+renderUISpriteWithSize sprite pos (V2 sx sy) = addRenderUIAction pos ro
   where
-    currentFrame = extract $ getFrames s
-    (V2 sx sy) = spriteSize currentFrame
-    sc = nonuniformScale (fmap fromIntegral $ V3 sx sy 1) identity
+    currentFrame = extract $ getFrames sprite
+    sc = nonuniformScale (V3 sx sy 1) identity
     ro = xformObject sc $ frameRO currentFrame
+
+renderUISprite :: Sprite -> V2 Float -> GameMonad ()
+renderUISprite s pos =
+  renderUISpriteWithSize s pos $ fromIntegral <$> (spriteSize $ extract $ getFrames s)
 
 renderFrameAt :: RenderObject -> V2 Int -> Float -> V2 Float -> GameMonad ()
 renderFrameAt ro sc depth (V2 x y) = addRenderAction xf ro
@@ -171,9 +194,11 @@ renderFrameAt ro sc depth (V2 x y) = addRenderAction xf ro
     xf = translate (V3 x y depth) $
          nonuniformScale (V3 sx sy 1) identity
 
+-- Renders an opaque sprite at the given scale, depth, and position
 renderSprite :: Sprite -> V2 Int -> Float -> V2 Float -> GameMonad ()
 renderSprite s = renderSpriteWithAlpha s 1.0
 
+-- Renders a sprite for the given alpha, scale, depth, and position
 renderSpriteWithAlpha :: Sprite -> Float -> V2 Int -> Float -> V2 Float ->
                          GameMonad ()
 renderSpriteWithAlpha s a =

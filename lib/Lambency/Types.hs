@@ -109,9 +109,9 @@ data ShaderVar = Uniform ShaderVarTy GL.UniformLocation
 
 type ShaderVarMap = Map.Map String ShaderVar
 
-data ShaderValue = Matrix2Val (Mat2f)
-                 | Matrix3Val (Mat3f)
-                 | Matrix4Val (Mat4f)
+data ShaderValue = Matrix2Val Mat2f
+                 | Matrix3Val Mat3f
+                 | Matrix4Val Mat4f
                  | Matrix3ListVal [Mat3f]
                  | Matrix4ListVal [Mat4f]
                  | Vector3Val Vec3f
