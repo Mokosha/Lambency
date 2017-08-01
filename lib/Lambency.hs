@@ -27,7 +27,8 @@ module Lambency (
   RenderFlag(..), RenderObject(..),
   OutputAction(..),
   TimeStep,
-  Game(..), GameWire, GameMonad,
+  Game(..), GameConfig(..), GameWire, GameMonad,
+  Sprite,
   module Lambency.Utils,
 
   makeWindow, destroyWindow, withWindow,

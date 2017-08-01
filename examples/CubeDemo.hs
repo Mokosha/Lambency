@@ -89,8 +89,8 @@ frameWire font = (W.mkId W.&&& (lastRenderTime W.>>> sAvg 5)) W.>>> renderWire
   where
     lastRenderTime :: L.GameWire a Float
     lastRenderTime = W.mkGen_ $ \_ -> do
-      lastPicoSeconds <- ask
-      return . Right $ fromIntegral lastPicoSeconds / 1000000000.0
+      gameConfig <- ask
+      return . Right $ fromIntegral (L.lastFrameTime gameConfig) / 1000000000.0
 
     renderWire :: L.GameWire (a, Float) a
     renderWire = W.mkGen_ $ \(v, fps) -> do

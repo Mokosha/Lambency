@@ -88,7 +88,6 @@ library
                        text,
                        time,
                        vector,
-                       yoga                 >= 0.0.0.1,
                        -- Eventually replace these...
                        directory
 

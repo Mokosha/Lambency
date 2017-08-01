@@ -1,6 +1,7 @@
 module Main where
 
 --------------------------------------------------------------------------------
+import Control.Monad
 import Control.Wire hiding ((.))
 import FRP.Netwire.Input
 
@@ -115,7 +116,7 @@ mkGameWire = do
       runBullets _ [] = return []
       runBullets dt (b:bs) = do
         bs' <- runBullets dt bs
-        runBullet dt b >>= liftM (++ bs')
+        liftM (++ bs') $ runBullet dt b
 
       runShip :: L.GameWire () [Bullet] -> [Bullet] -> L.GameWire () ()
       runShip sw' bullets = mkGen $ \dt _ -> do
