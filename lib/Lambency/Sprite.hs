@@ -215,32 +215,25 @@ data SpriteAnimationType
   | SpriteAnimationType'PingPong
     deriving(Eq, Ord, Show, Enum)
 
-animatedWire :: Sprite -> V2 Int -> SpriteAnimationType ->
-                GameWire (V2 Float) (V2 Float)
-animatedWire sprite sz SpriteAnimationType'Forward = loop $ second (delay sprite) >>> loopW
-  where
-    loopW :: GameWire (V2 Float, Sprite) (V2 Float, Sprite)
-    loopW = mkGenN $ \(p, s) -> do
-      renderSprite s sz 0 p
-      let nextSprite = Sprite . advance . getFrames $ s
-          result = Right (p, nextSprite)
-      if (curFrameOffset nextSprite) == curFrameOffset sprite
-        then return (result, mkEmpty)
-        else return (result, loopW)
+animatedWire :: Sprite -> SpriteAnimationType -> GameWire a Sprite
+animatedWire (Sprite (CyclicList _ _ [])) SpriteAnimationType'Forward = mkEmpty
+animatedWire sprite SpriteAnimationType'Forward = mkGenN $ \ _ -> do
+  let nextSprite = Sprite . advance . getFrames $ sprite
+  return (Right sprite, animatedWire nextSprite SpriteAnimationType'Forward)
 
-animatedWire (Sprite (CyclicList p c n)) sz SpriteAnimationType'Backward =
-   animatedWire (Sprite (CyclicList n c p)) sz SpriteAnimationType'Forward
+animatedWire (Sprite (CyclicList p c n)) SpriteAnimationType'Backward =
+  animatedWire (Sprite (CyclicList n c p)) SpriteAnimationType'Forward
 
-animatedWire s sz SpriteAnimationType'Loop =
-  let w = animatedWire s sz SpriteAnimationType'Forward
+animatedWire s SpriteAnimationType'Loop =
+  let w = animatedWire s SpriteAnimationType'Forward
   in w --> w
 
-animatedWire s sz SpriteAnimationType'LoopBack =
-  let w = animatedWire s sz SpriteAnimationType'Backward
+animatedWire s SpriteAnimationType'LoopBack =
+  let w = animatedWire s SpriteAnimationType'Backward
   in w --> w
 
-animatedWire s sz SpriteAnimationType'PingPong =
-  let f = animatedWire s sz SpriteAnimationType'Forward
-      b = animatedWire s sz SpriteAnimationType'Backward
+animatedWire s SpriteAnimationType'PingPong =
+  let f = animatedWire s SpriteAnimationType'Forward
+      b = animatedWire s SpriteAnimationType'Backward
   in
-   f --> b --> (animatedWire s sz SpriteAnimationType'PingPong)
+   f --> b --> (animatedWire s SpriteAnimationType'PingPong)
