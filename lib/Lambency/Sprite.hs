@@ -37,9 +37,6 @@ import Linear hiding (trace, identity)
 import qualified Linear
 --------------------------------------------------------------------------------
 
-curFrameOffset :: Sprite -> V2 Float
-curFrameOffset = offset . extract . getFrames
-
 updateColor :: V4 Float -> Material -> Material
 updateColor c mat@(MaskedSpriteMaterial {..}) =
   mat { spriteMaskColor = updateMaterialVar4vf c spriteMaskColor }

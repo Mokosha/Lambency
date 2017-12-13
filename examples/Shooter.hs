@@ -112,10 +112,7 @@ mkGameWire = do
           Left _ -> return []
 
       runBullets :: L.TimeStep -> [Bullet] -> L.GameMonad [Bullet]
-      runBullets _ [] = return []
-      runBullets dt (b:bs) = do
-        bs' <- runBullets dt bs
-        runBullet dt b >>= liftM (++ bs')
+      runBullets dt bs = concat <$> mapM (runBullet dt) bs
 
       runShip :: L.GameWire () [Bullet] -> [Bullet] -> L.GameWire () ()
       runShip sw' bullets = mkGen $ \dt _ -> do
