@@ -48,7 +48,7 @@ matrix:
 
   # The Stack builds. We can pass in arbitrary Stack arguments via the ARGS
   # variable, such as using --stack-yaml to point to a different file.
-  - env: BUILD=stack ARGS="--resolver lts-8"
+  - env: BUILD=stack ARGS="--resolver lts-9.18"
     compiler: ": #stack 8.0.2"
     addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, cabal-install-1.22, ghc-7.10.3], sources: [hvr-ghc]}}
 
@@ -58,7 +58,7 @@ matrix:
     addons: {apt: {packages: [libxxf86vm-dev, libopenal-dev, libgmp-dev, cabal-install]}}
 
   # Build on OS X in addition to Linux
-  - env: BUILD=stack ARGS="--resolver lts-8"
+  - env: BUILD=stack ARGS="--resolver lts-9.18"
     compiler: ": #stack 8.0.2 osx"
     os: osx
 
