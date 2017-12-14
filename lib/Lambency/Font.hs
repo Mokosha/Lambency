@@ -3,7 +3,7 @@ module Lambency.Font (
   loadSystemFont,
   loadTTFont,
   renderUIString,
-  stringWidth,
+  stringWidth, stringHeight,
   setFontColor,
 ) where
 
@@ -86,6 +86,18 @@ renderUIString font str pos = let
   in do
     mapM_ (uncurry renderCharAtPos) $ zip str positions
 
+stringHeight :: Font -> String -> Float
+stringHeight _ "" = 0
+stringHeight f str = foldl' max 0 sizes
+  where
+    sizes :: [Float]
+    sizes = map (getGlyphHeight . getGlyph f) str
+
+    getGlyphHeight :: Maybe (SpriteFrame, a) -> Float
+    getGlyphHeight Nothing = 0.0
+    getGlyphHeight (Just (frame, _)) =
+      let V2 _ y = fromIntegral <$> spriteSize frame in y
+
 stringWidth :: Font -> String -> Float
 stringWidth _ "" = 0
 stringWidth f str = foldl' (+) 0 sizes
@@ -96,9 +108,10 @@ stringWidth f str = foldl' (+) 0 sizes
     getX (V2 x _) = x
 
 mkFont :: Sprite -> [Char] -> [V2 Int] -> [V2 Int] -> Font
-mkFont sprite string advances offsets  = Font $ flip Map.lookup charMap
-  where
-    charMap = Map.fromList $ zip string (zip (cyclicToList $ getFrames sprite) (zip advances offsets))
+mkFont sprite string advances offsets =
+  Font $ flip Map.lookup
+  $ Map.fromList
+  $ zip string (zip (cyclicToList $ getFrames sprite) (zip advances offsets))
 
 charString :: [Char]
 charString = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ"
