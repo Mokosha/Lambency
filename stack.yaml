@@ -38,9 +38,6 @@ resolver: lts-8.8
 packages:
 - '.'
 - location:
-    git: https://github.com/jwiegley/bindings-dsl.git
-    commit: HEAD
-- location:
     git: https://github.com/Mokosha/yoga-hs.git
     commit: HEAD
   extra-dep: true
