@@ -27,7 +27,9 @@ module Lambency (
   RenderFlag(..), RenderObject(..),
   OutputAction(..),
   TimeStep,
-  Game(..), GameWire, GameMonad,
+  Sprite,
+  Game(..), GameConfig(..), GameWire, GameMonad,
+  module Lambency.UI,
   module Lambency.Utils,
 
   makeWindow, destroyWindow, withWindow,
@@ -73,6 +75,7 @@ import Lambency.Sprite
 import Lambency.Texture
 import Lambency.Transform
 import Lambency.Types
+import Lambency.UI
 import Lambency.Utils
 
 import System.CPUTime
@@ -251,6 +254,9 @@ runGame gs = do
   -- Retreive the next time step from our game session
   (ts, nextSess) <- liftIO $ W.stepSession (currentGameSession gls)
 
+  -- Collect the window dimensions at the current time.
+  winDims <- liftIO $ GLFW.getWindowSize (glfwWin gameLoopConfig)
+
   let
     -- The game step is the complete GameMonad computation that
     -- produces four values: Either inhibition or a new game value
@@ -270,7 +276,7 @@ runGame gs = do
     renderTime = lastFramePicoseconds gls
     sprite = simpleQuadSprite gameLoopConfig
     (((result, cam, lights, nextGame), newIpt), newGS, actions) =
-      runRWS rwsPrg (GameConfig renderTime (0, 0) sprite) gs
+      runRWS rwsPrg (GameConfig renderTime winDims sprite) gs
 
     -- We need to render if we're going to fall below the physics threshold
     -- on the next frame. This simulates a while loop. If we don't fall

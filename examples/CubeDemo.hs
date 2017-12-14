@@ -13,6 +13,8 @@ import Control.Monad.Reader
 import Data.Traversable (sequenceA)
 #endif
 
+import Data.Word
+
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Lambency as L
 
@@ -20,13 +22,14 @@ import System.FilePath
 import Paths_lambency
 
 import Linear.Vector
-import Linear.V2
 import Linear.V3
+import Linear.V4
 import qualified Linear.Quaternion as Quat
 
 import Control.Wire ((.))
 import qualified Control.Wire as W
 import FRP.Netwire.Analyze
+import qualified Yoga as Y
 ---------------------------------------------------------------------------------
 
 initialCam :: L.Camera
@@ -51,7 +54,8 @@ mkPlane = do
 mkBunny:: IO [(L.RenderObject, L.Transform)]
 mkBunny = do
   objFile <- getDataFileName ("examples" </> "bunnyN" <.> "obj")
-  ros <- L.loadOBJWithDefaultMaterial objFile $ Just (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
+  ros <- L.loadOBJWithDefaultMaterial objFile
+         $ Just (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
   return $ (\ro -> (ro, xform)) <$> ros
   where xform = L.rotate (Quat.axisAngle (V3 0 1 0) pi) $
                 L.translate (V3 (-4) (-4.8) (-5)) $
@@ -84,25 +88,55 @@ cubeWire = do
               L.uniformScale 2.0 $
               L.identity
 
-frameWire :: L.Font -> L.GameWire a a
-frameWire font = (W.mkId W.&&& (lastRenderTime W.>>> sAvg 5)) W.>>> renderWire
-  where
-    lastRenderTime :: L.GameWire a Float
-    lastRenderTime = W.mkGen_ $ \_ -> do
-      lastPicoSeconds <- ask
-      return . Right $ fromIntegral lastPicoSeconds / 1000000000.0
-
-    renderWire :: L.GameWire (a, Float) a
-    renderWire = W.mkGen_ $ \(v, fps) -> do
-      L.renderUIString font ("Frame Time (ms): " ++ (show fps)) (V2 10 10)
-      return $ Right v
-
 lightWire :: L.Light -> L.GameWire () L.Light
 lightWire initial = (W.timeF W.>>>) $ W.mkSF_ $ \t ->
   let Just (V3 _ py pz) = L.getLightPosition initial
       newPos = V3 (sin(t) * 10) py pz
   in L.setLightPosition newPos $
      L.setLightDirection (negate newPos) initial
+
+uiWire :: Monoid a => L.Font -> L.GameWire a a
+uiWire font = L.screen [
+  L.hbox [renderTime, L.glue],
+  L.glue,
+  L.hbox [L.glue, button]
+  ]
+  where
+    background = let
+        blue :: V4 Word8
+        blue = V4 0 0 255 255
+
+        yellow :: V4 Word8
+        yellow = V4 255 255 0 255
+      in L.WidgetState {
+        L.idleLogic = L.colorRenderer blue W.mkId,
+        L.eventHandlers =
+          [L.WidgetEvent'OnKeyDown GLFW.Key'U $ L.colorRenderer yellow W.mkId]
+        }
+
+    button = L.Widget
+             $ ($ background)
+             $ Y.withMargin Y.Edge'All 10.0
+             $ Y.exact 10.0 10.0
+
+    lastRenderTime :: L.GameWire a Float
+    lastRenderTime = W.mkGen_ $ \_ -> do
+      lastPicoSeconds <- L.lastFrameTime <$> ask
+      return . Right $ fromIntegral lastPicoSeconds / 1000000000.0
+
+    avgRenderTimeWire :: L.GameWire a String
+    avgRenderTimeWire =
+      ("Frame Time (ms): " ++) . show <$> (lastRenderTime W.>>> sAvg 5)
+
+    frameRenderState = let
+      idle = L.dynamicTextRenderer font $ W.mkId W.&&& avgRenderTimeWire
+      in L.WidgetState idle []
+
+    renderTime = L.Widget
+                 $ ($ frameRenderState)
+                 $ Y.withMargin Y.Edge'Left 5.0
+                 $ Y.withMargin Y.Edge'Top 15.0
+                 $ Y.exact 300.0 50.0
 
 loadGame :: IO (L.Game ())
 loadGame = do
@@ -111,14 +145,14 @@ loadGame = do
   plane <- uncurry L.staticObject <$> mkPlane
   bunny <- foldl (W.>>>) W.mkId <$> map (uncurry L.staticObject) <$> mkBunny
   cube <- cubeWire
-  let gameWire = L.quitWire GLFW.Key'Q . frameWire sysFont . cube . bunny . plane
+  let gameWire = L.quitWire GLFW.Key'Q . cube . bunny . plane
       lightPos = 5 *^ (V3 (-2) 1 0)
       lightParams = L.mkLightParams (V3 0.15 0.15 0.15) (V3 1.0 1.0 1.0) 1.0
   shadowLight <- L.addShadowMap $
                  L.spotlight lightParams lightPos (negate lightPos) (pi/4)
   return $ L.Game { L.mainCamera = demoCam,
                     L.dynamicLights = [lightWire shadowLight],
-                    L.gameLogic = gameWire}
+                    L.gameLogic = gameWire W.>>> uiWire sysFont }
 
 main :: IO ()
 main = L.withWindow 640 480 "Cube Demo" $ L.loadAndRun () loadGame

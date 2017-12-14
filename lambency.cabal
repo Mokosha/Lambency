@@ -58,6 +58,7 @@ library
                        Lambency.Texture
                        Lambency.Transform
                        Lambency.Vertex
+                       Lambency.UI
                        Lambency.Utils
                        Lambency.Sound
 
@@ -88,7 +89,7 @@ library
                        text,
                        time,
                        vector,
-                       yoga                 >= 0.0.0.1,
+                       yoga                 >= 0.0.0.2,
                        -- Eventually replace these...
                        directory
 
@@ -132,7 +133,8 @@ executable lambcubedemo
                   mtl,
                   containers,
                   directory,
-                  filepath
+                  filepath,
+                  yoga                 >= 0.0.0.1
 
   if flag(examples)
     buildable:    True
