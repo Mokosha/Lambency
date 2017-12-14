@@ -100,7 +100,6 @@ widgetRenderFn dt input lytInfo widgetState =
 
       wireArg = (lytInfo, input)
   in do
-    lastPicoSeconds <- lastFrameTime <$> ask
     (eventResults, events) <- handleEvents (eventHandlers widgetState) wireArg
     case eventResults of
       Nothing -> do

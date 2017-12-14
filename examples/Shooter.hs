@@ -1,7 +1,6 @@
 module Main where
 
 --------------------------------------------------------------------------------
-import Control.Monad
 import Control.Wire hiding ((.))
 import FRP.Netwire.Input
 
