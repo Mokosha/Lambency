@@ -185,7 +185,7 @@ spriteRenderer s logic = mkGen $ \dt (lytInfo, val) -> do
 colorRenderer :: Monoid b => V4 Word8 -> GameWire a b -> UIWire a b
 colorRenderer color logic = mkGen $ \dt (lytInfo, val) -> do
   let byteColor = fromIntegral <$> color
-  s <- changeSpriteColor byteColor <$> simpleSprite <$> lift ask
+  s <- changeSpriteColor byteColor <$> simpleSprite <$> ask
   renderSpriteAt s lytInfo
   (result, logic') <- stepWire logic dt $ Right val
   return (result, spriteRenderer s logic')

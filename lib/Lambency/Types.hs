@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Lambency.Types (
   Vec2f, Vec3f, Vec4f, Quatf, Mat2f, Mat3f, Mat4f,
   Camera(..), CameraType(..), CameraViewDistance(..),
@@ -10,11 +12,20 @@ module Lambency.Types (
   SpriteFrame(..), Sprite(..),
   OutputAction(..),
   TimeStep,
-  GameConfig(..), GameWire, GameMonad, GameState, GameSession, GameTime,
+  GameConfig(..), GameWire, GameMonad, GameSession, GameTime,
   Game(..)
 ) where
 
 --------------------------------------------------------------------------------
+
+import qualified Control.Wire as W
+import Control.Monad.RWS.Strict
+
+import Data.Maybe (isJust)
+import Data.Hashable
+import Data.Time.Clock
+
+import qualified Data.Map as Map
 
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.GL as GLRaw
@@ -23,15 +34,6 @@ import Lambency.Sound
 import Lambency.Utils
 
 import qualified Lambency.Transform as XForm
-
-import Data.Maybe (isJust)
-import Data.Hashable
-import Data.Time.Clock
-
-import qualified Data.Map as Map
-
-import qualified Control.Wire as W
-import Control.Monad.RWS.Strict
 
 import FRP.Netwire.Input.GLFW
 
@@ -307,10 +309,22 @@ data RenderAction = RenderObjects [RenderObject]
                   | RenderTransformed XForm.Transform RenderAction
                   | RenderCons RenderAction RenderAction
 
+instance Monoid RenderAction where
+  mempty = RenderObjects []
+  mappend (RenderObjects []) x = x
+  mappend x (RenderObjects []) = x
+  mappend (RenderObjects x) (RenderObjects y) = RenderObjects (x ++ y)
+  mappend x y = RenderCons x y
+
 data RenderActions = RenderActions {
   renderScene :: RenderAction,
   renderUI :: RenderAction
 }
+
+instance Monoid RenderActions where
+  mempty = RenderActions mempty mempty
+  mappend (RenderActions a b) (RenderActions c d) =
+    RenderActions (a `mappend` c) (b `mappend` d)
 
 data SpriteFrame = SpriteFrame {
   offset :: V2 Float,
@@ -340,8 +354,6 @@ data GameConfig = GameConfig {
                              -- and simple UI element backgrounds
   }
 
-type GameState = RenderActions
-
 -- Game
 data Game a = Game {
   mainCamera :: GameWire () Camera,
@@ -354,9 +366,27 @@ data Game a = Game {
 -- Game State
 
 type TimeStep = W.Timed Float ()
-type GameMonad = GLFWInputT (RWS GameConfig [OutputAction] GameState)
+type GameMonad = RWST GameConfig ([OutputAction], RenderActions) GLFWInputState IO
 type GameWire = W.Wire TimeStep String GameMonad
 type GameSession = W.Session IO TimeStep
+
+instance MonadGLFWInput GameMonad where
+  getGLFWInput = get
+  putGLFWInput = put
+
+-- TODO:
+{-
+newtype GameMonad a = GameMonad {
+  gameInstant :: RWST GameConfig [OutputAction] GLFWInputState IO a
+} deriving ( Functor
+           , Applicative
+           , Alternative
+           , Monad
+           , MonadFix
+           , MonadPlus
+           , MonadGLFWInput
+           )
+-}
 
 -- The game timer has two parts. The first is the time after the last rendering
 -- and the second is the amount of time left over from performing the

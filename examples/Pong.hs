@@ -167,7 +167,7 @@ collidePaddle playerOne sound = mkGen_ collide
       in
        if circleIntersectRect (p, ballRadius) paddleRect
        then do
-         tell $ [L.SoundAction sound L.StartSound]
+         tell $ ([L.SoundAction sound L.StartSound], mempty)
          return . Right $ Ball p v'
        else return . Right $ Ball p v
        

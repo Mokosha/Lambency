@@ -46,5 +46,5 @@ withVelocity initial velWire = velWire >>> (moveXForm initial)
 
 pulseSound :: Sound -> GameWire a a
 pulseSound sound = mkGenN $ \val -> do
-  tell $ [SoundAction sound StartSound]
+  tell $ ([SoundAction sound StartSound], mempty)
   return (Right val, Control.Wire.id)

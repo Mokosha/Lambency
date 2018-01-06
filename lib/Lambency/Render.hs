@@ -27,8 +27,9 @@ import Lambency.Vertex
 #if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
 #endif
-import Control.Monad.State
 import Control.Concurrent.STM
+import Control.Monad.RWS.Strict
+import Control.Monad.State
 
 import Data.Array.IO
 import Data.Array.Storable
@@ -326,7 +327,12 @@ mkLightCam (SpotLight dir' pos' cosCutoff') =
       ang = acos cco
   in mkPerspCamera pos dir (V3 0 1 0) (2 * ang) 1 0.1 500.0
 
-mkLightCam c = error $ "Lambency.Render (mkLightCam): Camera for light type unsupported: " ++ show c
+mkLightCam c =
+  error $ concat [
+    "Lambency.Render (mkLightCam): ",
+    "Camera for light type unsupported: ",
+    show c
+  ]
 
 renderLight :: RenderAction -> Camera -> Maybe Light -> RenderContext ()
 renderLight act cam (Just (Light params lightTy (Just (shadowMap, _)))) = do
@@ -404,11 +410,11 @@ renderText (RenderTransformed xf act) camera = do
   withStateT (\st -> st { currentRenderXF = transform xf (currentRenderXF st) }) $
     renderText act camera
   put oldState
-renderText (RenderClipped _ act) camera = do
+renderText (RenderClipped _ act) c = do
   -- !FIXME! ignoring clipped text...
   -- liftIO $ putStrLn "Warning: Unable to render clipped text!"
-  renderText act camera
-renderText (RenderCons act1 act2) camera = renderText act1 camera >> renderText act2 camera
+  renderText act c
+renderText (RenderCons act1 act2) c = forM_ [act1, act2] $ flip renderText c
 
 performRenderActions :: [Light] -> Camera -> RenderActions -> RenderContext ()
 performRenderActions lights camera actions = do
@@ -429,91 +435,46 @@ performRenderActions lights camera actions = do
   renderLight (renderUI actions) cam Nothing
   renderText (renderUI actions) cam
 
-type AppendObjectFn = RenderObject -> RenderAction -> RenderAction
-
-appendObj :: AppendObjectFn
-appendObj obj (RenderObjects objs) = RenderObjects (obj : objs)
-appendObj obj (RenderClipped clip act) = RenderClipped clip (appendObj obj act)
-appendObj obj (RenderCons act1 act2) = RenderCons act1 (appendObj obj act2)
-appendObj obj (RenderTransformed xf act) = RenderTransformed xf (appendObj obj act)
-
-appendSceneWith :: AppendObjectFn -> RenderObject -> RenderActions -> RenderActions
-appendSceneWith fn obj acts = acts { renderScene = fn obj (renderScene acts) }
-
-appendUIWith :: AppendObjectFn -> RenderObject -> RenderActions -> RenderActions
-appendUIWith fn obj acts = acts { renderUI = fn obj (renderUI acts) }
-
-embedNewAction :: RenderAction -> RenderAction -> RenderAction
-embedNewAction old new = RenderCons old $ RenderCons new $ RenderObjects []
-
-createClippedAction :: RenderAction -> RenderAction -> RenderAction -> RenderAction
-createClippedAction old clip draw = embedNewAction old $ RenderClipped clip draw
-
 -- !FIXME! This would probably be cleaner with lenses
-createClippedActions :: RenderActions -> RenderActions -> RenderActions -> RenderActions
-createClippedActions old clip draw =
-  RenderActions { renderScene = createClippedAction (rs old) (rs clip) (rs draw),
-                  renderUI = createClippedAction (ru old) (ru clip) (ru draw) }
+createClippedActions :: RenderActions -> RenderActions -> RenderActions
+createClippedActions clip draw =
+  RenderActions { renderScene = RenderClipped (rs clip) (rs draw),
+                  renderUI = RenderClipped (ru clip) (ru draw) }
   where
     rs = renderScene
     ru = renderUI
 
-addClippedRenderAction :: GameMonad () -> GameMonad a -> GameMonad a
-addClippedRenderAction clip draw = do
-  -- Get the existing actions
-  actions <- lift get
-
-  -- Put empty actions
-  lift $ put emptyRenderActions
-
+addClippedRenderAction :: GameMonad b -> (b -> GameMonad a) -> GameMonad a
+addClippedRenderAction clip drawWithClip = RWST $ \config input -> do
   -- Get the actions that render the clip
-  clipActions <- clip >> lift get
-
-  -- Put back empty actions again
-  lift $ put emptyRenderActions
+  (clipResult, clipInput, (clipActions, clipRenderActions)) <-
+    runRWST clip config input
 
   -- Get the actions that render our clipped geometry
-  result <- draw
-  renderActions <- lift get
+  (result, finalInput, (finalActions, finalRenderActions)) <-
+    runRWST (drawWithClip clipResult) config clipInput
 
-  -- Finally, replace our existing actions with clipped actions
-  lift $ put $ createClippedActions actions clipActions renderActions
-  return result
+  -- Return with clipped actions
+  return (result, finalInput,
+          (clipActions ++ finalActions,
+           createClippedActions clipRenderActions finalRenderActions))
 
-createTransformedAction :: Transform -> RenderAction -> RenderAction -> RenderAction
-createTransformedAction xf old new = embedNewAction old $ RenderTransformed xf new
-
-createTransformedActions :: Transform -> RenderActions -> RenderActions -> RenderActions
-createTransformedActions xf old new =
-  RenderActions { renderScene = createTransformedAction xf (rs old) (rs new),
-                  renderUI = createTransformedAction xf (ru old) (ru new) }
-  where
-    rs = renderScene
-    ru = renderUI
+createTransformedActions :: Transform -> RenderActions -> RenderActions
+createTransformedActions xf new =
+  RenderActions { renderScene = RenderTransformed xf (renderScene new),
+                  renderUI = RenderTransformed xf (renderUI new) }
 
 addTransformedRenderAction :: Transform -> GameMonad a -> GameMonad a
-addTransformedRenderAction xf prg = do
-  -- Get the actions so far
-  actions <- lift get
-
-  -- Put empty actions
-  lift $ put emptyRenderActions
-
-  -- Run the actions
-  result <- prg
-
-  -- Get the resulting actions
-  xfActions <- lift get
-
-  -- Put the transformed actions back
-  lift $ put $ createTransformedActions xf actions xfActions
-  return result
+addTransformedRenderAction xf prg = RWST $ \config input -> do
+  (result, finalInput, (actions, renderActions)) <- runRWST prg config input
+  return (result, finalInput, (actions, createTransformedActions xf renderActions))
 
 addRenderAction :: Transform -> RenderObject -> GameMonad ()
-addRenderAction xf ro = lift $ modify $ appendSceneWith appendObj (xformObject xf ro)
+addRenderAction xf ro =
+  tell $ ([], RenderActions (RenderObjects [xformObject xf ro]) mempty)
 
 addRenderUIAction :: V2 Float -> RenderObject -> GameMonad ()
-addRenderUIAction (V2 x y) ro = lift $
-  modify $ appendUIWith appendObj (xformObject xf ro)
+addRenderUIAction (V2 x y) ro =
+  tell $ ([], RenderActions mempty (RenderObjects [xformObject xf ro]))
   where
     xf = translate (V3 x y (-1)) identity

@@ -223,7 +223,7 @@ runLoop prevFrameTime = do
   thisFrameTime <- liftIO getCurrentTime
   let newAccum = accumulator + (diffUTCTime thisFrameTime prevFrameTime)
   modify $ \ls -> ls { currentPhysicsAccum = min newAccum maximumFramerate }
-  (go, (nextsession, accum), (nextGame, _)) <- stepGame emptyRenderActions
+  (go, (nextsession, accum), nextGame) <- stepGame
 
   case go of
     Right gobj -> do
@@ -236,17 +236,16 @@ runLoop prevFrameTime = do
     Left _ -> return ()
 
 type TimeStepper = (GameSession, NominalDiffTime)
-type StateStepper a = (Game a, GameState)
 
-stepGame :: GameState -> GameLoopM a (Either String a, TimeStepper, StateStepper a)
-stepGame gs = do
+stepGame :: GameLoopM a (Either String a, TimeStepper, Game a)
+stepGame = do
   (GameLoopState go game session accum _) <- get
   if (accum < physicsDeltaUTC)
-    then return (Right go, (session, accum), (game, gs))
-    else runGame gs
+    then return (Right go, (session, accum), game)
+    else runGame
 
-runGame :: GameState -> GameLoopM a (Either String a, TimeStepper, StateStepper a)
-runGame gs = do
+runGame :: GameLoopM a (Either String a, TimeStepper, Game a)
+runGame = do
   gameLoopConfig <- ask
   gls <- get
   ipt <- liftIO $ getInput (glfwInputControl gameLoopConfig)
@@ -264,20 +263,6 @@ runGame gs = do
     -- wire
     gameStep = step (currentGameValue gls) (currentGameLogic gls) ts
 
-    -- In order to get at the underlying RWS monad, let's create an
-    -- RWS program that works with the passed in input.
-    -- rwsPrg :: RWS () [OutputAction] RenderAction
-    --           ((Either () a, Camera, [Light], Game a), GLFWInputState)
-    rwsPrg = runGLFWInputT gameStep ipt
-
-    -- This is the meat of the step routine. This calls runRWS on the
-    -- main game wire, and uses the results to figure out what needs
-    -- to be done.
-    renderTime = lastFramePicoseconds gls
-    sprite = simpleQuadSprite gameLoopConfig
-    (((result, cam, lights, nextGame), newIpt), newGS, actions) =
-      runRWS rwsPrg (GameConfig renderTime winDims sprite) gs
-
     -- We need to render if we're going to fall below the physics threshold
     -- on the next frame. This simulates a while loop. If we don't fall
     -- through this threshold, we will perform another physics step before
@@ -285,8 +270,17 @@ runGame gs = do
     accum = currentPhysicsAccum gls
     needsRender = ((accum - physicsDeltaUTC) < physicsDeltaUTC)
 
-    -- The ReaderT RenderConfig IO program that will do the actual rendering
-    renderPrg = performRenderActions lights cam newGS
+    renderTime = lastFramePicoseconds gls
+    sprite = simpleQuadSprite gameLoopConfig
+
+  -- This is the meat of the step routine. This calls runRWS on the
+  -- main game wire, and uses the results to figure out what needs
+  -- to be done.
+  ((result, cam, lights, nextGame), newIpt, (actions, renderActs)) <-
+      liftIO $ runRWST gameStep (GameConfig renderTime winDims sprite) ipt
+
+  -- The ReaderT RenderConfig IO program that will do the actual rendering
+  let renderPrg = performRenderActions lights cam renderActs
 
   frameTime <-
     if needsRender
@@ -318,8 +312,8 @@ runGame gs = do
   case result of
     Right obj -> do
       put $ GameLoopState obj nextGame nextSess (accum - physicsDeltaUTC) frameTime
-      stepGame emptyRenderActions
-    Left _ -> return (result, (nextSess, accum), (nextGame, gs))
+      stepGame
+    Left _ -> return (result, (nextSess, accum), nextGame)
 
 run :: a -> Game a -> GLFW.Window -> IO ()
 run initialGameObject initialGame win = do

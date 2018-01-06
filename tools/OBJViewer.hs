@@ -57,7 +57,7 @@ wireframeToggle = (keyDebounced GLFW.Key'V W.>>> toggleWireframe True) W.<|> W.m
   where
     toggleWireframe :: Bool -> L.GameWire a a
     toggleWireframe wireframe = W.mkGenN $ \x -> do
-      tell [L.WireframeAction wireframe]
+      tell $ ([L.WireframeAction wireframe], mempty)
       return (Right x, toggleWireframe $ not wireframe)
 
 controlWire :: [L.RenderObject] -> L.GameWire a [a]
