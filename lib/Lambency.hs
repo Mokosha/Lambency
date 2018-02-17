@@ -35,15 +35,14 @@ module Lambency (
   makeWindow, destroyWindow, withWindow,
   run, loadAndRun, runSimple,
   quitWire,
+  toggleWireframe,
   module Lambency.Sound
 ) where
 
 --------------------------------------------------------------------------------
 import Prelude hiding ((.))
 
-#if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
-#endif
 import Control.Monad.RWS.Strict
 import Control.Monad.Reader
 import Control.Monad.State
@@ -272,12 +271,13 @@ runGame = do
 
     renderTime = lastFramePicoseconds gls
     sprite = simpleQuadSprite gameLoopConfig
+    frameConfig = GameConfig renderTime winDims sprite
 
   -- This is the meat of the step routine. This calls runRWS on the
   -- main game wire, and uses the results to figure out what needs
   -- to be done.
   ((result, cam, lights, nextGame), newIpt, (actions, renderActs)) <-
-      liftIO $ runRWST gameStep (GameConfig renderTime winDims sprite) ipt
+      liftIO $ runRWST (nextFrame gameStep) frameConfig ipt
 
   -- The ReaderT RenderConfig IO program that will do the actual rendering
   let renderPrg = performRenderActions lights cam renderActs
@@ -355,4 +355,7 @@ runSimple cam f x win = do
 quitWire :: GLFW.Key -> GameWire a a
 quitWire key =
   W.rSwitch W.mkId .
-  (W.mkId W.&&& (W.now . W.pure W.mkEmpty . keyPressed key W.<|> W.never))
+  (W.mkId W.&&& (W.now . W.pure W.mkEmpty . keyPressed key <|> W.never))
+
+toggleWireframe :: Bool -> GameMonad ()
+toggleWireframe b = GameMonad $ tell $ ([WireframeAction b], mempty)

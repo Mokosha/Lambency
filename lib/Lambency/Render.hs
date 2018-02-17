@@ -445,14 +445,14 @@ createClippedActions clip draw =
     ru = renderUI
 
 addClippedRenderAction :: GameMonad b -> (b -> GameMonad a) -> GameMonad a
-addClippedRenderAction clip drawWithClip = RWST $ \config input -> do
+addClippedRenderAction clip drawWithClip = GameMonad . RWST $ \cfg input -> do
   -- Get the actions that render the clip
   (clipResult, clipInput, (clipActions, clipRenderActions)) <-
-    runRWST clip config input
+    runRWST (nextFrame clip) cfg input
 
   -- Get the actions that render our clipped geometry
   (result, finalInput, (finalActions, finalRenderActions)) <-
-    runRWST (drawWithClip clipResult) config clipInput
+    runRWST (nextFrame $ drawWithClip clipResult) cfg clipInput
 
   -- Return with clipped actions
   return (result, finalInput,
@@ -465,16 +465,18 @@ createTransformedActions xf new =
                   renderUI = RenderTransformed xf (renderUI new) }
 
 addTransformedRenderAction :: Transform -> GameMonad a -> GameMonad a
-addTransformedRenderAction xf prg = RWST $ \config input -> do
-  (result, finalInput, (actions, renderActions)) <- runRWST prg config input
-  return (result, finalInput, (actions, createTransformedActions xf renderActions))
+addTransformedRenderAction xf prg = GameMonad . RWST $ \cfg input -> do
+  (result, finalInput, (actions, renderActions)) <-
+    runRWST (nextFrame prg) cfg input
+  let xformedActions = createTransformedActions xf renderActions
+  return (result, finalInput, (actions, xformedActions))
 
 addRenderAction :: Transform -> RenderObject -> GameMonad ()
-addRenderAction xf ro =
+addRenderAction xf ro = GameMonad $
   tell $ ([], RenderActions (RenderObjects [xformObject xf ro]) mempty)
 
 addRenderUIAction :: V2 Float -> RenderObject -> GameMonad ()
-addRenderUIAction (V2 x y) ro =
+addRenderUIAction (V2 x y) ro = GameMonad $
   tell $ ([], RenderActions mempty (RenderObjects [xformObject xf ro]))
   where
     xf = translate (V3 x y (-1)) identity

@@ -2,7 +2,6 @@ module Main where
 
 --------------------------------------------------------------------------------
 import Prelude hiding ((.), id)
-import Control.Monad.Writer (tell)
 import Control.Wire
 import FRP.Netwire.Input
 import FRP.Netwire.Move
@@ -167,7 +166,7 @@ collidePaddle playerOne sound = mkGen_ collide
       in
        if circleIntersectRect (p, ballRadius) paddleRect
        then do
-         tell $ ([L.SoundAction sound L.StartSound], mempty)
+         L.startSound sound
          return . Right $ Ball p v'
        else return . Right $ Ball p v
        

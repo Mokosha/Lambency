@@ -4,26 +4,25 @@ module Lambency.Sound (
   freeSound,
   loadSound,
   handleCommand,
+  startSound, stopSound
 ) where
 
 --------------------------------------------------------------------------------
+import qualified Codec.Wav as Wav
+import Control.Monad.RWS.Strict
+
+import Data.Array.Storable
+import Data.Audio
 
 import GHC.Int
-import Data.Array.Storable
-
-import qualified Codec.Wav as Wav
-import Data.Audio
-import qualified Sound.OpenAL.AL as AL
-import qualified Sound.OpenAL.ALC as ALC
 
 import qualified Graphics.Rendering.OpenGL as GL
 
---------------------------------------------------------------------------------
+import Lambency.Types
 
--- type Sound = Mix.Chunk
-type Sound = AL.Source
-data SoundCommand = StartSound
-                  | StopSound
+import qualified Sound.OpenAL.AL as AL
+import qualified Sound.OpenAL.ALC as ALC
+--------------------------------------------------------------------------------
 
 initSound :: IO ()
 initSound = do
@@ -91,3 +90,9 @@ freeSound = do
       ALC.destroyContext c
       result <- ALC.closeDevice d
       if result then return () else error "Failed to close device!"
+
+startSound :: Sound -> GameMonad ()
+startSound sound = GameMonad $ tell $ ([SoundAction sound StartSound], mempty)
+
+stopSound :: Sound -> GameMonad ()
+stopSound sound = GameMonad $ tell $ ([SoundAction sound StopSound], mempty)

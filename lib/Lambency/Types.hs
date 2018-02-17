@@ -1,5 +1,5 @@
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Lambency.Types (
   Vec2f, Vec3f, Vec4f, Quatf, Mat2f, Mat3f, Mat4f,
   Camera(..), CameraType(..), CameraViewDistance(..),
@@ -9,33 +9,31 @@ module Lambency.Types (
   Texture(..), TextureSize(..), TextureFormat(..), FBOHandle, TextureHandle(..),
   MaterialVar(..), NormalModulation(..), ReflectionInfo(..), Material(..),
   RenderFlag(..), RenderObject(..), RenderAction(..), RenderActions(..),
-  SpriteFrame(..), Sprite(..),
+  Sound, SoundCommand(..), SpriteFrame(..), Sprite(..),
   OutputAction(..),
   TimeStep,
-  GameConfig(..), GameWire, GameMonad, GameSession, GameTime,
+  GameConfig(..), GameWire, GameMonad(..), GameSession, GameTime,
   Game(..)
 ) where
 
 --------------------------------------------------------------------------------
 
 import qualified Control.Wire as W
+import Control.Applicative
 import Control.Monad.RWS.Strict
 
+import qualified Data.Map as Map
 import Data.Maybe (isJust)
 import Data.Hashable
 import Data.Time.Clock
 
-import qualified Data.Map as Map
+import FRP.Netwire.Input.GLFW
 
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.GL as GLRaw
 
-import Lambency.Sound
 import Lambency.Utils
-
 import qualified Lambency.Transform as XForm
-
-import FRP.Netwire.Input.GLFW
 
 import Linear.Matrix
 import Linear.V2
@@ -43,6 +41,7 @@ import Linear.V3
 import Linear.V4
 import qualified Linear.Quaternion as Quat
 
+import qualified Sound.OpenAL.AL as AL
 --------------------------------------------------------------------------------
 
 -- Vector Types
@@ -335,6 +334,13 @@ data SpriteFrame = SpriteFrame {
 newtype Sprite = Sprite { getFrames :: CyclicList SpriteFrame }
 
 --------------------------------------------------------------------------------
+--
+-- Sound types
+--
+type Sound = AL.Source
+data SoundCommand = StartSound | StopSound
+
+--------------------------------------------------------------------------------
 
 -- Output functions
 --
@@ -366,27 +372,23 @@ data Game a = Game {
 -- Game State
 
 type TimeStep = W.Timed Float ()
-type GameMonad = RWST GameConfig ([OutputAction], RenderActions) GLFWInputState IO
 type GameWire = W.Wire TimeStep String GameMonad
 type GameSession = W.Session IO TimeStep
 
-instance MonadGLFWInput GameMonad where
-  getGLFWInput = get
-  putGLFWInput = put
-
--- TODO:
-{-
 newtype GameMonad a = GameMonad {
-  gameInstant :: RWST GameConfig [OutputAction] GLFWInputState IO a
+  nextFrame :: RWST GameConfig ([OutputAction], RenderActions) GLFWInputState IO a
 } deriving ( Functor
            , Applicative
            , Alternative
            , Monad
            , MonadFix
            , MonadPlus
-           , MonadGLFWInput
+           , MonadReader GameConfig  -- TODO: Fix once we add monad transformer
            )
--}
+
+instance MonadGLFWInput GameMonad where
+  getGLFWInput = GameMonad get
+  putGLFWInput = GameMonad . put
 
 -- The game timer has two parts. The first is the time after the last rendering
 -- and the second is the amount of time left over from performing the

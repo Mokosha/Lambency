@@ -14,7 +14,6 @@ import Lambency.Types
 
 import Control.Arrow
 import Control.Wire hiding ((.))
-import Control.Monad.Writer
 
 import Linear.Vector
 --------------------------------------------------------------------------------
@@ -23,6 +22,9 @@ wireFrom :: GameMonad a -> (a -> GameWire b c) -> GameWire b c
 wireFrom prg fn = mkGen $ \dt val -> do
   seed <- prg
   stepWire (fn seed) dt (Right val)
+
+doOnce :: GameMonad () -> GameWire a a
+doOnce pgm = wireFrom pgm $ const Control.Wire.id
 
 mkObject :: RenderObject -> GameWire a Transform -> GameWire a a
 mkObject ro xfw = mkGen $ \dt val -> do
@@ -45,6 +47,4 @@ withVelocity initial velWire = velWire >>> (moveXForm initial)
           in (Right newxform, moveXForm newxform)
 
 pulseSound :: Sound -> GameWire a a
-pulseSound sound = mkGenN $ \val -> do
-  tell $ ([SoundAction sound StartSound], mempty)
-  return (Right val, Control.Wire.id)
+pulseSound = doOnce . startSound

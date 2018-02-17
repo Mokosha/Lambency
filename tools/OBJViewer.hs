@@ -8,8 +8,6 @@ import Prelude hiding ((.))
 import Control.Wire ((.))
 import qualified Control.Wire as W
 
-import Control.Monad.Writer
-
 #if __GLASGOW_HASKELL__ <= 708
 import Data.Traversable (sequenceA)
 #endif
@@ -53,12 +51,12 @@ cam = startCam (makeViewer initialCam) makeViewer makeFree
         else return (Right nextCam, startCam nextCamWire mkThisCam mkThatCam)
 
 wireframeToggle :: L.GameWire a a
-wireframeToggle = (keyDebounced GLFW.Key'V W.>>> toggleWireframe True) W.<|> W.mkId
+wireframeToggle = (keyDebounced GLFW.Key'W W.>>> toggle True) W.<|> W.mkId
   where
-    toggleWireframe :: Bool -> L.GameWire a a
-    toggleWireframe wireframe = W.mkGenN $ \x -> do
-      tell $ ([L.WireframeAction wireframe], mempty)
-      return (Right x, toggleWireframe $ not wireframe)
+    toggle :: Bool -> L.GameWire a a
+    toggle wireframe = W.mkGenN $ \x -> do
+      L.toggleWireframe wireframe
+      return (Right x, toggle $ not wireframe)
 
 controlWire :: [L.RenderObject] -> L.GameWire a [a]
 controlWire ros = sequenceA $ (\ro -> L.mkObject ro (pure L.identity) W.>>> wireframeToggle) <$> ros
