@@ -1,5 +1,7 @@
 module Lambency.GameObject (
   wireFrom,
+  bracketWire,
+  doOnce, doOnceWithInput,
   mkObject,
   staticObject,
   withVelocity,
@@ -23,8 +25,19 @@ wireFrom prg fn = mkGen $ \dt val -> do
   seed <- prg
   stepWire (fn seed) dt (Right val)
 
+bracketWire :: GameMonad a
+            -> (a -> GameMonad ())
+            -> (a -> GameWire b c)
+            -> GameWire b c
+bracketWire load unload fn = mkGen $ \dt val -> do
+  res <- load
+  stepWire (fn res --> (doOnce (unload res) >>> mkEmpty)) dt (Right val)
+
 doOnce :: GameMonad () -> GameWire a a
 doOnce pgm = wireFrom pgm $ const Control.Wire.id
+
+doOnceWithInput :: (a -> GameMonad ()) -> GameWire a a
+doOnceWithInput fn = mkGenN $ \x -> fn x >> return (Right x, mkId)
 
 mkObject :: RenderObject -> GameWire a Transform -> GameWire a a
 mkObject ro xfw = mkGen $ \dt val -> do

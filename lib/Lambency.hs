@@ -34,6 +34,7 @@ module Lambency (
 
   makeWindow, destroyWindow, withWindow,
   run, loadAndRun, runSimple,
+  bracketResource,
   quitWire,
   toggleWireframe,
   module Lambency.Sound
@@ -349,6 +350,14 @@ runSimple cam f x win = do
         return (Right result, gameWire)
 
   run x (Game (W.pure cam) [] gameWire) win
+
+-- Runs the initial loading program and uses the resource until the generated
+-- wire inhibits, at which point it unloads the resource. The wire inhibits
+-- afterwards.
+-- TODO: Maybe should restrict this to certain types of resources?
+bracketResource :: IO a -> (a -> IO ()) -> (a -> GameWire b c) -> GameWire b c
+bracketResource load unload =
+  bracketWire (GameMonad $ liftIO load) (GameMonad . liftIO . unload)
 
 -- Wire that behaves like the identity wire until the given key
 -- is pressed, then inhibits forever.
