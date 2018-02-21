@@ -297,11 +297,12 @@ data RenderFlag = Transparent
                 | Text
                 deriving (Show, Read, Ord, Eq, Enum)
 
-data RenderObject = RenderObject {
-  material :: Material,
-  render :: Shader -> ShaderMap -> IO (),
-  flags :: [RenderFlag]
-}
+data RenderObject = RenderObject
+                    { material :: Material
+                    , render :: Shader -> ShaderMap -> IO ()
+                    , flags :: [RenderFlag]
+                    , unloadRenderObject :: IO ()
+                    }
 
 data RenderAction = RenderObjects [RenderObject]
                   | RenderClipped RenderAction RenderAction

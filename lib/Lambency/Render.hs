@@ -144,7 +144,8 @@ createBasicRO [] _ _ = do
   return $ RenderObject {
     material = NoMaterial,
     render = \_ _ -> return (),
-    flags = []
+    flags = [],
+    unloadRenderObject = return ()
   }
 
 createBasicRO verts@(v:_) idxs mat =
@@ -196,7 +197,8 @@ createBasicRO verts@(v:_) idxs mat =
       -- material after being compiled into shader code...
       material = mat,
       render = createRenderFunc vbo ibo $ fromIntegral (length idxs),
-      flags = []
+      flags = [],
+      unloadRenderObject = GL.deleteObjectName vbo >> GL.deleteObjectName ibo
     }
 
 class Renderable a where
