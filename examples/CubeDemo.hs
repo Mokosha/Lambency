@@ -13,6 +13,8 @@ import Control.Monad.Reader
 import Data.Traversable (sequenceA)
 #endif
 
+import Data.Foldable (traverse_)
+import Data.Maybe (fromJust)
 import Data.Word
 
 import qualified Graphics.UI.GLFW as GLFW
@@ -61,17 +63,29 @@ mkBunny = do
                 L.translate (V3 (-4) (-4.8) (-5)) $
                 L.identity
 
-cubeWire :: IO (L.GameWire () ())
-cubeWire = do
-  sound <- getDataFileName ("examples" </> "stereol" <.> "wav") >>= L.loadSound
-  (Just tex) <- getDataFileName ("examples" </> "crate" <.> "png") >>= L.loadTexture
-  objFile <- getDataFileName ("examples" </> "cube" <.> "obj")
-  ros <- L.loadOBJWithDefaultMaterial objFile $ Just (L.diffuseTexturedMaterial tex)
-  return $
+cubeWire :: L.GameWire () ()
+cubeWire =
+  L.bracketResource loadSound L.unloadSound $ \sound ->
+  L.bracketResource loadTex L.destroyTexture $ \tex ->
+  L.bracketResource (loadMeshes tex) (traverse_ L.unloadRenderObject) $ \ros ->
     playSound sound 3.0 W.>>>
     (sequenceA $ (\ro -> L.mkObject ro (rotate initial)) <$> ros) W.>>>
-    (pure ())
+    pure ()
   where
+    loadMeshes :: L.Texture -> IO [L.RenderObject]
+    loadMeshes t = do
+      objFile <- getDataFileName ("examples" </> "cube" <.> "obj")
+      L.loadOBJWithDefaultMaterial objFile $ Just (L.diffuseTexturedMaterial t)
+
+    loadTex :: IO L.Texture
+    loadTex =
+      liftM fromJust $
+      getDataFileName ("examples" </> "crate" <.> "png") >>= L.loadTexture
+
+    loadSound :: IO L.Sound
+    loadSound =
+      getDataFileName ("examples" </> "stereol" <.> "wav") >>= L.loadSound
+
     playSound :: L.Sound -> Float -> L.GameWire a a
     playSound sound p = L.pulseSound sound W.>>> (W.for p) W.-->
                         playSound sound p
@@ -144,8 +158,7 @@ loadGame = do
              getDataFileName ("examples" </> "kenpixel" <.> "ttf")
   plane <- uncurry L.staticObject <$> mkPlane
   bunny <- foldl (W.>>>) W.mkId <$> map (uncurry L.staticObject) <$> mkBunny
-  cube <- cubeWire
-  let gameWire = L.quitWire GLFW.Key'Q . cube . bunny . plane
+  let gameWire = L.quitWire GLFW.Key'Q . cubeWire . bunny . plane
       lightPos = 5 *^ (V3 (-2) 1 0)
       lightParams = L.mkLightParams (V3 0.15 0.15 0.15) (V3 1.0 1.0 1.0) 1.0
   shadowLight <- L.addShadowMap $
