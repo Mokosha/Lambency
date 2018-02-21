@@ -2,7 +2,7 @@ module Lambency.Sound (
   Sound, SoundCommand(..),
   initSound,
   freeSound,
-  loadSound,
+  loadSound, unloadSound,
   handleCommand,
   startSound, stopSound
 ) where
@@ -73,7 +73,13 @@ loadSound fp = do
 
   -- Attach the source to the buffer...
   AL.buffer source GL.$= (Just buffer)
+  putStrLn $ "Loaded sound: " ++ (show source)
   return source
+
+unloadSound :: Sound -> IO ()
+unloadSound s = do
+  GL.deleteObjectName s
+  putStrLn $ "Unloaded sound: " ++ (show s)
 
 handleCommand :: Sound -> SoundCommand -> IO ()
 handleCommand src StartSound = AL.play [src]
