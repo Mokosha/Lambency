@@ -113,8 +113,11 @@ clearRenderTexture = do
   GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral szx) (fromIntegral szy))
 
 destroyTexture :: Texture -> IO ()
-destroyTexture (Texture (TexHandle h _) _) = GL.deleteObjectName h
+destroyTexture (Texture (TexHandle h _) fmt) = do
+  putStrLn $ concat ["Destroying ", show fmt, " texture: ", show h]
+  GL.deleteObjectName h
 destroyTexture (RenderTexture (TexHandle h _) fboh) = do
+  putStrLn $ "Destroying framebuffer object."
   GL.deleteObjectName h
   GL.deleteObjectName fboh
 
@@ -134,7 +137,10 @@ initializeTexture ptr (w, h) fmt = do
   GL.textureWrapMode GL.Texture2D GL.T GL.$= (GL.Repeated, GL.Repeat)
   GL.textureFunction GL.$= GL.Replace
 
-  putStrLn $ "Loaded " ++ (show fmt) ++ "texture with dimensions " ++ (show (w, h))
+  putStrLn $ concat [
+    "Loaded ", show fmt,
+    " texture with dimensions ", show (w, h),
+    ": ", show handle]
   return $ Texture (TexHandle handle $ TexSize $ fmap fromEnum (V2 w h)) fmt
 
 updateTexture :: Texture -> Ptr a -> (Word32, Word32) -> (Word32, Word32) -> IO ()
