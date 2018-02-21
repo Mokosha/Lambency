@@ -18,7 +18,7 @@ module Lambency (
   module Lambency.Render,
   module Lambency.Shader,
   module Lambency.Sprite,
-  loadTexture, createSolidTexture, destroyTexture,
+  Texture, loadTexture, createSolidTexture, destroyTexture,
   module Lambency.Transform,
   Camera, CameraType, CameraViewDistance,
   LightType, Light,
