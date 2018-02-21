@@ -258,10 +258,10 @@ data Material
     -- A textured sprite is a quad that has a texture on it
     -- The texture coordinates may be modulated based on the
     -- texture matrix
-  | TexturedSpriteMaterial {
-    spriteTextureMatrix :: MaterialVar (M33 Float),
-    spriteTexture :: MaterialVar Texture,
-    spriteAlpha :: MaterialVar Float
+  | TexturedSpriteMaterial
+    { spriteTextureMatrix :: MaterialVar (M33 Float)
+    , spriteTexture :: MaterialVar Texture
+    , spriteAlpha :: MaterialVar Float
     }
 
     -- A masked sprite is a quad that has a grayscale texture
