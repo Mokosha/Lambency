@@ -28,14 +28,13 @@ module Lambency (
   OutputAction(..),
   TimeStep,
   Sprite,
-  Game(..), GameConfig(..), GameWire, GameMonad,
+  Game(..), GameConfig(..), GameMonad,
+  GameWire, PureWire, ResourceContextWire,
   module Lambency.UI,
   module Lambency.Utils,
 
   makeWindow, destroyWindow, withWindow,
   run, loadAndRun, runSimple,
-  bracketResource,
-  quitWire,
   toggleWireframe,
   module Lambency.Sound
 ) where
@@ -43,7 +42,6 @@ module Lambency (
 --------------------------------------------------------------------------------
 import Prelude hiding ((.))
 
-import Control.Applicative
 import Control.Monad.RWS.Strict
 import Control.Monad.Reader
 import Control.Monad.State
@@ -57,7 +55,6 @@ import GHC.Float
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Graphics.Rendering.OpenGL as GL
 
-import FRP.Netwire.Input
 import FRP.Netwire.Input.GLFW
 
 import Lambency.Bounds
@@ -180,25 +177,29 @@ handleActions :: [OutputAction] -> IO ()
 handleActions = mapM_ handleAction
 
 step :: a -> Game a -> TimeStep ->
-        GameMonad (Either String a, Camera, [Light], Game a)
+        GameMonad (Maybe a, Camera, [Light], Game a)
 step go game t = do
-  (Right cam, nCamWire) <- W.stepWire (mainCamera game) t (Right ())
-  (result, gameWire) <- W.stepWire (gameLogic game) t (Right go)
-  lightObjs <- mapM (\w -> W.stepWire w t $ Right ()) (dynamicLights game)
+  (Right cam, nCamWire) <- W.stepWire (getRawWire $ mainCamera game) t (Right ())
+  (Right result, gameWire) <-
+    W.stepWire (getRawWire $ gameLogic game) t (Right go)
+  lightObjs <-
+    mapM (\w -> W.stepWire w t $ Right ()) (getRawWire <$> dynamicLights game)
   let (lights, lwires) = collect lightObjs
-  return (result, cam, lights, newGame nCamWire lwires gameWire)
-    where
-      collect :: [(Either e b, GameWire a b)] -> ([b], [GameWire a b])
-      collect [] = ([], [])
-      collect ((Left _, _) : rest) = collect rest
-      collect ((Right obj, wire) : rest) = (obj : objs, wire : wires)
-        where
-          (objs, wires) = collect rest
+  case result of
+    Nothing -> return (result, cam, lights, newGame nCamWire lwires W.mkEmpty)
+    Just _  -> return (result, cam, lights, newGame nCamWire lwires gameWire)
+  where
+    collect :: [(Either e b, GameWire a b)] -> ([b], [GameWire a b])
+    collect [] = ([], [])
+    collect ((Left _, _) : rest) = collect rest
+    collect ((Right obj, wire) : rest) = (obj : objs, wire : wires)
+      where
+        (objs, wires) = collect rest
 
-      newGame cam lights logic = game {
-        mainCamera = cam,
-        dynamicLights = lights,
-        gameLogic = logic}
+    newGame cam lights logic =
+      Game { mainCamera = PW cam
+           , dynamicLights = PW <$> lights
+           , gameLogic = PW logic}
 
 data GameLoopConfig = GameLoopConfig {
   simpleQuadSprite :: Sprite,
@@ -226,25 +227,25 @@ runLoop prevFrameTime = do
   (go, (nextsession, accum), nextGame) <- stepGame
 
   case go of
-    Right gobj -> do
+    Just gobj -> do
       ls <- get
       put $ GameLoopState gobj nextGame nextsession accum (lastFramePicoseconds ls)
       needsQuit <- glfwWin <$> ask >>= (liftIO . GLFW.windowShouldClose)
       case needsQuit of
         True -> return ()
         False -> runLoop thisFrameTime
-    Left _ -> return ()
+    Nothing -> return ()
 
 type TimeStepper = (GameSession, NominalDiffTime)
 
-stepGame :: GameLoopM a (Either String a, TimeStepper, Game a)
+stepGame :: GameLoopM a (Maybe a, TimeStepper, Game a)
 stepGame = do
   (GameLoopState go game session accum _) <- get
   if (accum < physicsDeltaUTC)
-    then return (Right go, (session, accum), game)
+    then return (Just go, (session, accum), game)
     else runGame
 
-runGame :: GameLoopM a (Either String a, TimeStepper, Game a)
+runGame :: GameLoopM a (Maybe a, TimeStepper, Game a)
 runGame = do
   gameLoopConfig <- ask
   gls <- get
@@ -268,7 +269,6 @@ runGame = do
     -- through this threshold, we will perform another physics step before
     -- we finally decide to render.
     accum = currentPhysicsAccum gls
-    needsRender = ((accum - physicsDeltaUTC) < physicsDeltaUTC)
 
     renderTime = lastFramePicoseconds gls
     sprite = simpleQuadSprite gameLoopConfig
@@ -282,6 +282,9 @@ runGame = do
 
   -- The ReaderT RenderConfig IO program that will do the actual rendering
   let renderPrg = performRenderActions lights cam renderActs
+      needsRender = case result of
+        Nothing -> False
+        Just _ -> (accum - physicsDeltaUTC) < physicsDeltaUTC
 
   frameTime <-
     if needsRender
@@ -311,10 +314,10 @@ runGame = do
 
   -- If our main wire inhibited, return immediately.
   case result of
-    Right obj -> do
+    Just obj -> do
       put $ GameLoopState obj nextGame nextSess (accum - physicsDeltaUTC) frameTime
       stepGame
-    Left _ -> return (result, (nextSess, accum), nextGame)
+    Nothing -> return (result, (nextSess, accum), nextGame)
 
 run :: a -> Game a -> GLFW.Window -> IO ()
 run initialGameObject initialGame win = do
@@ -347,24 +350,9 @@ runSimple :: Camera -> (Float -> a -> GameMonad a) -> a -> GLFW.Window -> IO ()
 runSimple cam f x win = do
   let gameWire = W.mkGen $ \ts obj -> do
         result <- f (W.dtime ts) obj
-        return (Right result, gameWire)
+        return (Right $ Just result, gameWire)
 
-  run x (Game (W.pure cam) [] gameWire) win
-
--- Runs the initial loading program and uses the resource until the generated
--- wire inhibits, at which point it unloads the resource. The wire inhibits
--- afterwards.
--- TODO: Maybe should restrict this to certain types of resources?
-bracketResource :: IO a -> (a -> IO ()) -> (a -> GameWire b c) -> GameWire b c
-bracketResource load unload =
-  bracketWire (GameMonad $ liftIO load) (GameMonad . liftIO . unload)
-
--- Wire that behaves like the identity wire until the given key
--- is pressed, then inhibits forever.
-quitWire :: GLFW.Key -> GameWire a a
-quitWire key =
-  W.rSwitch W.mkId .
-  (W.mkId W.&&& (W.now . W.pure W.mkEmpty . keyPressed key <|> W.never))
+  run x (Game (W.pure cam) [] (PW gameWire)) win
 
 toggleWireframe :: Bool -> GameMonad ()
 toggleWireframe b = GameMonad $ tell $ ([WireframeAction b], mempty)

@@ -1,7 +1,8 @@
 module Main where
 
 --------------------------------------------------------------------------------
-import Control.Wire hiding ((.))
+import Prelude hiding ((.), id)
+import Control.Wire
 import FRP.Netwire.Input
 
 import qualified Graphics.UI.GLFW as GLFW
@@ -95,15 +96,28 @@ inputWire =
   ((pure (V2 1 0) >>> keyPressed GLFW.Key'Right) <|> (pure zero)) `addVecWire`
   ((pure (V2 (-1) 0) >>> keyPressed GLFW.Key'Left) <|> (pure zero))
 
-mkGameWire :: IO (L.GameWire () ())
-mkGameWire = do
+loadGameResources :: IO (L.Texture, L.Texture, L.Sprite, L.Sprite)
+loadGameResources = do
   white <- L.createSolidTexture (255, 255, 255, 255)
   red <- L.createSolidTexture (255, 0, 0, 255)
   ship <- L.loadStaticSpriteWithTexture white
   bullet <- L.loadStaticSpriteWithTexture red
-  let shipW = inputWire >>> (shipWire (V2 240 320) ship bullet)
-  return $ runShip shipW []
-    where
+  return (white, red, ship, bullet)
+
+unloadGameResources :: (L.Texture, L.Texture, L.Sprite, L.Sprite) -> IO ()
+unloadGameResources (white, red, ship, bullet) = do
+  L.destroyTexture white
+  L.destroyTexture red
+  L.unloadSprite ship
+  L.unloadSprite bullet
+
+gameWire :: L.PureWire ((), Bool) (Maybe ())
+gameWire =
+  L.bracketResource loadGameResources unloadGameResources
+  $ L.withResource
+  $ \(_, _, ship, bullet) ->
+  let shipW = inputWire >>> shipWire (V2 240 320) ship bullet
+
       runBullet :: L.TimeStep -> Bullet -> L.GameMonad [Bullet]
       runBullet dt bw' = do
         (result, bw) <- stepWire bw' dt $ Right ()
@@ -122,19 +136,20 @@ mkGameWire = do
             bullets' <- runBullets dt (bullets ++ newb)
             return (Right (), runShip sw bullets')
           Left e -> return (Left e, runShip sw bullets)
+   in runShip shipW []
 
 --------------------------------------------------
 -- Init
 
-shooterCam :: L.GameWire () L.Camera
+shooterCam :: L.PureWire () L.Camera
 shooterCam = pure zero >>> (L.mk2DCam screenWidth screenHeight)
 
 loadGame :: IO (L.Game ())
-loadGame = do
-  w <- mkGameWire
-  return $ L.Game { L.mainCamera = shooterCam,
-                    L.dynamicLights = [],
-                    L.gameLogic = w >>> L.quitWire GLFW.Key'Q}
+loadGame =
+    let quitWire =
+          (pure True >>> keyPressed GLFW.Key'Q) `L.withDefault` pure False
+        mainWire = (id &&& quitWire) >>> gameWire
+    in return $ L.Game shooterCam [] mainWire
 
 main :: IO ()
 main = L.withWindow screenWidth screenHeight "Space Shooter Demo" $

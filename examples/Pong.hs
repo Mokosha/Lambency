@@ -211,18 +211,15 @@ handleScore f = scoreWire 0 0
             renderScore f p1' p2'
             return (Right (max p1' p2', b'), scoreWire p1' p2')
 
-gameFeedback :: L.Sprite -> L.Sprite -> IO (L.GameWire (Int, Ball) (Int, Ball))
-gameFeedback quad circle = do
-  fontFilename <- getDataFileName ("examples" </> "kenpixel.ttf")
-  sysFont <- L.loadTTFont 36 (V3 1 1 1) fontFilename
-  
-  sound <- getDataFileName ("examples" </> "pong-bloop.wav") >>= L.loadSound
-  return $ (second $
-            (collideWith True sound keyHandler) >>>
-            (collideWith False sound aiHandler) >>>
-            collideWall >>>
-            ballWire circle) >>>
-    handleScore sysFont
+gameFeedback :: L.Sprite -> L.Sprite -> L.Sound -> L.Font
+             -> L.GameWire (Int, Ball) (Int, Ball)
+gameFeedback quad circle sound sysFont =
+  (second $
+   (collideWith True sound keyHandler) >>>
+   (collideWith False sound aiHandler) >>>
+   collideWall >>>
+   ballWire circle) >>>
+  handleScore sysFont
     where
       collideWith :: Bool -> L.Sound ->
                      L.GameWire (Ball, Float) Float ->
@@ -231,12 +228,40 @@ gameFeedback quad circle = do
         (mkId &&& paddleWire playerOne quad handler) >>>
         collidePaddle playerOne s
 
-gameWire :: L.Sprite -> L.Sprite -> IO (L.GameWire Int Int)
-gameWire quad circle = do
-  feedback <- gameFeedback quad circle
-  return $ (loop $ second (delay startBall) >>> feedback) >>> (when (< 10))
+loadGameResources :: IO (L.Texture, L.Sprite, L.Sound, L.Font)
+loadGameResources = do
+  white <- L.createSolidTexture (255, 255, 255, 255)
+  quad <- L.changeSpriteColor (V4 0.4 0.6 0.2 1.0) <$>
+          L.loadStaticSpriteWithMask white
+  sound <- getDataFileName ("examples" </> "pong-bloop.wav") >>= L.loadSound
 
-pongCam :: L.GameWire () L.Camera
+  fontFilename <- getDataFileName ("examples" </> "kenpixel.ttf")
+  sysFont <- L.loadTTFont 36 (V3 1 1 1) fontFilename
+
+  return (white, quad, sound, sysFont)
+
+unloadGameResources :: (L.Texture, L.Sprite, L.Sound, L.Font) -> IO ()
+unloadGameResources (tex, sprite, sound, font) = do
+  L.destroyTexture tex
+  L.unloadSound sound
+  L.unloadSprite sprite
+  L.unloadFont font
+
+gameWire :: L.PureWire (Int, Bool) (Maybe Int)
+gameWire =
+  L.bracketResource loadGameResources unloadGameResources
+  $ L.withResource
+  $ \(_, quad, sound, font) ->
+    let feedback = gameFeedback quad quad sound font
+        staticSprites =
+          mkWall False quad :
+          mkWall True quad :
+          dashedMidsection quad
+     in (loop $ second (delay startBall) >>> feedback)
+        >>> when (< 10)
+        >>> renderStatic staticSprites
+
+pongCam :: L.PureWire () L.Camera
 pongCam = pure zero >>> (L.mk2DCam screenWidth screenHeight)
 
 --------------------------------------------------
@@ -244,12 +269,9 @@ pongCam = pure zero >>> (L.mk2DCam screenWidth screenHeight)
 
 loadGame :: IO (L.Game Int)
 loadGame = do
-  white <- L.createSolidTexture (255, 255, 255, 255)
-  quad <- L.changeSpriteColor (V4 0.4 0.6 0.2 1.0) <$>
-          L.loadStaticSpriteWithMask white
-  w <- gameWire quad quad
-  let staticSprites = [mkWall False quad, mkWall True quad] ++ dashedMidsection quad
-      mainWire = w >>> renderStatic staticSprites >>> L.quitWire GLFW.Key'Q
+  let quitWire =
+        (pure True >>> keyPressed GLFW.Key'Q) `L.withDefault` pure False
+      mainWire = (id &&& quitWire) >>> gameWire
   return $ L.Game { L.mainCamera = pongCam,
                     L.dynamicLights = [],
                     L.gameLogic = mainWire }

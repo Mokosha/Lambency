@@ -12,25 +12,32 @@ module Lambency.Types (
   Sound, SoundCommand(..), SpriteFrame(..), Sprite(..),
   OutputAction(..),
   TimeStep,
-  GameConfig(..), GameWire, GameMonad(..), GameSession, GameTime,
-  Game(..)
+  GameConfig(..), GameMonad(..), GameSession, GameTime,
+  Game(..),
+  GameWire, PureWire(..), ResourceContext, ResourceContextWire(..)
 ) where
 
 --------------------------------------------------------------------------------
 
-import qualified Control.Wire as W
+import Control.Arrow
 import Control.Applicative
+import Control.Category
 import Control.Monad.RWS.Strict
+import Control.Monad.Reader
+import qualified Control.Wire as W
 
 import qualified Data.Map as Map
 import Data.Maybe (isJust)
 import Data.Hashable
+import Data.Profunctor
 import Data.Time.Clock
 
 import FRP.Netwire.Input.GLFW
 
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.GL as GLRaw
+
+import Prelude hiding ((.), id)
 
 import Lambency.Utils
 import qualified Lambency.Transform as XForm
@@ -363,9 +370,9 @@ data GameConfig = GameConfig {
 
 -- Game
 data Game a = Game {
-  mainCamera :: GameWire () Camera,
-  dynamicLights :: [GameWire () Light],
-  gameLogic :: GameWire a a
+  mainCamera :: PureWire () Camera,
+  dynamicLights :: [PureWire () Light],
+  gameLogic :: PureWire a (Maybe a)
   }
 
 --------------------------------------------------------------------------------
@@ -373,7 +380,6 @@ data Game a = Game {
 -- Game State
 
 type TimeStep = W.Timed Float ()
-type GameWire = W.Wire TimeStep String GameMonad
 type GameSession = W.Session IO TimeStep
 
 newtype GameMonad a = GameMonad {
@@ -395,3 +401,49 @@ instance MonadGLFWInput GameMonad where
 -- and the second is the amount of time left over from performing the
 -- simulation steps.
 type GameTime = (UTCTime, NominalDiffTime)
+
+-- | A `GameWire` is a wire that has all of the features of a standard netwire
+-- value. In particular, it can choose to inhibit (not produce a value) and
+-- each frame it executes an action within the GameMonad.
+type GameWire = W.Wire TimeStep String GameMonad
+
+-- | A `ResourceContextWire` is a wire that has an associated rendering
+-- resource under its purview.
+type ResourceContext s = ReaderT s GameMonad
+newtype ResourceContextWire s a b =
+  RCW { getResourceWire :: W.Wire TimeStep String (ResourceContext s) a b }
+  deriving ( Functor
+           , Applicative
+           , Alternative
+           , Floating
+           , Fractional
+           , Monoid
+           , Num
+           , Choice
+           , Profunctor
+           , Strong
+           , Category
+           , Arrow
+           , ArrowZero
+           , ArrowPlus
+           , ArrowChoice
+           , ArrowLoop
+           )
+
+-- | `PureWire`s always produce a value and never inhibit.
+newtype PureWire a b =
+  PW { getRawWire :: GameWire a b }
+  deriving ( Functor
+           , Applicative
+           , Floating
+           , Fractional
+           , Monoid
+           , Num
+           , Choice
+           , Profunctor
+           , Strong
+           , Category
+           , Arrow
+           , ArrowChoice
+           , ArrowLoop
+           )

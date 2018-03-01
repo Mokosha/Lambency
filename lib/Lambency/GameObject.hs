@@ -1,7 +1,9 @@
 module Lambency.GameObject (
   wireFrom,
-  bracketWire,
+  bracketResource, liftWire, withResource, joinResources, withDefault,
+  mkPureWire, stepPureWire,
   doOnce, doOnceWithInput,
+  quitWire,
   mkObject,
   staticObject,
   withVelocity,
@@ -9,13 +11,22 @@ module Lambency.GameObject (
 ) where
 
 --------------------------------------------------------------------------------
+import Control.Arrow
+import Control.Monad
+import Control.Monad.Reader
+import Control.Wire
+
+import Data.Maybe
+
 import Lambency.Render
 import Lambency.Sound
 import Lambency.Transform
 import Lambency.Types
 
-import Control.Arrow
-import Control.Wire hiding ((.))
+import Prelude hiding ((.), id)
+
+import qualified Graphics.UI.GLFW as GLFW
+import FRP.Netwire.Input
 
 import Linear.Vector
 --------------------------------------------------------------------------------
@@ -24,14 +35,6 @@ wireFrom :: GameMonad a -> (a -> GameWire b c) -> GameWire b c
 wireFrom prg fn = mkGen $ \dt val -> do
   seed <- prg
   stepWire (fn seed) dt (Right val)
-
-bracketWire :: GameMonad a
-            -> (a -> GameMonad ())
-            -> (a -> GameWire b c)
-            -> GameWire b c
-bracketWire load unload fn = mkGen $ \dt val -> do
-  res <- load
-  stepWire (fn res --> (doOnce (unload res) >>> mkEmpty)) dt (Right val)
 
 doOnce :: GameMonad () -> GameWire a a
 doOnce pgm = wireFrom pgm $ const Control.Wire.id
@@ -61,3 +64,62 @@ withVelocity initial velWire = velWire >>> (moveXForm initial)
 
 pulseSound :: Sound -> GameWire a a
 pulseSound = doOnce . startSound
+
+-- | Runs the initial loading program and uses the resource until the generated
+-- wire inhibits, at which point it unloads the resource. Once the resource is
+-- freed, the resulting wire returns Nothing indefinitely. The resulting wire
+-- also takes a signal to terminate from its input.
+--
+-- TODO: Maybe should restrict this to certain types of resources?
+bracketResource :: IO r -> (r -> IO ()) -> ResourceContextWire r a b
+                -> PureWire (a, Bool) (Maybe b)
+bracketResource load unload (RCW rcw) = PW $ mkGen $ \dt x -> do
+  resource <- GameMonad $ liftIO load
+  stepWire (go resource rcw) dt (Right x)
+    where
+      go resource w = mkGen $ \dt (x, quitSignal) -> do
+        (result, w') <- runReaderT (stepWire w dt (Right x)) resource
+        let shouldQuit (Left _) = True
+            shouldQuit _ = quitSignal
+        if shouldQuit result
+          then do
+            GameMonad $ liftIO (unload resource)
+            return (Right Nothing, pure Nothing)
+          else return (Just <$> result, go resource w')
+
+withResource :: (r -> GameWire a b) -> ResourceContextWire r a b
+withResource wireGen = RCW $ mkGen $ \dt x -> ReaderT $ \r -> do
+  (result, w') <- stepWire (wireGen r) dt (Right x)
+  return (result, getResourceWire $ liftWire w')
+
+liftWire :: GameWire a b -> ResourceContextWire r a b
+liftWire = withResource . const
+
+loopWith :: PureWire (a, c) b -> c -> (b -> c -> c) -> PureWire (a, c) b
+loopWith m x fn =
+  loop $ second (PW $ delay x) >>> (first m >>> (arr fst &&& arr (uncurry fn)))
+
+joinResources :: Monoid b
+              => [PureWire (a, Bool) (Maybe b)]
+              -> PureWire (a, Bool) (Maybe b)
+joinResources res = loopWith (fmap mconcat $ sequenceA res) False ((&&) . isJust)
+
+withDefault :: GameWire a b -> PureWire a b -> PureWire a b
+withDefault w (PW m) = PW $ w <|> m
+
+mkPureWire :: (TimeStep -> a -> GameMonad (b, PureWire a b)) -> PureWire a b
+mkPureWire f = PW $ mkGen $ \dt x -> do
+  (r, PW w') <- f dt x
+  return (Right r, w')
+
+stepPureWire :: PureWire a b -> TimeStep -> a -> GameMonad (b, PureWire a b)
+stepPureWire (PW w) dt x = do
+  (Right r, w') <- stepWire w dt (Right x)
+  return (r, PW w')
+
+-- Wire that behaves like the identity wire until the given key
+-- is pressed, then inhibits forever.
+quitWire :: GLFW.Key -> GameWire a a
+quitWire key =
+  rSwitch mkId .
+  (mkId &&& (now . pure mkEmpty . keyPressed key <|> never))

@@ -179,12 +179,12 @@ getViewProjMatrix c = (getViewMatrix c) !*! (getProjMatrix c)
 
 --
 
-mkFixedCam :: Monad m => Camera -> W.Wire s e m a Camera
-mkFixedCam cam = W.mkConst $ Right cam
+mkFixedCam :: Camera -> PureWire a Camera
+mkFixedCam cam = PW $ W.mkConst $ Right cam
 
 type ViewCam = (Camera, Vec3f)
 
-mkViewerCam :: Camera -> Vec3f -> GameWire a Camera
+mkViewerCam :: Camera -> Vec3f -> PureWire a Camera
 mkViewerCam initialCam initialFocus =
   let handleRotation :: ((Float, Float), ViewCam) -> ViewCam
       handleRotation ((0, 0), c) = c
@@ -262,15 +262,16 @@ mkViewerCam initialCam initialFocus =
         (keyPressed GLFW.Key'LeftShift W.>>> mouseDeltas GLFW.MouseButton'1)
         W.<|> mouseDeltas GLFW.MouseButton'3
   in
-   W.loop $ W.second (
+   PW $ W.loop $ W.second (
      W.delay (initialCam, initialFocus) W.>>>
      (rotationalDeltas W.&&& W.mkId) W.>>> (W.arr handleRotation) W.>>>
      (panningDeltas W.&&& W.mkId) W.>>> (W.arr handlePanning) W.>>>
      (mouseScroll W.&&& W.mkId) W.>>> (W.arr handleScroll))
    W.>>> (W.arr $ \(_, c@(cam, _)) -> (cam, c))
 
-mkFreeCam :: Camera -> GameWire a Camera
-mkFreeCam initCam = W.loop ((W.second (W.delay initCam W.>>> updCam)) W.>>> feedback)
+mkFreeCam :: Camera -> PureWire a Camera
+mkFreeCam initCam =
+  PW $ W.loop ((W.second (W.delay initCam W.>>> updCam)) W.>>> feedback)
   where
   feedback :: GameWire (a, b) (b, b)
   feedback = W.mkPure_ $ \(_, x) -> Right (x, x)
@@ -308,7 +309,7 @@ mkFreeCam initCam = W.loop ((W.second (W.delay initCam W.>>> updCam)) W.>>> feed
                        (negate $ XForm.forward newXForm)
                        (V3 0 1 0)
 
-mk2DCam :: Int -> Int -> GameWire Vec2f Camera
+mk2DCam :: Int -> Int -> PureWire Vec2f Camera
 mk2DCam sx sy = let
   toHalfF :: Integral a => a -> Float
   toHalfF x = 0.5 * (fromIntegral x)
@@ -325,5 +326,7 @@ mk2DCam sx sy = let
   trPos :: Vec2f -> Vec3f
   trPos (V2 x y) = (V3 x y 0) ^+^ screenCenter
  in
-   W.mkSF_ $ \vec -> mkOrthoCamera
-   (trPos vec) (negate XForm.localForward) XForm.localUp (-hx) (hx) (hy) (-hy) 0.01 50.0
+   PW $ W.mkSF_ $ \vec -> mkOrthoCamera
+   (trPos vec) (negate XForm.localForward) XForm.localUp
+   (-hx) (hx) (hy) (-hy)
+   0.01 50.0

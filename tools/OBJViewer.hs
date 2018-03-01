@@ -4,9 +4,8 @@ module Main (main) where
 #if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
 #endif
-import Prelude hiding ((.))
-import Control.Wire ((.))
-import qualified Control.Wire as W
+import Prelude hiding ((.), id)
+import Control.Wire hiding (right)
 
 #if __GLASGOW_HASKELL__ <= 708
 import Data.Traversable (sequenceA)
@@ -31,38 +30,38 @@ initialCam = L.mkPerspCamera
              -- near far
              0.1 10000.0
 
-cam :: L.GameWire () L.Camera
+cam :: L.PureWire () L.Camera
 cam = startCam (makeViewer initialCam) makeViewer makeFree
   where
     makeViewer c = L.mkViewerCam c zero
     makeFree c = L.mkFreeCam c
-    startCam :: L.GameWire a L.Camera
-                -> (L.Camera -> L.GameWire a L.Camera)
-                -> (L.Camera -> L.GameWire a L.Camera)
-                -> (L.GameWire a L.Camera)
-    startCam camWire mkThisCam mkThatCam = W.mkGen $ \dt _ -> do
-      (Right nextCam, nextCamWire) <- W.stepWire camWire dt (Right undefined)
+    startCam :: L.PureWire a L.Camera
+             -> (L.Camera -> L.PureWire a L.Camera)
+             -> (L.Camera -> L.PureWire a L.Camera)
+             -> (L.PureWire a L.Camera)
+    startCam camWire mkThisCam mkThatCam = L.mkPureWire $ \dt _ -> do
+      (nextCam, nextCamWire) <- L.stepPureWire camWire dt undefined
       toggle <- keyIsPressed GLFW.Key'F
       if toggle then
         do
           setCursorMode CursorMode'Enabled
           releaseKey GLFW.Key'F
-          return (Right nextCam, startCam (mkThatCam nextCam) mkThatCam mkThisCam)
-        else return (Right nextCam, startCam nextCamWire mkThisCam mkThatCam)
+          return (nextCam, startCam (mkThatCam nextCam) mkThatCam mkThisCam)
+        else return (nextCam, startCam nextCamWire mkThisCam mkThatCam)
 
 wireframeToggle :: L.GameWire a a
-wireframeToggle = (keyDebounced GLFW.Key'W W.>>> toggle True) W.<|> W.mkId
+wireframeToggle = (keyDebounced GLFW.Key'W >>> toggle True) <|> mkId
   where
     toggle :: Bool -> L.GameWire a a
-    toggle wireframe = W.mkGenN $ \x -> do
+    toggle wireframe = mkGenN $ \x -> do
       L.toggleWireframe wireframe
       return (Right x, toggle $ not wireframe)
 
 controlWire :: [L.RenderObject] -> L.GameWire a [a]
-controlWire ros = sequenceA $ (\ro -> L.mkObject ro (pure L.identity) W.>>> wireframeToggle) <$> ros
+controlWire ros = sequenceA $ (\ro -> L.mkObject ro (pure L.identity) >>> wireframeToggle) <$> ros
 
-camLight :: L.GameWire L.Camera L.Light
-camLight = W.mkSF_ $ \c ->
+camLight :: L.PureWire L.Camera L.Light
+camLight = arr $ \c ->
   let dir = L.getCamDir c
       up = L.getCamUp c
       right = dir `cross` up
@@ -72,14 +71,25 @@ camLight = W.mkSF_ $ \c ->
 
   in L.dirlight lightParams lightDir
 
-loadGame :: FilePath -> IO (L.Game ())
-loadGame objfile = do
+loadObj :: FilePath -> IO [L.RenderObject]
+loadObj objfile = do
   obj <- L.loadOBJWithDefaultMaterial objfile $
          Just (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
   putStrLn $ "OBJ contained " ++ (show $ length obj) ++ " meshes."
-  return $ L.Game { L.mainCamera = cam,
-                    L.dynamicLights = [cam W.>>> camLight],
-                    L.gameLogic = pure () . L.quitWire GLFW.Key'Q . controlWire obj }
+  return obj
+
+quitWire :: L.PureWire a Bool
+quitWire =
+  (pure True >>> keyPressed GLFW.Key'Q) `L.withDefault` pure False
+
+viewerWire :: FilePath -> L.PureWire (a, Bool) (Maybe ())
+viewerWire objfile =
+  L.bracketResource (loadObj objfile) (mapM_ L.unloadRenderObject)
+  $ pure () . L.withResource controlWire
+
+loadGame :: FilePath -> IO (L.Game ())
+loadGame objfile =
+  return $ L.Game cam [cam >>> camLight] $ (id &&& quitWire) >>> viewerWire objfile
 
 handleArgs :: [FilePath] -> Either String FilePath
 handleArgs [] = Left "Usage: lobjview OBJFILE"

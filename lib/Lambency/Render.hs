@@ -165,7 +165,8 @@ createBasicRO verts@(v:_) idxs mat =
       locattrib = filter ((/= GL.AttribLocation(-1)) . fst) $
                   zip (map lu $ getAttribNames v)
                       (vertexAttributesToOpenGL . getVertexAttributes $ v)
-      in flip mapM_ locattrib $ \(loc, desc) -> GL.vertexAttribPointer loc GL.$= (GL.ToFloat, desc)
+      in flip mapM_ locattrib $ \(loc, desc) ->
+          GL.vertexAttribPointer loc GL.$= (GL.ToFloat, desc)
 
     -- Takes as input an array of vertices and indices and returns a function
     -- that renders the vertices for a given shader and shader variable mapping

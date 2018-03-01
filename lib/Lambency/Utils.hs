@@ -53,6 +53,15 @@ data CyclicList a = CyclicList [a] a [a]
 instance Functor CyclicList where
   fmap f (CyclicList p c n) = CyclicList (fmap f p) (f c) (fmap f n)
 
+instance Foldable CyclicList where
+  foldr f x (CyclicList p c n) =
+    foldr f (f c (foldr f x $ reverse p)) n
+
+instance Traversable CyclicList where
+  traverse f (CyclicList p c n) =
+    CyclicList <$>
+    (reverse <$> (traverse f $ reverse p)) <*> (f c) <*> (traverse f n)
+
 advance :: CyclicList a -> CyclicList a
 advance (CyclicList p c []) = let (r:rs) = reverse (c:p) in CyclicList [] r rs
 advance (CyclicList p c (n:ns)) = CyclicList (c:p) n ns

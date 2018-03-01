@@ -1,5 +1,5 @@
 module Lambency.Font (
-  Font,
+  Font, ModifiedFont, IsFont, unloadFont,
   loadSystemFont,
   loadTTFont,
   renderUIString,
@@ -54,7 +54,22 @@ logBase2 x = finiteBitSize x - 1 - countLeadingZeros x
 #endif
 
 --------------------------------------------------------------------------------
-newtype Font = Font { getGlyph :: Char -> Maybe (SpriteFrame, (V2 Int, V2 Int)) }
+data Font = Font
+            { getOrigGlyph :: Char -> Maybe (SpriteFrame, (V2 Int, V2 Int))
+            , unloadFont :: IO ()
+            }
+newtype ModifiedFont = MF {
+  getModifiedGlyph :: Char -> Maybe (SpriteFrame, (V2 Int, V2 Int))
+}
+
+class IsFont a where
+  getGlyph :: a -> Char -> Maybe (SpriteFrame, (V2 Int, V2 Int))
+
+instance IsFont Font where
+  getGlyph = getOrigGlyph
+
+instance IsFont ModifiedFont where
+  getGlyph = getModifiedGlyph
 
 glyphSize :: Font -> Char -> (V2 Float, V2 Float)
 glyphSize font c =
@@ -109,7 +124,7 @@ stringWidth f str = foldl' (+) 0 sizes
 
 mkFont :: Sprite -> [Char] -> [V2 Int] -> [V2 Int] -> Font
 mkFont sprite string advances offsets =
-  Font $ flip Map.lookup
+  flip Font (unloadSprite sprite) $ flip Map.lookup
   $ Map.fromList
   $ zip string (zip (cyclicToList $ getFrames sprite) (zip advances offsets))
 
@@ -126,8 +141,8 @@ loadSystemFont (V3 r g b) = let
     Just s <- loadAnimatedSpriteWithMask tex systemSizes systemOffsets
     return $ mkFont (changeSpriteColor (V4 r g b 1) s) charString (repeat zero) (repeat zero)
 
-setFontColor :: V3 Float -> Font -> Font
-setFontColor (V3 r g b) fnt = Font $ \c -> do
+setFontColor :: IsFont fnt => V3 Float -> fnt -> ModifiedFont
+setFontColor (V3 r g b) fnt = MF $ \c -> do
   (f, x) <- getGlyph fnt c
   return (changeSpriteFrameColor (V4 r g b 1) f, x)
 
