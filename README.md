@@ -20,6 +20,5 @@ Try the examples:
 
 From the source directory:
 
-    stack init --solver
     stack build
     stack exec lambcubedemo
