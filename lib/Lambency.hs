@@ -27,7 +27,7 @@ module Lambency (
   RenderFlag(..), RenderObject(..),
   OutputAction(..),
   TimeStep,
-  Sprite,
+  Sprite, unloadSprite,
   Game(..), GameConfig(..), GameMonad,
   GameWire, PureWire, ResourceContextWire,
   module Lambency.UI,

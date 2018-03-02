@@ -97,7 +97,8 @@ renderUIString font str pos = let
       Nothing -> return ()
       Just (f, _) ->
         let V2 _ glyphSzY = fmap fromIntegral $ spriteSize f
-        in renderUISprite (Sprite $ cycleSingleton f) $ p ^-^ (V2 0 glyphSzY)
+            fakeSprite = Sprite (cycleSingleton f) (return ())
+        in renderUISprite fakeSprite $ p ^-^ (V2 0 glyphSzY)
   in do
     mapM_ (uncurry renderCharAtPos) $ zip str positions
 
@@ -126,7 +127,7 @@ mkFont :: Sprite -> [Char] -> [V2 Int] -> [V2 Int] -> Font
 mkFont sprite string advances offsets =
   flip Font (unloadSprite sprite) $ flip Map.lookup
   $ Map.fromList
-  $ zip string (zip (cyclicToList $ getFrames sprite) (zip advances offsets))
+  $ zip string (zip (cyclicToList $ spriteFrames sprite) (zip advances offsets))
 
 charString :: [Char]
 charString = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -139,7 +140,8 @@ loadSystemFont (V3 r g b) = let
   in do
     Just tex <- getDataFileName ("font" <.> "png") >>= loadTexture 
     Just s <- loadAnimatedSpriteWithMask tex systemSizes systemOffsets
-    return $ mkFont (changeSpriteColor (V4 r g b 1) s) charString (repeat zero) (repeat zero)
+    let sprite = changeSpriteColor (V4 r g b 1) s
+    return $ mkFont sprite charString (repeat zero) (repeat zero)
 
 setFontColor :: IsFont fnt => V3 Float -> fnt -> ModifiedFont
 setFontColor (V3 r g b) fnt = MF $ \c -> do

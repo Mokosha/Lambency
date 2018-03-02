@@ -339,7 +339,10 @@ data SpriteFrame = SpriteFrame {
   frameRO :: RenderObject
 }
 
-newtype Sprite = Sprite { getFrames :: CyclicList SpriteFrame }
+data Sprite = Sprite
+  { spriteFrames :: CyclicList SpriteFrame
+  , unloadSprite :: IO ()
+  }
 
 --------------------------------------------------------------------------------
 --
