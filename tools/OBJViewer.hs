@@ -11,6 +11,7 @@ import Control.Wire hiding (right)
 import Data.Traversable (sequenceA)
 #endif
 import Data.List (intercalate)
+import Data.Foldable (traverse_)
 
 import qualified Graphics.UI.GLFW as GLFW
 
@@ -78,18 +79,13 @@ loadObj objfile = do
   putStrLn $ "OBJ contained " ++ (show $ length obj) ++ " meshes."
   return obj
 
-quitWire :: L.PureWire a Bool
-quitWire =
-  (pure True >>> keyPressed GLFW.Key'Q) `L.withDefault` pure False
+viewerWire :: [L.RenderObject] -> L.GameWire a ()
+viewerWire ros = pure () . controlWire ros
 
-viewerWire :: FilePath -> L.PureWire (a, Bool) (Maybe ())
-viewerWire objfile =
-  L.bracketResource (loadObj objfile) (mapM_ L.unloadRenderObject)
-  $ pure () . L.withResource controlWire
-
-loadGame :: FilePath -> IO (L.Game ())
-loadGame objfile =
-  return $ L.Game cam [cam >>> camLight] $ (id &&& quitWire) >>> viewerWire objfile
+loadGame :: [L.RenderObject] -> L.Game ()
+loadGame objs = L.Game cam [cam >>> camLight] $
+  (L.quitWire GLFW.Key'Q >>> viewerWire objs >>> pure (Just ()))
+  `L.withDefault` (pure Nothing)
 
 handleArgs :: [FilePath] -> Either String FilePath
 handleArgs [] = Left "Usage: lobjview OBJFILE"
@@ -100,6 +96,10 @@ main :: IO ()
 main = do
   objfile <- handleArgs <$> getArgs
   case objfile of
-    Right file -> L.withWindow 640 480 "OBJ Viewer" $
-                  L.loadAndRun () (loadGame file)
+    Right file -> do
+      (Just win) <- L.makeWindow 640 480 "OBJ Viewer"
+      ros <- loadObj file
+      L.run () (loadGame ros) win
+      traverse_ L.unloadRenderObject ros
+      L.destroyWindow $ Just win
     Left err -> putStrLn err
