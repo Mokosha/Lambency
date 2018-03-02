@@ -9,7 +9,6 @@ module Lambency.Sprite (
   loadAnimatedSpriteWithTexture,
   loadAnimatedSpriteWithMask,
   loadFixedSizeAnimatedSprite,
-  unloadSprite,
 
   renderSprite,
   renderSpriteWithAlpha,
@@ -195,9 +194,6 @@ loadAnimatedSpriteWithMask t frameSzs offsets =
 
 loadFixedSizeAnimatedSprite :: FilePath -> V2 Int -> [V2 Int] -> IO (Maybe Sprite)
 loadFixedSizeAnimatedSprite f frameSz = loadAnimatedSprite f (repeat frameSz)
-
-unloadSprite :: Sprite -> IO ()
-unloadSprite = traverse_ (unloadRenderObject . frameRO) . getFrames
 
 renderUISpriteWithSize :: Sprite -> V2 Float -> V2 Float -> GameMonad ()
 renderUISpriteWithSize sprite pos (V2 sx sy) = addRenderUIAction pos ro
