@@ -128,13 +128,19 @@ lightWire initial =
   in L.setLightPosition newPos $
      L.setLightDirection (negate newPos) initial
 
-uiWire :: L.Font -> L.PureWire () ()
-uiWire font = flip L.withDefault (pure ())
-              $ L.screen
-              [ L.hbox [renderTime, L.glue]
-              , L.glue
-              , L.hbox [L.glue, button]
-              ]
+loadFont :: IO L.Font
+loadFont = L.loadTTFont 18 (V3 1 0 0) =<<
+           getDataFileName ("examples" </> "kenpixel" <.> "ttf")
+
+uiWire :: L.PureWire ((), Bool) (Maybe ())
+uiWire = L.bracketResource loadFont L.unloadFont
+         $ L.withResource
+         $ \font -> 
+         L.screen
+         [ L.hbox [renderTime font, L.glue]
+         , L.glue
+         , L.hbox [L.glue, button]
+         ]
   where
     background = let
         blue :: V4 Word8
@@ -162,31 +168,29 @@ uiWire font = flip L.withDefault (pure ())
     avgRenderTimeWire =
       ("Frame Time (ms): " ++) . show <$> (lastRenderTime W.>>> sAvg 5)
 
-    frameRenderState = let
-      idle = L.dynamicTextRenderer font $ W.mkId W.&&& avgRenderTimeWire
+    frameRenderState font =
+      let idle = L.dynamicTextRenderer font $ W.mkId W.&&& avgRenderTimeWire
       in L.WidgetState idle []
 
-    renderTime = L.Widget
-                 $ ($ frameRenderState)
-                 $ Y.withMargin Y.Edge'Left 5.0
-                 $ Y.withMargin Y.Edge'Top 15.0
-                 $ Y.exact 300.0 50.0
+    renderTime font = L.Widget
+                      $ ($ frameRenderState font)
+                      $ Y.withMargin Y.Edge'Left 5.0
+                      $ Y.withMargin Y.Edge'Top 15.0
+                      $ Y.exact 300.0 50.0
 
 loadGame :: IO (L.Game ())
 loadGame = do
-  sysFont <- L.loadTTFont 18 (V3 1 0 0) =<<
-             getDataFileName ("examples" </> "kenpixel" <.> "ttf")
   let quitWire =
         (pure True W.>>> keyPressed GLFW.Key'Q) `L.withDefault` pure False
       gameWire =
-        (id W.&&& quitWire) W.>>> L.joinResources [cubeWire, bunny, plane]
+        (id W.&&& quitWire) W.>>> L.joinResources [cubeWire, bunny, plane, uiWire]
       lightPos = 5 *^ (V3 (-2) 1 0)
       lightParams = L.mkLightParams (V3 0.15 0.15 0.15) (V3 1.0 1.0 1.0) 1.0
   shadowLight <- L.addShadowMap $
                  L.spotlight lightParams lightPos (negate lightPos) (pi/4)
   return $ L.Game { L.mainCamera = demoCam,
                     L.dynamicLights = [lightWire shadowLight],
-                    L.gameLogic = gameWire . uiWire sysFont }
+                    L.gameLogic = gameWire }
 
 main :: IO ()
 main = L.withWindow 640 480 "Cube Demo" $ L.loadAndRun () loadGame
