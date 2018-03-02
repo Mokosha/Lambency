@@ -17,6 +17,7 @@ import Control.Monad.Reader
 import Control.Wire
 
 import Data.Maybe
+import Data.Either (isLeft)
 
 import Lambency.Render
 import Lambency.Sound
@@ -77,23 +78,24 @@ bracketResource load unload (RCW rcw) = PW $ mkGen $ \dt x -> do
   resource <- GameMonad $ liftIO load
   stepWire (go resource rcw) dt (Right x)
     where
-      go resource w = mkGen $ \dt (x, quitSignal) -> do
-        (result, w') <- runReaderT (stepWire w dt (Right x)) resource
-        let shouldQuit (Left _) = True
-            shouldQuit _ = quitSignal
-        if shouldQuit result
+      go res w = mkGen $ \dt (x, quitSignal) -> do
+        (result, w') <- runReaderT (stepWire w dt (Right x)) res
+        if isLeft result || quitSignal
           then do
-            GameMonad $ liftIO (unload resource)
+            GameMonad $ liftIO (unload res)
             return (Right Nothing, pure Nothing)
-          else return (Just <$> result, go resource w')
-
-withResource :: (r -> GameWire a b) -> ResourceContextWire r a b
-withResource wireGen = RCW $ mkGen $ \dt x -> ReaderT $ \r -> do
-  (result, w') <- stepWire (wireGen r) dt (Right x)
-  return (result, getResourceWire $ liftWire w')
+          else return (Just <$> result, go res w')
 
 liftWire :: GameWire a b -> ResourceContextWire r a b
-liftWire = withResource . const
+liftWire gw = RCW $ mkGen $ \dt x -> do
+  (r, RCW gw') <-
+    second liftWire <$> (ReaderT $ \_ -> stepWire gw dt (Right x))
+  return (r, gw')
+
+withResource :: (r -> GameWire a b) -> ResourceContextWire r a b
+withResource wireGen = RCW $ mkGen $ \dt x ->
+  (second $ getResourceWire . liftWire) <$>
+  (ReaderT $ \r -> stepWire (wireGen r) dt (Right x))
 
 loopWith :: PureWire (a, c) b -> c -> (b -> c -> c) -> PureWire (a, c) b
 loopWith m x fn =
