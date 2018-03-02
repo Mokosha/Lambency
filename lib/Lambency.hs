@@ -340,6 +340,7 @@ run initialGameObject initialGame win = do
   evalStateT statePrg $
     GameLoopState initialGameObject initialGame session (toEnum 0) 0
 
+  unloadSprite sprite
   hSetBuffering stdout oldBuffering
 
 loadAndRun :: a -> IO (Game a) -> GLFW.Window -> IO ()
