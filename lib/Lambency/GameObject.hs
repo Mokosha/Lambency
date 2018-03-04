@@ -18,6 +18,7 @@ import Control.Wire
 
 import Data.Maybe
 import Data.Either (isLeft)
+import Data.Foldable
 
 import Lambency.Render
 import Lambency.Sound
@@ -97,14 +98,27 @@ withResource wireGen = RCW $ mkGen $ \dt x ->
   (second $ getResourceWire . liftWire) <$>
   (ReaderT $ \r -> stepWire (wireGen r) dt (Right x))
 
-loopWith :: PureWire (a, c) b -> c -> (b -> c -> c) -> PureWire (a, c) b
-loopWith m x fn =
-  loop $ second (PW $ delay x) >>> (first m >>> (arr fst &&& arr (uncurry fn)))
-
 joinResources :: Monoid b
               => [PureWire (a, Bool) (Maybe b)]
               -> PureWire (a, Bool) (Maybe b)
-joinResources res = loopWith (fmap mconcat $ sequenceA res) False ((&&) . isJust)
+joinResources res = loopWith (fmap msequence $ sequenceA res) ((||) . isNothing)
+  where
+    loopWith :: PureWire (a, Bool) b
+             -> (b -> Bool -> Bool)
+             -> PureWire (a, Bool) b
+    loopWith m fn =
+      loop $ (second $ PW $ delay False)
+             >>> rearrange
+             >>> second (arr $ uncurry (||))
+             >>> (m &&& arr snd)
+             >>> (arr fst &&& arr (uncurry fn))
+
+    msequence :: (MonadPlus m, Monoid b) => [m b] -> m b
+    msequence [] = mzero
+    msequence (v : vs) = foldr (\x y -> x >>= ((<$> y) . mappend)) v vs
+
+    rearrange :: Arrow a => a ((b, c), d) (b, (c, d))
+    rearrange = arr $ \((x, y), z) -> (x, (y, z))
 
 withDefault :: GameWire a b -> PureWire a b -> PureWire a b
 withDefault w (PW m) = PW $ w <|> m
