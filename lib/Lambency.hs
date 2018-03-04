@@ -187,7 +187,7 @@ step go game t = do
   let (lights, lwires) = collect lightObjs
   case result of
     Nothing -> return (result, cam, lights, newGame nCamWire lwires W.mkEmpty)
-    Just _  -> return (result, cam, lights, newGame nCamWire lwires gameWire)
+    Just x  -> return (x `seq` result, cam, lights, newGame nCamWire lwires gameWire)
   where
     collect :: [(Either e b, GameWire a b)] -> ([b], [GameWire a b])
     collect [] = ([], [])
