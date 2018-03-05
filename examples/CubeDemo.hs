@@ -52,6 +52,7 @@ loadPlane = L.createRenderObject L.plane (L.diffuseColoredMaterial $ V3 0.5 0.5 
 
 plane :: L.PureWire ((), Bool) (Maybe ())
 plane = L.bracketResource loadPlane L.unloadRenderObject
+        $ (L.liftWire (L.quitWire GLFW.Key'E) W.>>>)
         $ L.withResource
         $ flip L.staticObject xform
   where xform = L.uniformScale 10 $
