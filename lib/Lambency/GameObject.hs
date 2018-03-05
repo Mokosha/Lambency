@@ -79,13 +79,13 @@ bracketResource load unload (RCW rcw) = PW $ mkGen $ \dt x -> do
   resource <- GameMonad $ liftIO load
   stepWire (go resource rcw) dt (Right x)
     where
-      go res w = mkGen $ \dt (x, quitSignal) -> do
-        (result, w') <- runReaderT (stepWire w dt (Right x)) res
-        if isLeft result || quitSignal
-          then do
-            GameMonad $ liftIO (unload res)
-            return (Right Nothing, pure Nothing)
-          else return (Just <$> result, go res w')
+      go res w = mkGen $ \dt (x, quitSignal) ->
+        let quit = do
+              GameMonad $ liftIO (unload res)
+              return (Right Nothing, pure Nothing)
+        in if quitSignal then quit else do
+          (result, w') <- runReaderT (stepWire w dt (Right x)) res
+          if isLeft result then quit else return (Just <$> result, go res w')
 
 liftWire :: GameWire a b -> ResourceContextWire r a b
 liftWire gw = RCW $ mkGen $ \dt x -> do
@@ -137,5 +137,4 @@ stepPureWire (PW w) dt x = do
 -- is pressed, then inhibits forever.
 quitWire :: GLFW.Key -> GameWire a a
 quitWire key =
-  rSwitch mkId .
-  (mkId &&& (now . pure mkEmpty . keyPressed key <|> never))
+  rSwitch mkId . (mkId &&& (now . pure mkEmpty . keyPressed key <|> never))
