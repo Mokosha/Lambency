@@ -101,24 +101,17 @@ withResource wireGen = RCW $ mkGen $ \dt x ->
 joinResources :: Monoid b
               => [PureWire (a, Bool) (Maybe b)]
               -> PureWire (a, Bool) (Maybe b)
-joinResources res = loopWith (fmap msequence $ sequenceA res) ((||) . isNothing)
+joinResources = mkWire . fmap msequence . sequenceA
   where
-    loopWith :: PureWire (a, Bool) b
-             -> (b -> Bool -> Bool)
-             -> PureWire (a, Bool) b
-    loopWith m fn =
-      loop $ (second $ PW $ delay False)
-             >>> rearrange
-             >>> second (arr $ uncurry (||))
-             >>> (m &&& arr snd)
-             >>> (arr fst &&& arr (uncurry fn))
+    mkWire (PW w) = PW $ mkGen $ \dt (x, quit) -> do
+      (Right result, w') <- stepWire w dt (Right (x, quit))
+      if not quit && isNothing result
+        then stepWire w' dt (Right (undefined, True))
+        else return (Right result, getRawWire . mkWire $ PW w')
 
     msequence :: (MonadPlus m, Monoid b) => [m b] -> m b
     msequence [] = mzero
     msequence (v : vs) = foldr (\x y -> x >>= ((<$> y) . mappend)) v vs
-
-    rearrange :: Arrow a => a ((b, c), d) (b, (c, d))
-    rearrange = arr $ \((x, y), z) -> (x, (y, z))
 
 withDefault :: GameWire a b -> PureWire a b -> PureWire a b
 withDefault w (PW m) = PW $ w <|> m
