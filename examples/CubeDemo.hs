@@ -44,13 +44,13 @@ initialCam = L.mkPerspCamera
              -- near far
              0.1 1000.0
 
-demoCam :: L.PureWire () L.Camera
+demoCam :: L.ContWire () L.Camera
 demoCam = L.mkFreeCam initialCam
 
 loadPlane :: IO L.RenderObject
 loadPlane = L.createRenderObject L.plane (L.diffuseColoredMaterial $ V3 0.5 0.5 0.5)
 
-plane :: L.PureWire ((), Bool) (Maybe ())
+plane :: L.ContWire ((), Bool) (Maybe ())
 plane = L.bracketResource loadPlane L.unloadRenderObject
         $ (L.liftWire (L.quitWire GLFW.Key'E) W.>>>)
         $ L.withResource
@@ -68,7 +68,7 @@ loadBunny = do
   L.loadOBJWithDefaultMaterial objFile
     $ Just (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
 
-bunny :: L.PureWire ((), Bool) (Maybe ())
+bunny :: L.ContWire ((), Bool) (Maybe ())
 bunny = L.bracketResource loadBunny unloadRenderObjects
         $ L.withResource
         $ (foldl (W.>>>) W.mkId) . map (flip L.staticObject xform)
@@ -95,7 +95,7 @@ unloadCubeResources (tex, sound, meshes) = do
   L.unloadSound sound
   unloadRenderObjects meshes
 
-cubeWire :: L.PureWire (a, Bool) (Maybe ())
+cubeWire :: L.ContWire (a, Bool) (Maybe ())
 cubeWire =
   L.bracketResource loadCubeResources unloadCubeResources
     $ L.withResource
@@ -120,7 +120,7 @@ cubeWire =
               L.uniformScale 2.0 $
               L.identity
 
-lightWire :: L.Light -> L.PureWire () L.Light
+lightWire :: L.Light -> L.ContWire () L.Light
 lightWire initial =
   flip L.withDefault (pure initial) $
   (W.timeF W.>>>) $ W.mkSF_ $ \t ->
@@ -133,7 +133,7 @@ loadFont :: IO L.Font
 loadFont = L.loadTTFont 18 (V3 1 0 0) =<<
            getDataFileName ("examples" </> "kenpixel" <.> "ttf")
 
-uiWire :: L.PureWire ((), Bool) (Maybe ())
+uiWire :: L.ContWire ((), Bool) (Maybe ())
 uiWire = L.bracketResource loadFont L.unloadFont
          $ L.withResource
          $ \font -> 

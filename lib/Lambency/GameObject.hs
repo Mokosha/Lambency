@@ -1,7 +1,7 @@
 module Lambency.GameObject (
   wireFrom,
   bracketResource, liftWire, withResource, joinResources, withDefault,
-  mkPureWire, stepPureWire,
+  mkContWire, stepContWire,
   doOnce, doOnceWithInput,
   quitWire,
   mkObject,
@@ -71,11 +71,10 @@ pulseSound = doOnce . startSound
 -- wire inhibits, at which point it unloads the resource. Once the resource is
 -- freed, the resulting wire returns Nothing indefinitely. The resulting wire
 -- also takes a signal to terminate from its input.
---
--- TODO: Maybe should restrict this to certain types of resources?
 bracketResource :: IO r -> (r -> IO ()) -> ResourceContextWire r a b
-                -> PureWire (a, Bool) (Maybe b)
-bracketResource load unload (RCW rcw) = PW $ mkGen $ \dt x -> do
+                -> ContWire (a, Bool) (Maybe b)
+bracketResource load unload (RCW rcw) = CW $ mkGen $ \dt x -> do
+  -- TODO: Maybe should restrict this to certain types of resources?
   resource <- GameMonad $ liftIO load
   stepWire (go resource rcw) dt (Right x)
     where
@@ -89,42 +88,42 @@ bracketResource load unload (RCW rcw) = PW $ mkGen $ \dt x -> do
 
 liftWire :: GameWire a b -> ResourceContextWire r a b
 liftWire gw = RCW $ mkGen $ \dt x -> do
-  (r, RCW gw') <-
-    second liftWire <$> (ReaderT $ \_ -> stepWire gw dt (Right x))
+  (r, RCW gw') <- second liftWire <$> (ReaderT $ \_ -> stepWire gw dt (Right x))
   return (r, gw')
 
 withResource :: (r -> GameWire a b) -> ResourceContextWire r a b
-withResource wireGen = RCW $ mkGen $ \dt x ->
-  (second $ getResourceWire . liftWire) <$>
-  (ReaderT $ \r -> stepWire (wireGen r) dt (Right x))
+withResource wireGen = RCW $ mkGen $ \dt x -> do
+  (r, RCW w) <- second liftWire <$>
+                (ReaderT $ \r -> stepWire (wireGen r) dt (Right x))
+  return (r, w)
 
 joinResources :: Monoid b
-              => [PureWire (a, Bool) (Maybe b)]
-              -> PureWire (a, Bool) (Maybe b)
+              => [ContWire (a, Bool) (Maybe b)]
+              -> ContWire (a, Bool) (Maybe b)
 joinResources = mkWire . fmap msequence . sequenceA
   where
-    mkWire (PW w) = PW $ mkGen $ \dt (x, quit) -> do
+    mkWire (CW w) = CW $ mkGen $ \dt (x, quit) -> do
       (Right result, w') <- stepWire w dt (Right (x, quit))
       if not quit && isNothing result
         then stepWire w' dt (Right (undefined, True))
-        else return (Right result, getRawWire . mkWire $ PW w')
+        else return (Right result, getContinuousWire . mkWire $ CW w')
 
     msequence :: (MonadPlus m, Monoid b) => [m b] -> m b
     msequence [] = mzero
     msequence (v : vs) = foldr (\x y -> x >>= ((<$> y) . mappend)) v vs
 
-withDefault :: GameWire a b -> PureWire a b -> PureWire a b
-withDefault w (PW m) = PW $ w <|> m
+withDefault :: GameWire a b -> ContWire a b -> ContWire a b
+withDefault w (CW m) = CW $ w <|> m
 
-mkPureWire :: (TimeStep -> a -> GameMonad (b, PureWire a b)) -> PureWire a b
-mkPureWire f = PW $ mkGen $ \dt x -> do
-  (r, PW w') <- f dt x
+mkContWire :: (TimeStep -> a -> GameMonad (b, ContWire a b)) -> ContWire a b
+mkContWire f = CW $ mkGen $ \dt x -> do
+  (r, CW w') <- f dt x
   return (Right r, w')
 
-stepPureWire :: PureWire a b -> TimeStep -> a -> GameMonad (b, PureWire a b)
-stepPureWire (PW w) dt x = do
+stepContWire :: ContWire a b -> TimeStep -> a -> GameMonad (b, ContWire a b)
+stepContWire (CW w) dt x = do
   (Right r, w') <- stepWire w dt (Right x)
-  return (r, PW w')
+  return (r, CW w')
 
 -- Wire that behaves like the identity wire until the given key
 -- is pressed, then inhibits forever.

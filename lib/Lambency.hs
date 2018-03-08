@@ -29,7 +29,7 @@ module Lambency (
   TimeStep,
   Sprite, unloadSprite,
   Game(..), GameConfig(..), GameMonad,
-  GameWire, PureWire, ResourceContextWire,
+  GameWire, ContWire, ResourceContextWire,
   module Lambency.UI,
   module Lambency.Utils,
 
@@ -179,27 +179,28 @@ handleActions = mapM_ handleAction
 step :: a -> Game a -> TimeStep ->
         GameMonad (Maybe a, Camera, [Light], Game a)
 step go game t = do
-  (Right cam, nCamWire) <- W.stepWire (getRawWire $ mainCamera game) t (Right ())
+  (Right cam, nCamWire) <-
+    W.stepWire (getContinuousWire $ mainCamera game) t (Right ())
+  (lights, lwires) <-
+    collect <$>
+    mapM (\w -> W.stepWire w t $ Right ()) (getContinuousWire <$> dynamicLights game)
   (Right result, gameWire) <-
-    W.stepWire (getRawWire $ gameLogic game) t (Right go)
-  lightObjs <-
-    mapM (\w -> W.stepWire w t $ Right ()) (getRawWire <$> dynamicLights game)
-  let (lights, lwires) = collect lightObjs
+    W.stepWire (getContinuousWire $ gameLogic game) t (Right go)
   case result of
     Nothing -> return (result, cam, lights, newGame nCamWire lwires W.mkEmpty)
     Just x  -> return (x `seq` result, cam, lights, newGame nCamWire lwires gameWire)
   where
     collect :: [(Either e b, GameWire a b)] -> ([b], [GameWire a b])
     collect [] = ([], [])
-    collect ((Left _, _) : rest) = collect rest
+    collect ((Left _, _) : _) = error "Internal -- Light wire inhibited?"
     collect ((Right obj, wire) : rest) = (obj : objs, wire : wires)
       where
         (objs, wires) = collect rest
 
     newGame cam lights logic =
-      Game { mainCamera = PW cam
-           , dynamicLights = PW <$> lights
-           , gameLogic = PW logic}
+      Game { mainCamera = CW cam
+           , dynamicLights = CW <$> lights
+           , gameLogic = CW logic}
 
 data GameLoopConfig = GameLoopConfig {
   simpleQuadSprite :: Sprite,
@@ -353,7 +354,7 @@ runSimple cam f x win = do
         result <- f (W.dtime ts) obj
         return (Right $ Just result, gameWire)
 
-  run x (Game (W.pure cam) [] (PW gameWire)) win
+  run x (Game (W.pure cam) [] (CW gameWire)) win
 
 toggleWireframe :: Bool -> GameMonad ()
 toggleWireframe b = GameMonad $ tell $ ([WireframeAction b], mempty)

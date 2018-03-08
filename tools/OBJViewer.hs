@@ -31,17 +31,17 @@ initialCam = L.mkPerspCamera
              -- near far
              0.1 10000.0
 
-cam :: L.PureWire () L.Camera
+cam :: L.ContWire () L.Camera
 cam = startCam (makeViewer initialCam) makeViewer makeFree
   where
     makeViewer c = L.mkViewerCam c zero
     makeFree c = L.mkFreeCam c
-    startCam :: L.PureWire a L.Camera
-             -> (L.Camera -> L.PureWire a L.Camera)
-             -> (L.Camera -> L.PureWire a L.Camera)
-             -> (L.PureWire a L.Camera)
-    startCam camWire mkThisCam mkThatCam = L.mkPureWire $ \dt _ -> do
-      (nextCam, nextCamWire) <- L.stepPureWire camWire dt undefined
+    startCam :: L.ContWire a L.Camera
+             -> (L.Camera -> L.ContWire a L.Camera)
+             -> (L.Camera -> L.ContWire a L.Camera)
+             -> (L.ContWire a L.Camera)
+    startCam camWire mkThisCam mkThatCam = L.mkContWire $ \dt _ -> do
+      (nextCam, nextCamWire) <- L.stepContWire camWire dt undefined
       toggle <- keyIsPressed GLFW.Key'F
       if toggle then
         do
@@ -61,7 +61,7 @@ wireframeToggle = (keyDebounced GLFW.Key'W >>> toggle True) <|> mkId
 controlWire :: [L.RenderObject] -> L.GameWire a [a]
 controlWire ros = sequenceA $ (\ro -> L.mkObject ro (pure L.identity) >>> wireframeToggle) <$> ros
 
-camLight :: L.PureWire L.Camera L.Light
+camLight :: L.ContWire L.Camera L.Light
 camLight = arr $ \c ->
   let dir = L.getCamDir c
       up = L.getCamUp c

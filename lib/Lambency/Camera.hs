@@ -179,12 +179,12 @@ getViewProjMatrix c = (getViewMatrix c) !*! (getProjMatrix c)
 
 --
 
-mkFixedCam :: Camera -> PureWire a Camera
-mkFixedCam cam = PW $ W.mkConst $ Right cam
+mkFixedCam :: Camera -> ContWire a Camera
+mkFixedCam cam = CW $ W.mkConst $ Right cam
 
 type ViewCam = (Camera, Vec3f)
 
-mkViewerCam :: Camera -> Vec3f -> PureWire a Camera
+mkViewerCam :: Camera -> Vec3f -> ContWire a Camera
 mkViewerCam initialCam initialFocus =
   let handleRotation :: ((Float, Float), ViewCam) -> ViewCam
       handleRotation ((0, 0), c) = c
@@ -262,16 +262,16 @@ mkViewerCam initialCam initialFocus =
         (keyPressed GLFW.Key'LeftShift W.>>> mouseDeltas GLFW.MouseButton'1)
         W.<|> mouseDeltas GLFW.MouseButton'3
   in
-   PW $ W.loop $ W.second (
+   CW $ W.loop $ W.second (
      W.delay (initialCam, initialFocus) W.>>>
      (rotationalDeltas W.&&& W.mkId) W.>>> (W.arr handleRotation) W.>>>
      (panningDeltas W.&&& W.mkId) W.>>> (W.arr handlePanning) W.>>>
      (mouseScroll W.&&& W.mkId) W.>>> (W.arr handleScroll))
    W.>>> (W.arr $ \(_, c@(cam, _)) -> (cam, c))
 
-mkFreeCam :: Camera -> PureWire a Camera
+mkFreeCam :: Camera -> ContWire a Camera
 mkFreeCam initCam =
-  PW $ W.loop ((W.second (W.delay initCam W.>>> updCam)) W.>>> feedback)
+  CW $ W.loop ((W.second (W.delay initCam W.>>> updCam)) W.>>> feedback)
   where
   feedback :: GameWire (a, b) (b, b)
   feedback = W.mkPure_ $ \(_, x) -> Right (x, x)
@@ -281,10 +281,12 @@ mkFreeCam initCam =
   tr key sc dir = (trans W.>>> (keyPressed key)) W.<|> W.mkId
     where
       trans :: GameWire XForm.Transform XForm.Transform
-      trans = W.mkSF $ \ts xf -> (XForm.translate (3.0 * (W.dtime ts) * sc *^ (dir xf)) xf, trans)
+      trans = W.mkSF $ \ts xf ->
+        (XForm.translate (3.0 * (W.dtime ts) * sc *^ (dir xf)) xf, trans)
 
   updCam :: GameWire Camera Camera
-  updCam = (W.mkId W.&&& (W.arr getCamXForm W.>>> xfWire)) W.>>> (W.mkSF_ $ uncurry stepCam)
+  updCam = (W.mkId W.&&& (W.arr getCamXForm W.>>> xfWire))
+           W.>>> (W.mkSF_ $ uncurry stepCam)
     where
 
       xfWire :: GameWire XForm.Transform XForm.Transform
@@ -309,7 +311,7 @@ mkFreeCam initCam =
                        (negate $ XForm.forward newXForm)
                        (V3 0 1 0)
 
-mk2DCam :: Int -> Int -> PureWire Vec2f Camera
+mk2DCam :: Int -> Int -> ContWire Vec2f Camera
 mk2DCam sx sy = let
   toHalfF :: Integral a => a -> Float
   toHalfF x = 0.5 * (fromIntegral x)
@@ -326,7 +328,7 @@ mk2DCam sx sy = let
   trPos :: Vec2f -> Vec3f
   trPos (V2 x y) = (V3 x y 0) ^+^ screenCenter
  in
-   PW $ W.mkSF_ $ \vec -> mkOrthoCamera
+   CW $ W.mkSF_ $ \vec -> mkOrthoCamera
    (trPos vec) (negate XForm.localForward) XForm.localUp
    (-hx) (hx) (hy) (-hy)
    0.01 50.0

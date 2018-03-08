@@ -111,7 +111,7 @@ unloadGameResources (white, red, ship, bullet) = do
   L.unloadSprite ship
   L.unloadSprite bullet
 
-gameWire :: L.PureWire ((), Bool) (Maybe ())
+gameWire :: L.ContWire ((), Bool) (Maybe ())
 gameWire =
   L.bracketResource loadGameResources unloadGameResources
   $ L.withResource
@@ -141,7 +141,7 @@ gameWire =
 --------------------------------------------------
 -- Init
 
-shooterCam :: L.PureWire () L.Camera
+shooterCam :: L.ContWire () L.Camera
 shooterCam = pure zero >>> (L.mk2DCam screenWidth screenHeight)
 
 loadGame :: IO (L.Game ())

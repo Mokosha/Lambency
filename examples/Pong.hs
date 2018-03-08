@@ -247,7 +247,7 @@ unloadGameResources (tex, sprite, sound, font) = do
   L.unloadSprite sprite
   L.unloadFont font
 
-gameWire :: L.PureWire (Int, Bool) (Maybe Int)
+gameWire :: L.ContWire (Int, Bool) (Maybe Int)
 gameWire =
   L.bracketResource loadGameResources unloadGameResources
   $ L.withResource
@@ -261,7 +261,7 @@ gameWire =
         >>> when (< 10)
         >>> renderStatic staticSprites
 
-pongCam :: L.PureWire () L.Camera
+pongCam :: L.ContWire () L.Camera
 pongCam = pure zero >>> (L.mk2DCam screenWidth screenHeight)
 
 --------------------------------------------------

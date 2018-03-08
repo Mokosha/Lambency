@@ -14,7 +14,7 @@ module Lambency.Types (
   TimeStep,
   GameConfig(..), GameMonad(..), GameSession, GameTime,
   Game(..),
-  GameWire, PureWire(..), ResourceContext, ResourceContextWire(..)
+  GameWire, ContWire(..), ResourceContext, ResourceContextWire(..)
 ) where
 
 --------------------------------------------------------------------------------
@@ -373,9 +373,9 @@ data GameConfig = GameConfig {
 
 -- Game
 data Game a = Game {
-  mainCamera :: PureWire () Camera,
-  dynamicLights :: [PureWire () Light],
-  gameLogic :: PureWire a (Maybe a)
+  mainCamera :: ContWire () Camera,
+  dynamicLights :: [ContWire () Light],
+  gameLogic :: ContWire a (Maybe a)
   }
 
 --------------------------------------------------------------------------------
@@ -433,9 +433,9 @@ newtype ResourceContextWire s a b =
            , ArrowLoop
            )
 
--- | `PureWire`s always produce a value and never inhibit.
-newtype PureWire a b =
-  PW { getRawWire :: GameWire a b }
+-- | Continuous wires always produce a value and never inhibit.
+newtype ContWire a b =
+  CW { getContinuousWire :: GameWire a b }
   deriving ( Functor
            , Applicative
            , Floating
