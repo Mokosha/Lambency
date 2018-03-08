@@ -27,7 +27,7 @@ module Lambency.Camera (
   mk2DCam,
 ) where
 --------------------------------------------------------------------------------
-import qualified Control.Wire as W
+import Control.Wire
 import qualified Graphics.UI.GLFW as GLFW
 import FRP.Netwire.Input
 import GHC.Float
@@ -35,6 +35,8 @@ import Lambency.Types
 import qualified Lambency.Transform as XForm
 import qualified Linear.Quaternion as Quat
 import Linear
+
+import Prelude hiding (id, (.))
 --------------------------------------------------------------------------------
 
 mkXForm :: Vec3f -> Vec3f -> Vec3f -> XForm.Transform
@@ -47,20 +49,9 @@ mkOrthoCamera :: Vec3f -> Vec3f -> Vec3f  ->
                  Float -> Float -> Float -> Float -> Float -> Float ->
                  Camera
 mkOrthoCamera pos dir up l r t b n f = Camera
-
   (mkXForm pos (signorm dir) (signorm up))
-
-  Ortho {
-    left = l,
-    right = r,
-    top = t,
-    bottom = b
-  }
-
-  CameraViewDistance {
-    near = n,
-    far = f
-  }
+  (Ortho l r t b)
+  (CameraViewDistance n f)
 
 mkPerspCamera :: Vec3f -> Vec3f -> Vec3f ->
                  Float -> Float -> Float -> Float -> Camera
@@ -166,8 +157,8 @@ getViewMatrix (Camera xf _ _) =
   in adjoint $ V4 (te r sx) (te u sy) (te f sz) (V4 0 0 0 1)
 
 mkProjMatrix :: CameraType -> CameraViewDistance -> Mat4f
-mkProjMatrix (Ortho {..}) (CameraViewDistance{..}) =
-  transpose $ ortho left right bottom top near far
+mkProjMatrix (Ortho l r t b) (CameraViewDistance{..}) =
+  transpose $ ortho l r b t near far
 mkProjMatrix (Persp {..}) (CameraViewDistance{..}) =
   transpose $ perspective fovY aspect near far
 
@@ -180,7 +171,7 @@ getViewProjMatrix c = (getViewMatrix c) !*! (getProjMatrix c)
 --
 
 mkFixedCam :: Camera -> ContWire a Camera
-mkFixedCam cam = CW $ W.mkConst $ Right cam
+mkFixedCam cam = CW $ mkConst $ Right cam
 
 type ViewCam = (Camera, Vec3f)
 
@@ -230,17 +221,17 @@ mkViewerCam initialCam initialFocus =
       mouseIfThen :: GLFW.MouseButton -> GameWire a b -> GameWire a b -> GameWire a b
       mouseIfThen mb ifPressed elsePressed = whilePressed
         where
-          whilePressed = (mousePressed mb W.>>> ifPressed) W.--> whileNotPressed
-          whileNotPressed = W.switch $
-                            elsePressed W.&&& ((mousePressed mb W.>>>
-                                                W.pure whilePressed W.>>> W.now)
-                                               W.<|> W.never)
+          whilePressed = (mousePressed mb >>> ifPressed) --> whileNotPressed
+          whileNotPressed = switch $
+                            elsePressed &&&
+                            ((mousePressed mb >>> pure whilePressed >>> now)
+                             <|> never)
 
       mouseDeltas :: GLFW.MouseButton -> GameWire a (Float, Float)
-      mouseDeltas mb = mouseIfThen mb getDelta $ W.pure (0, 0)
+      mouseDeltas mb = mouseIfThen mb getDelta $ pure (0, 0)
         where
-          delayM :: Monad m => m a -> W.Wire s e m a a
-          delayM x' = W.mkGenN $ \x -> do
+          delayM :: Monad m => m a -> Wire s e m a a
+          delayM x' = mkGenN $ \x -> do
             r <- x'
             return (Right r, delayM $ return x)
 
@@ -249,54 +240,53 @@ mkViewerCam initialCam initialFocus =
 
           getDelta :: GameWire a (Float, Float)
           getDelta =
-            W.loop $ (mouseCursor W.*** delayCursor) W.>>>
-            (W.arr $ \((x, y), (x', y')) -> ((x - x', y - y'), (x, y)))
+            loop $ (mouseCursor *** delayCursor) >>>
+            (arr $ \((x, y), (x', y')) -> ((x - x', y - y'), (x, y)))
 
       rotationalDeltas :: GameWire a (Float, Float)
       rotationalDeltas =
-        (keyPressed GLFW.Key'LeftShift W.>>> W.pure (0, 0))
-        W.<|> mouseDeltas GLFW.MouseButton'1
+        (keyPressed GLFW.Key'LeftShift >>> pure (0, 0))
+        <|> mouseDeltas GLFW.MouseButton'1
 
       panningDeltas :: GameWire a (Float, Float)
       panningDeltas =
-        (keyPressed GLFW.Key'LeftShift W.>>> mouseDeltas GLFW.MouseButton'1)
-        W.<|> mouseDeltas GLFW.MouseButton'3
+        (keyPressed GLFW.Key'LeftShift >>> mouseDeltas GLFW.MouseButton'1)
+        <|> mouseDeltas GLFW.MouseButton'3
   in
-   CW $ W.loop $ W.second (
-     W.delay (initialCam, initialFocus) W.>>>
-     (rotationalDeltas W.&&& W.mkId) W.>>> (W.arr handleRotation) W.>>>
-     (panningDeltas W.&&& W.mkId) W.>>> (W.arr handlePanning) W.>>>
-     (mouseScroll W.&&& W.mkId) W.>>> (W.arr handleScroll))
-   W.>>> (W.arr $ \(_, c@(cam, _)) -> (cam, c))
+   CW $ loop $ second (
+     delay (initialCam, initialFocus) >>>
+     (rotationalDeltas &&& id) >>> (arr handleRotation) >>>
+     (panningDeltas    &&& id) >>> (arr handlePanning) >>>
+     (mouseScroll      &&& id) >>> (arr handleScroll))
+   >>> (arr $ \(_, c@(cam, _)) -> (cam, c))
 
 mkFreeCam :: Camera -> ContWire a Camera
 mkFreeCam initCam =
-  CW $ W.loop ((W.second (W.delay initCam W.>>> updCam)) W.>>> feedback)
+  CW $ loop ((second (delay initCam >>> updCam)) >>> feedback)
   where
   feedback :: GameWire (a, b) (b, b)
-  feedback = W.mkPure_ $ \(_, x) -> Right (x, x)
+  feedback = mkPure_ $ \(_, x) -> Right (x, x)
 
   tr :: GLFW.Key -> Float -> (XForm.Transform -> Vec3f) ->
         GameWire XForm.Transform XForm.Transform
-  tr key sc dir = (trans W.>>> (keyPressed key)) W.<|> W.mkId
+  tr key sc dir = (trans >>> (keyPressed key)) <|> id
     where
       trans :: GameWire XForm.Transform XForm.Transform
-      trans = W.mkSF $ \ts xf ->
-        (XForm.translate (3.0 * (W.dtime ts) * sc *^ (dir xf)) xf, trans)
+      trans = mkSF $ \ts xf ->
+        (XForm.translate (3.0 * (dtime ts) * sc *^ (dir xf)) xf, trans)
 
   updCam :: GameWire Camera Camera
-  updCam = (W.mkId W.&&& (W.arr getCamXForm W.>>> xfWire))
-           W.>>> (W.mkSF_ $ uncurry stepCam)
+  updCam = (id &&& (arr getCamXForm >>> xfWire))
+           >>> (mkSF_ $ uncurry stepCam)
     where
-
       xfWire :: GameWire XForm.Transform XForm.Transform
       xfWire =
-        (tr GLFW.Key'W (-1.0) XForm.forward) W.>>>
-        (tr GLFW.Key'S (1.0) XForm.forward) W.>>>
-        (tr GLFW.Key'A (-1.0) XForm.right) W.>>>
-        (tr GLFW.Key'D (1.0) XForm.right) W.>>>
-        (W.mkId W.&&& mouseMickies) W.>>>
-        (W.mkSF_ $ \(xf, (mx, my)) ->
+        (tr GLFW.Key'W (-1.0) XForm.forward) >>>
+        (tr GLFW.Key'S (1.0) XForm.forward) >>>
+        (tr GLFW.Key'A (-1.0) XForm.right) >>>
+        (tr GLFW.Key'D (1.0) XForm.right) >>>
+        (id &&& mouseMickies) >>>
+        (mkSF_ $ \(xf, (mx, my)) ->
           XForm.rotate
           (foldl1 (*) [
               Quat.axisAngle (XForm.up xf) (-asin mx),
@@ -328,7 +318,7 @@ mk2DCam sx sy = let
   trPos :: Vec2f -> Vec3f
   trPos (V2 x y) = (V3 x y 0) ^+^ screenCenter
  in
-   CW $ W.mkSF_ $ \vec -> mkOrthoCamera
+   CW $ mkSF_ $ \vec -> mkOrthoCamera
    (trPos vec) (negate XForm.localForward) XForm.localUp
    (-hx) (hx) (hy) (-hy)
    0.01 50.0

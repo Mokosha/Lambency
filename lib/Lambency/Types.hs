@@ -73,6 +73,7 @@ data CameraViewDistance = CameraViewDistance {
   far :: Float
 } deriving (Show, Eq)
 
+-- !TODO! Choose better names for the Ortho planes.
 data CameraType =
   Ortho {
     left :: Float,
