@@ -41,11 +41,18 @@ packages:
     git: https://github.com/Mokosha/yoga-hs.git
     commit: HEAD
   extra-dep: true
+- location:
+    git: https://github.com/Mokosha/netwire-input-glfw.git
+    commit: head
+  extra-dep: true
+- location:
+    git: https://github.com/Mokosha/netwire-input.git
+    commit: head
+  extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
-extra-deps:
-- netwire-input-glfw-0.0.8
+# extra-deps:
 
 # Override default flag values for local packages and extra-deps
 flags: {

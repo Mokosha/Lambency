@@ -80,7 +80,7 @@ library
                        mtl                  >= 2.1.2,
                        netwire              >= 5.0.0,
                        netwire-input        >= 0.0.3,
-                       netwire-input-glfw   >= 0.0.8,
+                       netwire-input-glfw   >= 0.0.9,
                        OpenAL,
                        OpenGL               >= 2.9.2.0,
                        OpenGLRaw            >= 3.1,
