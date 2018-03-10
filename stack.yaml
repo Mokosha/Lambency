@@ -43,11 +43,11 @@ packages:
   extra-dep: true
 - location:
     git: https://github.com/Mokosha/netwire-input-glfw.git
-    commit: head
+    commit: HEAD
   extra-dep: true
 - location:
     git: https://github.com/Mokosha/netwire-input.git
-    commit: head
+    commit: HEAD
   extra-dep: true
 
 # Dependency packages to be pulled from upstream that are not in the resolver
