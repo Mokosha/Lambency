@@ -1,8 +1,11 @@
 module Lambency.GameObject (
   wireFrom,
   bracketResource, liftWire, withResource, joinResources, withDefault,
+  transformedContext, transformedResourceContext,
+  clippedContext, clippedResourceContext,
+  withSubResource,
   mkContWire, stepContWire,
-  doOnce, doOnceWithInput,
+  doOnce, doOnceWithInput, everyFrame,
   quitWire,
   mkObject,
   staticObject,
@@ -44,6 +47,9 @@ doOnce pgm = wireFrom pgm $ const Control.Wire.id
 doOnceWithInput :: (a -> GameMonad ()) -> GameWire a a
 doOnceWithInput fn = mkGenN $ \x -> fn x >> return (Right x, mkId)
 
+everyFrame :: (a -> GameMonad b) -> GameWire a b
+everyFrame fn = mkGen_ $ \x -> Right <$> (fn x)
+
 mkObject :: RenderObject -> GameWire a Transform -> GameWire a a
 mkObject ro xfw = mkGen $ \dt val -> do
   (xform, nextWire) <- stepWire xfw dt (Right val)
@@ -53,6 +59,24 @@ mkObject ro xfw = mkGen $ \dt val -> do
 
 staticObject :: RenderObject -> Transform -> GameWire a a
 staticObject ro = mkObject ro . mkConst . Right
+
+-- | `transformedContext a b` runs b as if all actions within it were rendered
+-- with the transform produced by a
+transformedContext :: GameWire a Transform -> GameWire a b -> GameWire a b
+transformedContext xfw w = mkGen $ \dt x -> do
+  (xfResult, xfw') <- stepWire xfw dt (Right x)
+  case xfResult of
+    Right xf ->
+      addTransformedRenderAction xf $
+      second (transformedContext xfw') <$> stepWire w dt (Right x)
+    Left i -> return (Left i, transformedContext xfw' w)
+
+clippedContext :: GameWire a b -> GameWire b c -> GameWire a c
+clippedContext cw w = mkGen $ \dt x ->
+  addClippedRenderAction (stepWire cw dt (Right x)) $ \(clipResult, cw') ->
+  case clipResult of
+    Right clip -> second (clippedContext cw') <$> stepWire w dt (Right clip)
+    Left i -> return (Left i, clippedContext cw' w)
 
 withVelocity :: (Monad m, Monoid s) =>
                 Transform -> Wire (Timed Float s) e m a Vec3f ->
@@ -97,6 +121,33 @@ withResource wireGen = RCW $ mkGen $ \dt x -> do
                 (ReaderT $ \r -> stepWire (wireGen r) dt (Right x))
   return (r, w)
 
+withinContext :: r -> ResourceContextWire r a b -> GameWire a b
+withinContext res (RCW w) =
+  mkGen $ \dt x ->
+  second (withinContext res . RCW) <$> runReaderT (stepWire w dt (Right x)) res
+
+transformedResourceContext :: ResourceContextWire r a Transform
+                           -> ResourceContextWire r a b
+                           -> ResourceContextWire r a b
+transformedResourceContext xf w = RCW $ mkGen $ \dt x ->
+  second (getResourceWire . liftWire) <$>
+  (ReaderT $ \r ->
+    let xf' = withinContext r xf
+        w' = withinContext r w
+        xfw = transformedContext xf' w'
+     in stepWire xfw dt (Right x))
+
+clippedResourceContext :: ResourceContextWire r a b
+                       -> ResourceContextWire r b c
+                       -> ResourceContextWire r a c
+clippedResourceContext cw w = RCW $ mkGen $ \dt x ->
+  second (getResourceWire . liftWire) <$>
+  (ReaderT $ \r ->
+    let cw' = withinContext r cw
+        w' = withinContext r w
+        xfw = clippedContext cw' w'
+     in stepWire xfw dt (Right x))
+
 joinResources :: Monoid b
               => [ContWire (a, Bool) (Maybe b)]
               -> ContWire (a, Bool) (Maybe b)
@@ -114,6 +165,13 @@ joinResources = mkWire . fmap msequence . sequenceA
 
 withDefault :: GameWire a b -> ContWire a b -> ContWire a b
 withDefault w (CW m) = CW $ w <|> m
+
+withSubResource :: (r' -> r)
+                -> ResourceContextWire r a b
+                -> ResourceContextWire r' a b
+withSubResource f (RCW w) = RCW $ mkGen $ \dt x -> do
+  (r, w') <- withReaderT f $ stepWire w dt (Right x)
+  return (r, getResourceWire $ withSubResource f (RCW w'))
 
 mkContWire :: (TimeStep -> a -> GameMonad (b, ContWire a b)) -> ContWire a b
 mkContWire f = CW $ mkGen $ \dt x -> do
