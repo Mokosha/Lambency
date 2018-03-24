@@ -307,6 +307,7 @@ data RenderFlag = Transparent
 
 data RenderObject = RenderObject
                     { material :: Material
+                    , objectVars :: ShaderMap
                     , render :: Shader -> ShaderMap -> IO ()
                     , flags :: [RenderFlag]
                     , unloadRenderObject :: IO ()
