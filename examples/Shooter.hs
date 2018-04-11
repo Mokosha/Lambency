@@ -96,26 +96,23 @@ inputWire =
   ((pure (V2 1 0) >>> keyPressed GLFW.Key'Right) <|> (pure zero)) `addVecWire`
   ((pure (V2 (-1) 0) >>> keyPressed GLFW.Key'Left) <|> (pure zero))
 
-loadGameResources :: IO (L.Texture, L.Texture, L.Sprite, L.Sprite)
+loadGameResources :: IO (L.Sprite, L.Sprite)
 loadGameResources = do
-  white <- L.createSolidTexture (255, 255, 255, 255)
-  red <- L.createSolidTexture (255, 0, 0, 255)
-  ship <- L.loadStaticSpriteWithTexture white
-  bullet <- L.loadStaticSpriteWithTexture red
-  return (white, red, ship, bullet)
+  let white = (255, 255, 255, 255)
+      red = (255, 0, 0, 255)
+  ship <- L.createSolidTexture white >>= L.loadStaticSpriteWithTexture
+  bullet <- L.createSolidTexture red >>= L.loadStaticSpriteWithTexture
+  return (ship, bullet)
 
-unloadGameResources :: (L.Texture, L.Texture, L.Sprite, L.Sprite) -> IO ()
-unloadGameResources (white, red, ship, bullet) = do
-  L.destroyTexture white
-  L.destroyTexture red
+unloadGameResources :: (L.Sprite, L.Sprite) -> IO ()
+unloadGameResources (ship, bullet) = do
   L.unloadSprite ship
   L.unloadSprite bullet
 
 gameWire :: L.ContWire ((), Bool) (Maybe ())
 gameWire =
   L.bracketResource loadGameResources unloadGameResources
-  $ L.withResource
-  $ \(_, _, ship, bullet) ->
+  $ L.withResource $ \(ship, bullet) ->
   let shipW = inputWire >>> shipWire (V2 240 320) ship bullet
 
       runBullet :: L.TimeStep -> Bullet -> L.GameMonad [Bullet]
