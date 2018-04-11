@@ -228,21 +228,20 @@ gameFeedback quad circle sound sysFont =
         (mkId &&& paddleWire playerOne quad handler) >>>
         collidePaddle playerOne s
 
-loadGameResources :: IO (L.Texture, L.Sprite, L.Sound, L.Font)
+loadGameResources :: IO (L.Sprite, L.Sound, L.Font)
 loadGameResources = do
-  white <- L.createSolidTexture (255, 255, 255, 255)
+  let color = (255, 255, 255, 255)
   quad <- L.changeSpriteColor (V4 0.4 0.6 0.2 1.0) <$>
-          L.loadStaticSpriteWithMask white
+          (L.createSolidTexture color >>= L.loadStaticSpriteWithMask)
   sound <- getDataFileName ("examples" </> "pong-bloop.wav") >>= L.loadSound
 
   fontFilename <- getDataFileName ("examples" </> "kenpixel.ttf")
   sysFont <- L.loadTTFont 36 (V3 1 1 1) fontFilename
 
-  return (white, quad, sound, sysFont)
+  return (quad, sound, sysFont)
 
-unloadGameResources :: (L.Texture, L.Sprite, L.Sound, L.Font) -> IO ()
-unloadGameResources (tex, sprite, sound, font) = do
-  L.destroyTexture tex
+unloadGameResources :: (L.Sprite, L.Sound, L.Font) -> IO ()
+unloadGameResources (sprite, sound, font) = do
   L.unloadSound sound
   L.unloadSprite sprite
   L.unloadFont font
@@ -251,7 +250,7 @@ gameWire :: L.ContWire (Int, Bool) (Maybe Int)
 gameWire =
   L.bracketResource loadGameResources unloadGameResources
   $ L.withResource
-  $ \(_, quad, sound, font) ->
+  $ \(quad, sound, font) ->
     let feedback = gameFeedback quad quad sound font
         staticSprites =
           mkWall False quad :
