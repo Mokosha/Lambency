@@ -61,7 +61,7 @@ matVarToList :: MaterialVar a -> [(String, ShaderValue)]
 matVarToList (MaterialVar (_, Nothing)) = []
 matVarToList (MaterialVar (name, Just val)) = [(name, val)]
 
-materialShaderVars :: Material -> ShaderMap
+materialShaderVars :: Material -> UniformMap
 materialShaderVars (BlinnPhongMaterial{..}) =
   Map.fromList $ concat
   [ matVarToList diffuseReflectivity,
@@ -127,14 +127,27 @@ diffuseColoredMaterial color =
 
 maskedSpriteMaterial :: Texture -> Material
 maskedSpriteMaterial tex =
-  defaultMaskedSprite { spriteMaskMatrix = MaterialVar ("spriteMaskMatrix", Just $ Matrix3Val $ identity),
-                        spriteMask = MaterialVar ("spriteMask", Just $ TextureVal tex) }
+  defaultMaskedSprite
+  { spriteMaskMatrix = MaterialVar
+                       ( "spriteMaskMatrix"
+                       , Just $ Matrix3Val $ identity
+                       ),
+    spriteMask = MaterialVar
+                 ( "spriteMask"
+                 , Just $ TextureVal undefined tex
+                 )
+  }
 
 texturedSpriteMaterial :: Texture -> Material
 texturedSpriteMaterial tex =
-  TexturedSpriteMaterial { spriteTextureMatrix = MaterialVar ("spriteMaskMatrix", Just $ Matrix3Val $ identity),
-                           spriteTexture = MaterialVar ("spriteMask", Just $ TextureVal tex),
-                           spriteAlpha = MaterialVar ("spriteAlpha", Just $ FloatVal 1) }
+  TexturedSpriteMaterial
+  { spriteTextureMatrix = MaterialVar
+                          ( "spriteMaskMatrix"
+                          , Just $ Matrix3Val $ identity
+                          ),
+    spriteTexture = MaterialVar ("spriteMask", Just $ TextureVal undefined tex),
+    spriteAlpha = MaterialVar ("spriteAlpha", Just $ FloatVal 1)
+  }
 
 updateMaterialVar3mf :: M33 Float -> MaterialVar (M33 Float) -> MaterialVar (M33 Float)
 updateMaterialVar3mf x (MaterialVar (n, _)) = MaterialVar (n, Just $ Matrix3Val x)
@@ -149,7 +162,8 @@ updateMaterialVarf :: Float -> MaterialVar Float -> MaterialVar Float
 updateMaterialVarf x (MaterialVar (n, _)) = MaterialVar (n, Just $ FloatVal x)
 
 updateMaterialVarTex :: Texture -> MaterialVar Texture -> MaterialVar Texture
-updateMaterialVarTex x (MaterialVar (n, _)) = MaterialVar (n, Just $ TextureVal x)
+updateMaterialVarTex x (MaterialVar (n, _)) =
+  MaterialVar (n, Just $ TextureVal undefined x)
 
 isDefined :: MaterialVar a -> Bool
 isDefined (MaterialVar (_, Nothing)) = False

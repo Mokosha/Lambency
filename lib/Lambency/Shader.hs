@@ -1,10 +1,9 @@
 {-# LANGUAGE RecordWildCards #-}
 module Lambency.Shader (
   getProgram,
-  getShaderVars,
   isUniform,
-  getUniforms,
   setUniformVar,
+  setUniformVals,
   destroyShader,
   beforeRender, afterRender,
 
@@ -42,86 +41,95 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.GL as GLRaw
 --------------------------------------------------------------------------------
 
-type ShaderVarMap = Map.Map String ShaderVar
-
 getProgram :: Shader -> GL.Program
 getProgram (Shader prg _) = prg
-
-getShaderVars :: Shader -> ShaderVarMap
-getShaderVars (Shader _ vars) = vars
 
 isUniform :: ShaderVar -> Bool
 isUniform (Uniform _ _) = True
 isUniform _ = False
 
-getUniforms :: Shader -> ShaderVarMap
-getUniforms = (Map.filter isUniform) . getShaderVars
+-- !TODO! Assert that the types align for 'combine'
+setUniformVals :: UniformMap -> ShaderMap -> ShaderMap
+setUniformVals = Map.mergeWithKey combine setNoLoc errorOnUnset
+  where
+    combine :: String -> ShaderValue -> ShaderVar -> Maybe ShaderVar
+    combine _ v (Uniform _ loc) = Just $ Uniform v loc
+    combine _ v (Attribute _ loc) = Just $ Attribute v loc
 
-setUniformVar :: ShaderVar -> ShaderValue -> IO ()
-setUniformVar (Uniform Matrix4Ty (GL.UniformLocation loc)) (Matrix4Val mat) = do
+    setNoLoc :: UniformMap -> ShaderMap
+    setNoLoc = Map.map (flip Uniform (GL.UniformLocation (-1)))
+
+    errorOnUnset :: ShaderMap -> ShaderMap
+    errorOnUnset = Map.mapWithKey checkIfUniform
+      where
+        checkIfUniform name (Uniform _ (GL.UniformLocation x))
+          | x >= 0 = error $ "Undefined uniform: " ++ name
+        checkIfUniform _ x = x
+
+setUniformVar :: GLRaw.GLuint -> ShaderVar -> IO GLRaw.GLuint
+setUniformVar x (Uniform (Matrix4Val mat) (GL.UniformLocation loc)) = do
   with mat $ \ptr ->
     GLRaw.glUniformMatrix4fv loc 1 0 (castPtr (ptr :: Ptr (M44 Float)))
+  return x
 
-setUniformVar (Uniform Matrix3Ty (GL.UniformLocation loc)) (Matrix3Val mat) = do
+setUniformVar x (Uniform (Matrix3Val mat) (GL.UniformLocation loc)) = do
   with mat $ \ptr ->
     GLRaw.glUniformMatrix3fv loc 1 0 (castPtr (ptr :: Ptr (M33 Float)))
+  return x
 
-setUniformVar (Uniform Matrix2Ty (GL.UniformLocation loc)) (Matrix2Val mat) = do
+setUniformVar x (Uniform (Matrix2Val mat) (GL.UniformLocation loc)) = do
   with mat $ \ptr ->
     GLRaw.glUniformMatrix2fv loc 1 0 (castPtr (ptr :: Ptr (M22 Float)))
+  return x
 
-setUniformVar (Uniform (TextureTy unit) loc) (TextureVal tex) = do
-  GL.activeTexture GL.$= (GL.TextureUnit unit)
+setUniformVar nextTexUnit (Uniform (TextureVal _ tex) loc) = do
+  GL.activeTexture GL.$= (GL.TextureUnit nextTexUnit)
   GL.textureBinding GL.Texture2D GL.$= Just (getGLTexObj tex)
-  GL.uniform loc GL.$= (GL.TextureUnit unit)
+  GL.uniform loc GL.$= (GL.TextureUnit nextTexUnit)
+  return $ nextTexUnit + 1
 
-setUniformVar (Uniform (ShadowMapTy unit) loc) (ShadowMapVal sm) =
-  setUniformVar (Uniform (TextureTy unit) loc) (TextureVal $ getShadowmapTexture sm)
+setUniformVar unit (Uniform (ShadowMapVal sampler sm) loc) =
+  setUniformVar unit $ Uniform (TextureVal sampler (getShadowmapTexture sm)) loc
 
-setUniformVar (Uniform FloatTy loc) (FloatVal f) = do
+setUniformVar unit (Uniform (FloatVal f) loc) = do
   GL.uniform loc GL.$= GL.Index1 ((realToFrac f) :: GL.GLfloat)
+  return unit
 
-setUniformVar (Uniform Vector3Ty loc) (Vector3Val (V3 x y z)) = do
-  GL.uniform loc GL.$= GL.Vertex3 (f x) (f y) (f z)
-  where
-    f :: Float -> GL.GLfloat
-    f = realToFrac
+setUniformVar unit (Uniform (Vector3Val vec) loc) =
+  let (V3 x y z) = (realToFrac :: Float -> GL.GLfloat) <$> vec
+  in GL.uniform loc GL.$= GL.Vertex3 x y z >> return unit
 
-setUniformVar (Uniform Vector4Ty loc) (Vector4Val (V4 x y z w)) = do
-  GL.uniform loc GL.$= GL.Vertex4 (f x) (f y) (f z) (f w)
-  where
-    f :: Float -> GL.GLfloat
-    f = realToFrac
+setUniformVar unit (Uniform (Vector4Val vec) loc) =
+  let (V4 x y z w) = (realToFrac :: Float -> GL.GLfloat) <$> vec
+  in GL.uniform loc GL.$= GL.Vertex4 x y z w >> return unit
 
-setUniformVar (Attribute _ _) _ = return ()
-setUniformVar (Uniform ty _) _ = ioError $ userError $ "Uniform not supported: " ++ (show ty)
+setUniformVar x (Attribute _ _) = return x
+setUniformVar _ (Uniform ty _) =
+  ioError $ userError $ "Uniform not supported: " ++ (show ty)
 
 destroyShader :: Shader -> IO ()
 destroyShader (Shader prog _) = GL.deleteObjectName prog
 
 beforeRender :: Shader -> IO ()
-beforeRender shdr = do
+beforeRender (Shader prog vars) = do
   -- Enable the program
-  GL.currentProgram GL.$= Just (getProgram shdr)
+  GL.currentProgram GL.$= Just prog
 
   -- Enable each vertex attribute that this material needs
-  mapM_ enableAttribute $ (Map.elems . getShaderVars) shdr
+  mapM_ enableAttribute $ Map.elems vars
   where enableAttribute :: ShaderVar -> IO ()
         enableAttribute v = case v of
-          Uniform _ _ -> return ()
           Attribute _ loc -> GL.vertexAttribArray loc GL.$= GL.Enabled
+          _ -> return ()
 
 afterRender :: Shader -> IO ()
-afterRender shdr = do
+afterRender (Shader _ vars) = do
   -- Disable each vertex attribute that this material needs
-  mapM_ disableAttribute $ (Map.elems . getShaderVars) shdr
+  mapM_ disableAttribute $ Map.elems vars
   where disableAttribute :: ShaderVar -> IO ()
         disableAttribute v = case v of
-          Uniform (TextureTy unit) _ -> do
-            GL.activeTexture GL.$= GL.TextureUnit unit
-            GL.textureBinding GL.Texture2D GL.$= Nothing
-          Uniform _ _ -> return ()
           Attribute _ loc -> GL.vertexAttribArray loc GL.$= GL.Disabled
+          _ -> return ()
 
 ----------------------------------------
 

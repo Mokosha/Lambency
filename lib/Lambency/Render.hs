@@ -60,7 +60,7 @@ data RenderStateFlag
 data RenderState = RenderState {
   nextStencilValue :: Int,
   currentRenderXF :: Transform,
-  currentRenderVars :: ShaderMap,
+  currentRenderVars :: UniformMap,
   currentRenderFlags :: [RenderStateFlag]
 }
 
@@ -156,12 +156,12 @@ createBasicRO [] _ _ = do
 createBasicRO verts@(v:_) idxs mat =
   let
     bindShaderVertexAttributes :: Shader -> IO ()
-    bindShaderVertexAttributes shdr = let
+    bindShaderVertexAttributes (Shader _ vars) = let
 
       -- Lookup the location for the given attribute name in the shader program
       lu :: String -> GL.AttribLocation
       lu name =
-        case Map.lookup name (getShaderVars shdr) of
+        case Map.lookup name vars of
            Nothing -> GL.AttribLocation (-1)
            Just var -> case var of
              Uniform _ _ -> GL.AttribLocation (-1)
@@ -176,14 +176,11 @@ createBasicRO verts@(v:_) idxs mat =
     -- Takes as input an array of vertices and indices and returns a function
     -- that renders the vertices for a given shader and shader variable mapping
     createRenderFunc :: GL.BufferObject -> GL.BufferObject ->
-                        GL.NumArrayIndices -> Shader -> ShaderMap -> IO ()
-    createRenderFunc vbo ibo nIndices shdr shdrmap = do
+                        GL.NumArrayIndices -> Shader -> UniformMap -> IO ()
+    createRenderFunc vbo ibo nIndices shdr@(Shader _ shdrVars) shdrmap = do
 
         -- Set all uniforms for this shader
-        let shdrVars = getShaderVars shdr
-        mapM_ (\(k, sv) -> case Map.lookup k shdrVars of
-          Nothing -> return ()
-          Just shdrVar -> setUniformVar shdrVar sv) (Map.toList shdrmap)
+        foldM_ setUniformVar 0 $ Map.elems $ setUniformVals shdrmap shdrVars
 
         -- Bind appropriate buffers
         GL.bindBuffer GL.ArrayBuffer GL.$= Just vbo
@@ -219,7 +216,7 @@ updateMatrices _ v1 _ = v1
 groupROsByMaterial :: [RenderObject] -> [[RenderObject]]
 groupROsByMaterial = groupWith (hash . material)
 
-renderROsWithShader :: [RenderObject] -> Shader -> ShaderMap -> IO ()
+renderROsWithShader :: [RenderObject] -> Shader -> UniformMap -> IO ()
 renderROsWithShader ros shdr shdrmap = do
   beforeRender shdr
   flip mapM_ ros $ \ro -> do
@@ -227,7 +224,7 @@ renderROsWithShader ros shdr shdrmap = do
     (render ro) shdr $ Map.union (objectVars ro) $ Map.union matVars shdrmap
   afterRender shdr
 
-renderLitROs :: [RenderObject] -> Light -> Maybe ShadowMap -> ShaderMap -> IO ()
+renderLitROs :: [RenderObject] -> Light -> Maybe ShadowMap -> UniformMap -> IO ()
 renderLitROs ros light sm shdrmap =
   let vars = Map.union shdrmap $ getLightShaderVars light
       renderWithShdr [] = return ()
@@ -239,7 +236,7 @@ renderLitROs ros light sm shdrmap =
         renderROsWithShader rs shdr vars
   in mapM_ renderWithShdr $ groupROsByMaterial ros
 
-renderUnlitROs :: [RenderObject] -> ShaderMap -> IO ()
+renderUnlitROs :: [RenderObject] -> UniformMap -> IO ()
 renderUnlitROs ros shdrmap =
   let renderWithShdr [] = return ()
       renderWithShdr rs@(ro : _) = do
@@ -250,18 +247,17 @@ renderUnlitROs ros shdrmap =
         renderROsWithShader rs shdr shdrmap
   in mapM_ renderWithShdr $ groupROsByMaterial ros
 
-appendCamXForm :: Camera -> ShaderMap -> ShaderMap
+appendCamXForm :: Camera -> UniformMap -> UniformMap
 appendCamXForm cam sm' =
-  let sm :: ShaderMap
-      sm = Map.singleton "mvpMatrix" (Matrix4Val $ getViewProjMatrix cam)
+  let sm = Map.singleton "mvpMatrix" (Matrix4Val $ getViewProjMatrix cam)
   in Map.unionWithKey updateMatrices sm' sm
 
-appendXform :: Transform -> ShaderMap -> ShaderMap
+appendXform :: Transform -> UniformMap -> UniformMap
 appendXform xform sm' = let
   matrix :: M44 Float
   matrix = xform2Matrix xform
 
-  sm :: ShaderMap
+  sm :: UniformMap
   sm = Map.fromList [ ("mvpMatrix", Matrix4Val matrix)
                     , ("m2wMatrix", Matrix4Val matrix)
                     ]
@@ -298,7 +294,7 @@ divideAndRenderROs ros cam light = do
         Nothing -> renderUnlitROs opaque vars
         Just l -> do
           case Map.lookup "shadowMap" vars of
-            Just (ShadowMapVal sm) -> renderLitROs opaque l (Just sm) vars
+            Just (ShadowMapVal _ sm) -> renderLitROs opaque l (Just sm) vars
             _ -> renderLitROs opaque l Nothing vars
       return $ fmap (\x -> (Nothing, x)) trans
 
@@ -358,7 +354,7 @@ renderLight act cam (Just (Light params lightTy (Just (shadowMap, _)))) = do
   [] <- withRenderFlag RenderState'DepthOnly $ renderLight act lcam Nothing
 
   liftIO clearRenderTexture
-  addRenderVar "shadowMap" (ShadowMapVal shadowMap)
+  addRenderVar "shadowMap" (ShadowMapVal undefined shadowMap)
   addRenderVar "shadowVP" shadowVP
   renderLight act cam (Just $ Light params lightTy Nothing)
 

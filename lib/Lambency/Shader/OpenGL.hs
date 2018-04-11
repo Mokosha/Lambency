@@ -3,8 +3,6 @@ module Lambency.Shader.OpenGL (
 ) where
 
 --------------------------------------------------------------------------------
-import Control.Monad (zipWithM)
-
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.List as List
 import qualified Data.Map as Map
@@ -265,61 +263,54 @@ generateShader prg ty = do
       error "Internal Error: OpenGL shader compilation failed!"
   return shdr
 
-toHighLevelTy :: Int -> ShaderVarTyRep -> L.ShaderVarTy
-toHighLevelTy _ Matrix2Ty = L.Matrix2Ty
-toHighLevelTy _ Matrix3Ty = L.Matrix3Ty
-toHighLevelTy _ Matrix4Ty = L.Matrix4Ty
-toHighLevelTy _ Matrix3ListTy = L.Matrix3ListTy
-toHighLevelTy _ Matrix4ListTy = L.Matrix4ListTy
-toHighLevelTy _ Vector2Ty = L.Vector2Ty
-toHighLevelTy _ Vector3Ty = L.Vector3Ty
-toHighLevelTy _ Vector4Ty = L.Vector4Ty
-toHighLevelTy _ Vector2ListTy = L.Vector2ListTy
-toHighLevelTy _ Vector3ListTy = L.Vector3ListTy
-toHighLevelTy _ Vector4ListTy = L.Vector4ListTy
-toHighLevelTy _ IntTy = L.IntTy
-toHighLevelTy _ IntListTy = L.IntListTy
-toHighLevelTy _ FloatTy = L.FloatTy
-toHighLevelTy _ FloatListTy = L.FloatListTy
-toHighLevelTy n Sampler1DTy = L.TextureTy (toEnum n)
-toHighLevelTy n Sampler2DTy = L.TextureTy (toEnum n)
-toHighLevelTy n Sampler3DTy = L.TextureTy (toEnum n)
-toHighLevelTy n Shadow2DTy = L.ShadowMapTy (toEnum n)
+toHighLevel :: ShaderVarTyRep -> L.ShaderValue
+toHighLevel Matrix2Ty = L.Matrix2Val identity
+toHighLevel Matrix3Ty = L.Matrix3Val identity
+toHighLevel Matrix4Ty = L.Matrix4Val identity
+toHighLevel Matrix3ListTy = L.Matrix3ListVal []
+toHighLevel Matrix4ListTy = L.Matrix4ListVal []
+toHighLevel Vector2Ty = L.Vector2Val zero
+toHighLevel Vector3Ty = L.Vector3Val zero
+toHighLevel Vector4Ty = L.Vector4Val zero
+toHighLevel Vector2ListTy = L.Vector2ListVal []
+toHighLevel Vector3ListTy = L.Vector3ListVal []
+toHighLevel Vector4ListTy = L.Vector4ListVal []
+toHighLevel IntTy = L.IntVal 0
+toHighLevel IntListTy = L.IntListVal []
+toHighLevel FloatTy = L.FloatVal 0
+toHighLevel FloatListTy = L.FloatListVal []
+toHighLevel Sampler1DTy = L.TextureVal undefined undefined
+toHighLevel Sampler2DTy = L.TextureVal undefined undefined
+toHighLevel Sampler3DTy = L.TextureVal undefined undefined
+toHighLevel Shadow2DTy = L.ShadowMapVal undefined undefined
 
-isSampler :: ShaderVarTyRep -> Bool
-isSampler Sampler1DTy = True
-isSampler Sampler2DTy = True
-isSampler Sampler3DTy = True
-isSampler Shadow2DTy = True
-isSampler _ = False
-
-toSamplerIdx :: Int -> Declaration -> Int
-toSamplerIdx idx (Uniform (ShdrVarRep _ _ ty)) = if isSampler ty then idx + 1 else idx
-toSamplerIdx _ _ = error "Only uniforms have sampler types!"
-
-lookupUniform :: GL.Program -> Int -> Declaration -> IO (String, L.ShaderVar)
-lookupUniform prg idx (Uniform v@(ShdrVarRep n _ ty)) = do
+lookupUniform :: GL.Program -> Declaration -> IO (String, L.ShaderVar)
+lookupUniform prg (Uniform v@(ShdrVarRep n _ ty)) = do
   uloc <- GL.get $ GL.uniformLocation prg (varName v)
   if uloc == (GL.UniformLocation (-1))
-    then error $ concat ["Internal Error: Did not find uniform ", n, " of type ", show ty]
-    else return (n, L.Uniform (toHighLevelTy idx ty) uloc)
-lookupUniform _ _ _ = error "Internal error: Is not a uniform!"
+    then error $ concat ["Internal Error: Did not find uniform "
+                        , n, " of type ", show ty
+                        ]
+    else return (n, L.Uniform (toHighLevel ty) uloc)
+lookupUniform _ _ = error "Internal error: Is not a uniform!"
 
 lookupAttrib :: GL.Program -> Declaration -> IO (String, L.ShaderVar)
 lookupAttrib prg (Attribute v@(ShdrVarRep n _ ty)) = do
   aloc <- GL.get $ GL.attribLocation prg (varName v)
   if aloc == (GL.AttribLocation (-1))
-    then error $ concat ["Internal Error: Did not find attribute ", n, " of type ", show ty]
-    else return (n, L.Attribute (toHighLevelTy undefined ty) aloc)
+    then error $ concat ["Internal Error: Did not find attribute "
+                        , n, " of type ", show ty
+                        ]
+    else return (n, L.Attribute (toHighLevel ty) aloc)
 lookupAttrib _ _ = error "Internal error: Is not an attribute!"
 
-genVariableLocs :: GL.Program -> [Declaration] -> IO (Map.Map String L.ShaderVar)
+genVariableLocs :: GL.Program -> [Declaration] -> IO (L.ShaderMap)
 genVariableLocs prg decls =
   let ufrms = filter ((== UniformDeclTy) . getDeclType) decls
       attribs = filter ((== AttributeDeclTy) . getDeclType) decls
   in do
     attrMap <- mapM (lookupAttrib prg) attribs
-    ufrmMap <- zipWithM (lookupUniform prg) (scanl toSamplerIdx 0 ufrms) ufrms
+    ufrmMap <- mapM (lookupUniform prg) ufrms
     return $ Map.union (Map.fromList attrMap) (Map.fromList ufrmMap)
 
 generateOpenGLShader :: Shader -> IO (L.Shader)

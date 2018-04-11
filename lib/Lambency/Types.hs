@@ -5,7 +5,7 @@ module Lambency.Types (
   Camera(..), CameraType(..), CameraViewDistance(..),
   LightVar(..), LightParams(..), LightType(..), Light(..),
   ShadowMap(..), ShadowTechnique(..),
-  Shader(..), ShaderVarTy(..), ShaderValue(..), ShaderVar(..), ShaderMap,
+  Shader(..), ShaderValue(..), ShaderVar(..), ShaderMap, UniformMap,
   Texture(..), TextureSize(..), TextureFormat(..), FBOHandle, TextureHandle(..),
   MaterialVar(..), NormalModulation(..), ReflectionInfo(..), Material(..),
   RenderFlag(..), RenderObject(..), RenderAction(..), RenderActions(..),
@@ -35,7 +35,6 @@ import Data.Time.Clock
 import FRP.Netwire.Input.GLFW
 
 import qualified Graphics.Rendering.OpenGL as GL
-import qualified Graphics.GL as GLRaw
 
 import Prelude hiding ((.), id)
 
@@ -93,51 +92,33 @@ data Camera = Camera XForm.Transform CameraType CameraViewDistance deriving(Show
 
 -- Shaders
 
-data ShaderVarTy = Matrix2Ty
-                 | Matrix3Ty
-                 | Matrix4Ty
-                 | Matrix3ListTy
-                 | Matrix4ListTy
-                 | Vector2Ty
-                 | Vector3Ty
-                 | Vector4Ty
-                 | Vector2ListTy
-                 | Vector3ListTy
-                 | Vector4ListTy
-                 | IntTy
-                 | IntListTy
-                 | FloatTy
-                 | FloatListTy
-                 | TextureTy GLRaw.GLuint
-                 | ShadowMapTy GLRaw.GLuint
-                 deriving (Show, Eq, Ord)
-
-data ShaderVar = Uniform ShaderVarTy GL.UniformLocation
-               | Attribute ShaderVarTy GL.AttribLocation
-               deriving (Show, Eq, Ord)
-
-type ShaderVarMap = Map.Map String ShaderVar
-
 data ShaderValue = Matrix2Val Mat2f
                  | Matrix3Val Mat3f
                  | Matrix4Val Mat4f
                  | Matrix3ListVal [Mat3f]
                  | Matrix4ListVal [Mat4f]
+                 | Vector2Val Vec2f
                  | Vector3Val Vec3f
                  | Vector4Val Vec4f
+                 | Vector2ListVal [Vec2f]
                  | Vector3ListVal [Vec3f]
                  | Vector4ListVal [Vec4f]
                  | IntVal Int
                  | IntListVal [Int]
                  | FloatVal Float
                  | FloatListVal [Float]
-                 | TextureVal Texture
-                 | ShadowMapVal ShadowMap
+                 | TextureVal Sampler Texture
+                 | ShadowMapVal Sampler ShadowMap
                  deriving (Show, Eq, Ord)
 
-type ShaderMap = Map.Map String ShaderValue
+data ShaderVar = Uniform ShaderValue GL.UniformLocation
+               | Attribute ShaderValue GL.AttribLocation
+               deriving (Show, Eq, Ord)
 
-data Shader = Shader GL.Program ShaderVarMap deriving(Show, Eq, Ord)
+type UniformMap = Map.Map String ShaderValue
+type ShaderMap = Map.Map String ShaderVar
+
+data Shader = Shader GL.Program ShaderMap deriving(Show, Eq, Ord)
 
 --------------------------------------------------------------------------------
 
@@ -155,6 +136,9 @@ data TextureFormat = RGBA8 | RGB8 | Alpha8
 data Texture = Texture TextureHandle TextureFormat
              | RenderTexture TextureHandle FBOHandle
                deriving(Show, Eq, Ord)
+
+-- !TODO! FIXME add actual sampler types (shadow PCF, bilinear, trilinear, etc)
+data Sampler = Sampler deriving (Show, Eq, Ord)
 
 --------------------------------------------------------------------------------
 
@@ -307,8 +291,8 @@ data RenderFlag = Transparent
 
 data RenderObject = RenderObject
                     { material :: Material
-                    , objectVars :: ShaderMap
-                    , render :: Shader -> ShaderMap -> IO ()
+                    , objectVars :: UniformMap
+                    , render :: Shader -> UniformMap -> IO ()
                     , flags :: [RenderFlag]
                     , unloadRenderObject :: IO ()
                     }
@@ -388,14 +372,18 @@ type TimeStep = W.Timed Float ()
 type GameSession = W.Session IO TimeStep
 
 newtype GameMonad a = GameMonad {
-  nextFrame :: RWST GameConfig ([OutputAction], RenderActions) GLFWInputState IO a
+  nextFrame :: RWST GameConfig                       -- Reader
+                    ([OutputAction], RenderActions)  -- Writer
+                    GLFWInputState                   -- State
+                    IO                               -- Bottom of Monad stack
+                    a
 } deriving ( Functor
            , Applicative
            , Alternative
            , Monad
            , MonadFix
            , MonadPlus
-           , MonadReader GameConfig  -- TODO: Fix once we add monad transformer
+           , MonadReader GameConfig
            )
 
 instance MonadGLFWInput GameMonad where

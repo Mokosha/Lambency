@@ -49,7 +49,7 @@ mkLightParams a c i =
   (mkLightVar3f "lightColor" c)
   (mkLightVarf "lightIntensity" i)
 
-getLightShaderVars :: Light -> ShaderMap
+getLightShaderVars :: Light -> UniformMap
 getLightShaderVars (Light params ty _) =
   let mkShdrVarPair :: LightVar a -> (String, ShaderValue)
       mkShdrVarPair (LightVar x) = x

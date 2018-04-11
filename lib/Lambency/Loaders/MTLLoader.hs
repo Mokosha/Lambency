@@ -195,7 +195,7 @@ updateReflectivity baseDir reflInfo (v1, v2) = do
       tex <- L.loadTexture $ baseDir </> fp
       case tex of
         Nothing -> return Nothing
-        Just t -> return . Just $ L.TextureVal t
+        Just t -> return . Just $ L.TextureVal undefined t
 
   return (L.MaterialVar (v1n, v1'), L.MaterialVar (v2n, v2'))
 
