@@ -5,8 +5,9 @@ module Lambency.Types (
   Camera(..), CameraType(..), CameraViewDistance(..),
   LightVar(..), LightParams(..), LightType(..), Light(..),
   ShadowMap(..), ShadowTechnique(..),
-  Shader(..), ShaderValue(..), ShaderVar(..), ShaderMap, UniformMap,
-  Texture(..), TextureSize(..), TextureFormat(..), FBOHandle, TextureHandle(..),
+  Shader(..), ShaderValue(..), ShaderVar(..), ShaderMap,
+  UniformBinding(..), AttributeBinding(..), UniformMap,
+  Texture(..), TextureSize(..), TextureFormat(..), FBOHandle(..), TextureHandle(..),
   MaterialVar(..), NormalModulation(..), ReflectionInfo(..), Material(..),
   RenderFlag(..), RenderObject(..), RenderAction(..), RenderActions(..),
   Sound, SoundCommand(..), SpriteFrame(..), Sprite(..),
@@ -111,8 +112,13 @@ data ShaderValue = Matrix2Val Mat2f
                  | ShadowMapVal Sampler ShadowMap
                  deriving (Show, Eq, Ord)
 
-data ShaderVar = Uniform ShaderValue GL.UniformLocation
-               | Attribute ShaderValue GL.AttribLocation
+data UniformBinding = OpenGLUniformBinding GL.UniformLocation
+                    deriving (Show, Eq, Ord)
+data AttributeBinding = OpenGLAttributeBinding GL.AttribLocation
+                      deriving (Show, Eq, Ord)
+
+data ShaderVar = Uniform ShaderValue UniformBinding
+               | Attribute ShaderValue AttributeBinding
                deriving (Show, Eq, Ord)
 
 type UniformMap = Map.Map String ShaderValue
@@ -127,8 +133,9 @@ data Shader = Shader GL.Program ShaderMap deriving(Show, Eq, Ord)
 newtype TextureSize = TexSize { getTextureSize :: Vec2i }
                       deriving(Show, Eq, Ord)
 
-type FBOHandle = GL.FramebufferObject
-data TextureHandle = TexHandle GL.TextureObject TextureSize
+data FBOHandle = OpenGLFBOHandle GL.FramebufferObject
+               deriving (Show, Eq, Ord)
+data TextureHandle = OpenGLTexHandle GL.TextureObject TextureSize
                      deriving(Show, Eq, Ord)
 data TextureFormat = RGBA8 | RGB8 | Alpha8
                      deriving(Show, Eq, Ord, Enum, Bounded)

@@ -44,12 +44,13 @@ kShadowMapSize :: GL.GLsizei
 kShadowMapSize = 1024
 
 getGLTexObj :: Texture -> GL.TextureObject
-getGLTexObj (Texture (TexHandle h _) _) = h
-getGLTexObj (RenderTexture (TexHandle h _) _) = h
+getGLTexObj (Texture (OpenGLTexHandle h _) _) = h
+getGLTexObj (RenderTexture (OpenGLTexHandle h _) _) = h
 
 getGLTexFmt :: Texture -> TextureFormat
 getGLTexFmt (Texture _ fmt) = fmt
-getGLTexFmt (RenderTexture _ _) = error "Render textures don't have a texture format"
+getGLTexFmt (RenderTexture _ _) =
+  error "Render textures don't have a texture format"
 
 fmt2glpfmt :: TextureFormat -> GL.PixelFormat
 fmt2glpfmt RGBA8 = GL.RGBA
@@ -60,7 +61,8 @@ internalglpfmt :: GL.PixelFormat -> GL.PixelInternalFormat
 internalglpfmt GL.RGBA = GL.RGBA8
 internalglpfmt GL.RGB = GL.RGB8
 internalglpfmt GL.Alpha = GL.Alpha8
-internalglpfmt _ = error "We don't know the data used for this pixelformat"
+internalglpfmt _ =
+  error "We don't know the data used for this pixelformat"
 
 isRenderTexture :: Texture -> Bool
 isRenderTexture (Texture _ _) = False
@@ -68,13 +70,13 @@ isRenderTexture (RenderTexture _ _) = True
 
 bindRenderTexture :: Texture -> IO ()
 bindRenderTexture (Texture _ _) = return ()
-bindRenderTexture (RenderTexture _ h) = do
+bindRenderTexture (RenderTexture _ (OpenGLFBOHandle h)) = do
   GL.bindFramebuffer GL.Framebuffer GL.$= h
   GL.viewport GL.$= (GL.Position 0 0, GL.Size kShadowMapSize kShadowMapSize)
 
 textureSize :: Texture -> V2 Int
-textureSize (Texture (TexHandle _ sz) _) = getTextureSize sz
-textureSize (RenderTexture (TexHandle _ sz) _) = getTextureSize sz
+textureSize (Texture (OpenGLTexHandle _ sz) _) = getTextureSize sz
+textureSize (RenderTexture (OpenGLTexHandle _ sz) _) = getTextureSize sz
 
 clearRenderTexture :: IO ()
 clearRenderTexture = do
@@ -113,10 +115,10 @@ clearRenderTexture = do
   GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral szx) (fromIntegral szy))
 
 destroyTexture :: Texture -> IO ()
-destroyTexture (Texture (TexHandle h _) fmt) = do
+destroyTexture (Texture (OpenGLTexHandle h _) fmt) = do
   putStrLn $ concat ["Destroying ", show fmt, " texture: ", show h]
   GL.deleteObjectName h
-destroyTexture (RenderTexture (TexHandle h _) fboh) = do
+destroyTexture (RenderTexture (OpenGLTexHandle h _) (OpenGLFBOHandle fboh)) = do
   putStrLn $ "Destroying framebuffer object."
   GL.deleteObjectName h
   GL.deleteObjectName fboh
@@ -124,7 +126,6 @@ destroyTexture (RenderTexture (TexHandle h _) fboh) = do
 initializeTexture :: Ptr a -> (Word32, Word32) -> TextureFormat -> IO (Texture)
 initializeTexture ptr (w, h) fmt = do
   handle <- GL.genObjectName
-  GL.activeTexture GL.$= GL.TextureUnit 0
   GL.textureBinding GL.Texture2D GL.$= Just handle
 
   let glfmt = fmt2glpfmt fmt
@@ -141,7 +142,8 @@ initializeTexture ptr (w, h) fmt = do
     "Loaded ", show fmt,
     " texture with dimensions ", show (w, h),
     ": ", show handle]
-  return $ Texture (TexHandle handle $ TexSize $ fmap fromEnum (V2 w h)) fmt
+  return $ flip Texture fmt
+         $ OpenGLTexHandle handle (TexSize $ fromEnum <$> V2 w h)
 
 updateTexture :: Texture -> Ptr a -> (Word32, Word32) -> (Word32, Word32) -> IO ()
 updateTexture (RenderTexture _ _) _ _ _ = putStrLn "Cannot update render texture"
@@ -200,7 +202,8 @@ loadTextureFromJPG filename = do
     Just img -> do
       case img of
         (JP.ImageYCbCr8 i) ->
-          let (JP.ImageRGB8 (JP.Image width height dat)) = JP.ImageRGB8 (JP.convertImage $ flipY i)
+          let (JP.ImageRGB8 (JP.Image width height dat)) =
+                JP.ImageRGB8 (JP.convertImage $ flipY i)
           in do
             tex <- Vector.unsafeWith dat $ \ptr ->
               initializeTexture ptr (fromIntegral width, fromIntegral height) RGB8
@@ -233,7 +236,9 @@ createDepthTexture = do
   GL.cullFace GL.$= Just GL.Back
   GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject
 
-  return $ RenderTexture (TexHandle handle $ TexSize $ fmap fromEnum (V2 kShadowMapSize kShadowMapSize)) rbHandle
+  let shadowMapSize = TexSize $ fromEnum <$> V2 kShadowMapSize kShadowMapSize
+  return $ RenderTexture (OpenGLTexHandle handle shadowMapSize)
+         $ OpenGLFBOHandle rbHandle
 
 createSolidTexture :: (Word8, Word8, Word8, Word8) -> IO(Texture)
 createSolidTexture (r, g, b, a) = do

@@ -291,7 +291,7 @@ lookupUniform prg (Uniform v@(ShdrVarRep n _ ty)) = do
     then error $ concat ["Internal Error: Did not find uniform "
                         , n, " of type ", show ty
                         ]
-    else return (n, L.Uniform (toHighLevel ty) uloc)
+    else return (n, L.Uniform (toHighLevel ty) (L.OpenGLUniformBinding uloc))
 lookupUniform _ _ = error "Internal error: Is not a uniform!"
 
 lookupAttrib :: GL.Program -> Declaration -> IO (String, L.ShaderVar)
@@ -301,7 +301,7 @@ lookupAttrib prg (Attribute v@(ShdrVarRep n _ ty)) = do
     then error $ concat ["Internal Error: Did not find attribute "
                         , n, " of type ", show ty
                         ]
-    else return (n, L.Attribute (toHighLevel ty) aloc)
+    else return (n, L.Attribute (toHighLevel ty) (L.OpenGLAttributeBinding aloc))
 lookupAttrib _ _ = error "Internal error: Is not an attribute!"
 
 genVariableLocs :: GL.Program -> [Declaration] -> IO (L.ShaderMap)
@@ -314,7 +314,8 @@ genVariableLocs prg decls =
     return $ Map.union (Map.fromList attrMap) (Map.fromList ufrmMap)
 
 generateOpenGLShader :: Shader -> IO (L.Shader)
-generateOpenGLShader (Shader vs@(ShaderProgram vs_decls _) fs@(ShaderProgram fs_decls _)) = do
+generateOpenGLShader (Shader vs@(ShaderProgram vs_decls _)
+                             fs@(ShaderProgram fs_decls _)) = do
   prg <- GL.createProgram
   generateShader vs GL.VertexShader >>= GL.attachShader prg
   generateShader fs GL.FragmentShader >>= GL.attachShader prg

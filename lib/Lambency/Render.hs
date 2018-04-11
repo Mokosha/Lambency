@@ -165,7 +165,7 @@ createBasicRO verts@(v:_) idxs mat =
            Nothing -> GL.AttribLocation (-1)
            Just var -> case var of
              Uniform _ _ -> GL.AttribLocation (-1)
-             Attribute _ loc -> loc
+             Attribute _ (OpenGLAttributeBinding loc) -> loc
 
       locattrib = filter ((/= GL.AttribLocation(-1)) . fst) $
                   zip (map lu $ getAttribNames v)
