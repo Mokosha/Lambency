@@ -9,7 +9,6 @@ module Lambency.Texture (
   destroyTexture,
   updateTexture,
   bindRenderTexture,
-  clearRenderTexture,
 ) where
 
 --------------------------------------------------------------------------------
@@ -18,19 +17,15 @@ import Control.Applicative
 #endif
 
 import qualified Graphics.Rendering.OpenGL as GL
-import qualified Graphics.UI.GLFW as GLFW
 
 import Lambency.Types
 
 import qualified Codec.Picture as JP
 import qualified Codec.Picture.Types as JP
 
-import Control.Monad (unless)
-
 -- import System.Directory
 import Foreign.Ptr
 import Data.Array.Storable
-import Data.Array.Unboxed
 import Data.Word
 import qualified Data.Vector.Storable as Vector
 import qualified Data.ByteString as BS
@@ -78,42 +73,6 @@ bindRenderTexture (RenderTexture _ (OpenGLFBOHandle h)) = do
 textureSize :: Texture -> V2 Int
 textureSize (Texture (OpenGLTexHandle _ sz) _) = getTextureSize sz
 textureSize (RenderTexture (OpenGLTexHandle _ sz) _) = getTextureSize sz
-
-clearRenderTexture :: IO ()
-clearRenderTexture = do
-  let depthfile = "depth.png"
---  exists <- doesFileExist depthfile
---  unless exists $ do
-  unless True $ do
-    GL.flush
-    arr <- newArray_ ((0, 0), (fromIntegral $ kShadowMapSize - 1, fromIntegral $ kShadowMapSize - 1))
-    withStorableArray arr (\ptr -> do
-      GL.readPixels (GL.Position 0 0)
-        (GL.Size kShadowMapSize kShadowMapSize)
-        (GL.PixelData GL.DepthComponent GL.Float ptr)
-      GL.flush)
-    farr <- (freeze :: StorableArray (Int, Int) Float -> IO (UArray (Int, Int) Float)) arr
-    let img = JP.generateImage
-              (\x y -> (round :: Float -> Word16) $ 65535 * (farr ! (x, y)))
-              (fromIntegral kShadowMapSize) (fromIntegral kShadowMapSize)
-
-        smallest :: Integer
-        smallest = fromIntegral $ Vector.minimum (JP.imageData img)
-
-        largest :: Integer
-        largest = fromIntegral $ Vector.maximum (JP.imageData img)
-
-        modulate :: Word16 -> Word16
-        modulate x = fromIntegral $
-                     (65535 * ((fromIntegral :: Integral a => a -> Integer) x - smallest))
-                     `div`
-                     (largest - smallest)
-
-    JP.writePng depthfile $ JP.pixelMap modulate img
-  GL.bindFramebuffer GL.Framebuffer GL.$= GL.defaultFramebufferObject
-  (Just m) <- GLFW.getCurrentContext
-  (szx, szy) <- GLFW.getFramebufferSize m
-  GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral szx) (fromIntegral szy))
 
 destroyTexture :: Texture -> IO ()
 destroyTexture (Texture (OpenGLTexHandle h _) fmt) = do
@@ -211,17 +170,17 @@ loadTextureFromJPG filename = do
             return $ Just tex
         _ -> return Nothing
 
-createDepthTexture :: IO (Texture)
+createDepthTexture :: IO Texture
 createDepthTexture = do
   handle <- GL.genObjectName
-  GL.activeTexture GL.$= GL.TextureUnit 0
   GL.textureBinding GL.Texture2D GL.$= Just handle
   GL.textureWrapMode GL.Texture2D GL.S GL.$= (GL.Repeated, GL.ClampToEdge)
   GL.textureWrapMode GL.Texture2D GL.T GL.$= (GL.Repeated, GL.ClampToEdge)
   GL.textureFilter GL.Texture2D GL.$= ((GL.Linear', Nothing), GL.Linear')
   GL.textureCompareMode GL.Texture2D GL.$= (Just GL.Lequal)
   GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.DepthComponent'
-    (GL.TextureSize2D kShadowMapSize kShadowMapSize) 0 $ GL.PixelData GL.DepthComponent GL.UnsignedInt nullPtr
+                (GL.TextureSize2D kShadowMapSize kShadowMapSize) 0
+                (GL.PixelData GL.DepthComponent GL.UnsignedInt nullPtr)
 
   putStrLn "Creating framebuffer object..."
   rbHandle <- GL.genObjectName
