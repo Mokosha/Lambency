@@ -335,7 +335,7 @@ run initialGameObject initialGame win = do
 
   -- !FIXME! Use fully opaque 'mask' texture that we can change the color and
   -- size for dynamically. This isn't the best way to do this, but it'll work.
-  sprite <- createSolidTexture (255, 255, 255, 255) >>= loadStaticSpriteWithMask
+  sprite <- createSolidTexture (pure 255) >>= loadStaticSpriteWithMask
 
   let statePrg = runReaderT (runLoop curTime) $ GameLoopConfig sprite ictl win
   evalStateT statePrg $

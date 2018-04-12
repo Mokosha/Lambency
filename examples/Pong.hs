@@ -230,7 +230,7 @@ gameFeedback quad circle sound sysFont =
 
 loadGameResources :: IO (L.Sprite, L.Sound, L.Font)
 loadGameResources = do
-  let color = (255, 255, 255, 255)
+  let color = pure 255
   quad <- L.changeSpriteColor (V4 0.4 0.6 0.2 1.0) <$>
           (L.createSolidTexture color >>= L.loadStaticSpriteWithMask)
   sound <- getDataFileName ("examples" </> "pong-bloop.wav") >>= L.loadSound

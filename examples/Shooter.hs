@@ -98,8 +98,8 @@ inputWire =
 
 loadGameResources :: IO (L.Sprite, L.Sprite)
 loadGameResources = do
-  let white = (255, 255, 255, 255)
-      red = (255, 0, 0, 255)
+  let white = pure 255
+      red = V4 255 0 0 255
   ship <- L.createSolidTexture white >>= L.loadStaticSpriteWithTexture
   bullet <- L.createSolidTexture red >>= L.loadStaticSpriteWithTexture
   return (ship, bullet)

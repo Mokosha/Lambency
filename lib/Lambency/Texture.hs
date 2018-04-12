@@ -36,6 +36,7 @@ import qualified Data.Vector.Storable as Vector
 import qualified Data.ByteString as BS
 
 import Linear.V2
+import Linear.V4
 
 import System.FilePath (takeExtension)
 --------------------------------------------------------------------------------
@@ -240,8 +241,8 @@ createDepthTexture = do
   return $ RenderTexture (OpenGLTexHandle handle shadowMapSize)
          $ OpenGLFBOHandle rbHandle
 
-createSolidTexture :: (Word8, Word8, Word8, Word8) -> IO(Texture)
-createSolidTexture (r, g, b, a) = do
+createSolidTexture :: V4 Word8 -> IO(Texture)
+createSolidTexture (V4 r g b a) = do
   carr <- newListArray (0 :: Integer, 3) [r, g, b, a]
   withStorableArray carr (\ptr -> initializeTexture ptr (1, 1) RGBA8)
 
