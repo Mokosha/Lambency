@@ -36,6 +36,9 @@ import FRP.Netwire.Input
 import qualified Yoga as Y
 ---------------------------------------------------------------------------------
 
+quitWire :: L.ContWire a Bool
+quitWire = (pure True W.>>> keyPressed GLFW.Key'Q) `L.withDefault` pure False
+
 initialCam :: L.Camera
 initialCam = L.mkPerspCamera
              -- Pos           Dir              Up
@@ -120,14 +123,21 @@ cubeWire =
               L.uniformScale 2.0 $
               L.identity
 
-lightWire :: L.Light -> L.ContWire () L.Light
-lightWire initial =
-  flip L.withDefault (pure initial) $
-  (W.timeF W.>>>) $ W.mkSF_ $ \t ->
-  let Just (V3 _ py pz) = L.getLightPosition initial
-      newPos = V3 (sin(t) * 10) py pz
+lightWire :: L.ContWire a L.Light
+lightWire =
+  let lightPos = 5 *^ (V3 (-2) 1 0)
+      lightParams = L.mkLightParams (V3 0.15 0.15 0.15) (V3 1.0 1.0 1.0) 1.0
+      initial = L.spotlight lightParams lightPos (negate lightPos) (pi/4)
+      (Just (V3 _ py pz)) = L.getLightPosition initial
+  in
+  ((arr $ maybe (error "Light wire inhibited?") id) W.<<<)
+  $ ((id &&& quitWire) W.>>>)
+  $ L.bracketResource (L.addShadowMap initial) L.removeShadowMap
+  $ L.withResource
+  $ \l -> (W.timeF W.>>>) $ W.mkSF_ $ \t ->
+  let newPos = V3 (sin(t) * 10) py pz
   in L.setLightPosition newPos $
-     L.setLightDirection (negate newPos) initial
+     L.setLightDirection (negate newPos) l
 
 loadFont :: IO L.Font
 loadFont = L.loadTTFont 18 (V3 1 0 0) =<<
@@ -179,19 +189,10 @@ uiWire = L.bracketResource loadFont L.unloadFont
                       $ Y.withMargin Y.Edge'Top 15.0
                       $ Y.exact 300.0 50.0
 
-loadGame :: IO (L.Game ())
-loadGame = do
-  let quitWire =
-        (pure True W.>>> keyPressed GLFW.Key'Q) `L.withDefault` pure False
-      gameWire =
-        (id W.&&& quitWire) W.>>> L.joinResources [cubeWire, bunny, plane, uiWire]
-      lightPos = 5 *^ (V3 (-2) 1 0)
-      lightParams = L.mkLightParams (V3 0.15 0.15 0.15) (V3 1.0 1.0 1.0) 1.0
-  shadowLight <- L.addShadowMap $
-                 L.spotlight lightParams lightPos (negate lightPos) (pi/4)
-  return $ L.Game { L.mainCamera = demoCam,
-                    L.dynamicLights = [lightWire shadowLight],
-                    L.gameLogic = gameWire }
+game :: L.Game ()
+game =
+  L.Game demoCam [lightWire]
+  $ (id W.&&& quitWire) W.>>> L.joinResources [cubeWire, bunny, plane, uiWire]
 
 main :: IO ()
-main = L.withWindow 640 480 "Cube Demo" $ L.loadAndRun () loadGame
+main = L.withWindow 640 480 "Cube Demo" $ L.run () game
