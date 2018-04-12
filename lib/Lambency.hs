@@ -76,7 +76,6 @@ import Lambency.UI
 import Lambency.Utils
 
 import System.CPUTime
-import System.Exit
 import System.IO
 --------------------------------------------------------------------------------
 
@@ -282,8 +281,7 @@ runGame = do
       liftIO $ runRWST (nextFrame gameStep) frameConfig ipt
 
   -- The ReaderT RenderConfig IO program that will do the actual rendering
-  let renderPrg = performRenderActions lights cam renderActs
-      needsRender = case result of
+  let needsRender = case result of
         Nothing -> False
         Just _ -> (accum - physicsDeltaUTC) < physicsDeltaUTC
 
@@ -291,18 +289,8 @@ runGame = do
     if needsRender
     then liftIO $ do
       t <- getCPUTime
-
-      -- !FIXME! This should be moved to the camera...
-      GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
-      clearBuffers
-      () <- evalStateT renderPrg initialRenderState
-      GL.flush
-      GLFW.swapBuffers (glfwWin gameLoopConfig)
-
+      render (glfwWin gameLoopConfig) lights cam renderActs
       t' <- getCPUTime
-
-      GL.get GL.errors >>= foldM (\() e -> print e >> exitFailure) ()
-
       return (t' - t)
     else return renderTime
 

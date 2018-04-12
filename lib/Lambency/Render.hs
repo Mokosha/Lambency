@@ -1,12 +1,6 @@
 module Lambency.Render (
-  Renderable(..),
-  RenderState, initialRenderState,
-  RenderContext,
-  emptyRenderActions,
-  clearBuffers,
-  createBasicRO,
-  xformObject,
-  performRenderActions,
+  render,
+  createRenderObject,
   addRenderAction,
   addRenderUIAction,
   addClippedRenderAction,
@@ -26,7 +20,7 @@ import Control.Monad.State
 
 import Data.Array.IO
 import Data.Array.Storable
-import Data.Array.Unboxed
+import Data.Array.Unboxed hiding (indices)
 import Data.Bits (complement)
 import Data.Function (on)
 import Data.Hashable
@@ -46,6 +40,7 @@ import qualified Graphics.UI.GLFW as GLFW
 
 import Lambency.Camera
 import Lambency.Material
+import Lambency.Mesh
 import Lambency.Light
 import Lambency.Shader
 import Lambency.Texture
@@ -56,6 +51,7 @@ import Lambency.Vertex
 import Linear hiding (trace, identity)
 
 import System.Directory
+import System.Exit
 import System.IO.Unsafe
 --------------------------------------------------------------------------------
 
@@ -75,12 +71,6 @@ type TransparentRenderAction = (Maybe Int, RenderObject)
 
 initialRenderState :: RenderState
 initialRenderState = RenderState 1 identity Map.empty []
-
-emptyRenderActions :: RenderActions
-emptyRenderActions = RenderActions {
-  renderScene = RenderObjects [],
-  renderUI = RenderObjects []
-}
 
 data ShaderCache = ShaderCache {
   unlitShaders :: Map.Map Int Shader, -- Parameterized by material hashes
@@ -154,7 +144,7 @@ createBasicRO [] _ _ = do
   return $ RenderObject {
     material = NoMaterial,
     objectVars = Map.empty,
-    render = \_ _ -> return (),
+    renderObject = \_ _ -> return (),
     flags = [],
     unloadRenderObject = return ()
   }
@@ -206,13 +196,13 @@ createBasicRO verts@(v:_) idxs mat =
       -- material after being compiled into shader code...
       material = mat,
       objectVars = Map.empty,
-      render = createRenderFunc vbo ibo $ fromIntegral (length idxs),
+      renderObject = createRenderFunc vbo ibo $ fromIntegral (length idxs),
       flags = [],
       unloadRenderObject = GL.deleteObjectName vbo >> GL.deleteObjectName ibo
     }
 
-class Renderable a where
-  createRenderObject :: a -> Material -> IO (RenderObject)
+createRenderObject :: Vertex a => Mesh a -> Material -> IO RenderObject
+createRenderObject m = createBasicRO (vertices m) (indices m)
 
 updateMatrices :: String -> ShaderValue -> ShaderValue -> ShaderValue
 updateMatrices "mvpMatrix" (Matrix4Val m1) (Matrix4Val m2) = Matrix4Val $ m1 !*! m2
@@ -227,7 +217,8 @@ renderROsWithShader ros shdr shdrmap = do
   beforeRender shdr
   flip mapM_ ros $ \ro -> do
     let matVars = materialShaderVars $ material ro
-    (render ro) shdr $ Map.union (objectVars ro) $ Map.union matVars shdrmap
+        uniforms = Map.union (objectVars ro) $ Map.union matVars shdrmap
+    renderObject ro shdr uniforms
   afterRender shdr
 
 renderLitROs :: [RenderObject] -> Light -> Maybe ShadowMap -> UniformMap -> IO ()
@@ -524,7 +515,7 @@ sortAndRenderTransparent light acts = do
     collapse :: TransparentRenderAction -> RenderObject
     collapse (Nothing, ro) = ro
     collapse (Just stencil, ro) = ro {
-      render = \shdr shdrMap -> do
+      renderObject = \shdr shdrMap -> do
          -- Enable drawing to the color buffers, and disable drawing to the stencil
          -- and depth buffers
          GL.stencilTest GL.$= GL.Enabled
@@ -537,7 +528,7 @@ sortAndRenderTransparent light acts = do
          -- geometry. To only render where we have clipped stuff, we should set
          -- the stencil func to test for equality
          GL.stencilFunc GL.$= (GL.Equal, fromIntegral stencil, complement 0)
-         render ro shdr shdrMap
+         renderObject ro shdr shdrMap
 
          -- Finally, disable the stencil test
          GL.stencilTest GL.$= GL.Disabled
@@ -566,6 +557,19 @@ performRenderActions lights camera actions = do
   transUI <- renderLight (renderUI actions) cam Nothing
   transText <- renderText (renderUI actions) cam
   sortAndRenderTransparent Nothing $ transUI ++ transText
+
+render :: GLFW.Window -> [Light] -> Camera -> RenderActions -> IO ()
+render win lights cam acts = do
+  -- !FIXME! This should be moved to the camera...
+  GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
+  clearBuffers
+  let renderPrg = performRenderActions lights cam acts
+  result <- evalStateT renderPrg initialRenderState
+  GL.flush
+  GLFW.swapBuffers win
+
+  GL.get GL.errors >>= foldM (\() e -> print e >> exitFailure) ()
+  return result
 
 -- !FIXME! This would probably be cleaner with lenses
 createClippedActions :: RenderActions -> RenderActions -> RenderActions

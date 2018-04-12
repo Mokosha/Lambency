@@ -17,7 +17,6 @@ module Lambency.Mesh (
 
 --------------------------------------------------------------------------------
 
-import Lambency.Render
 import Lambency.Vertex
 
 #if __GLASGOW_HASKELL__ <= 708
@@ -128,9 +127,6 @@ quad = Mesh {
     texToVert :: Vec2f -> Vec3f
     texToVert (V2 x y) = V3 x (1 - y) 0
 
-
-instance Vertex a => Renderable (Mesh a) where
-  createRenderObject m mat = createBasicRO (vertices m) (indices m) mat
 
 type Triangle = (Vec3f, Vec3f, Vec3f)
 
