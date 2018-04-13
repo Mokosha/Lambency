@@ -183,10 +183,10 @@ script:
   set -ex
   case "$BUILD" in
     stack)
-      stack --no-terminal $ARGS build --bench --no-run-benchmarks --haddock --no-haddock-deps
+      stack --no-terminal $ARGS build --bench --no-run-benchmarks --haddock --no-haddock-deps --flag lambency:examples
       ;;
     cabal)
-      cabal install --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
+      cabal install -fexamples --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
 
       ORIGDIR=$(pwd)
       for dir in $PACKAGES
