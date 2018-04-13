@@ -124,7 +124,7 @@ data ShaderVar = Uniform ShaderValue UniformBinding
 type UniformMap = Map.Map String ShaderValue
 type ShaderMap = Map.Map String ShaderVar
 
-data Shader = Shader GL.Program ShaderMap deriving(Show, Eq, Ord)
+data Shader = OpenGLShader GL.Program ShaderMap deriving(Show, Eq, Ord)
 
 --------------------------------------------------------------------------------
 

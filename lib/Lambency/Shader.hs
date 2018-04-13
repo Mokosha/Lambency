@@ -1,7 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
 module Lambency.Shader (
-  getProgram,
-  isUniform,
   setUniformVar,
   setUniformVals,
   destroyShader,
@@ -40,13 +38,6 @@ import Foreign.Ptr
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.GL as GLRaw
 --------------------------------------------------------------------------------
-
-getProgram :: Shader -> GL.Program
-getProgram (Shader prg _) = prg
-
-isUniform :: ShaderVar -> Bool
-isUniform (Uniform _ _) = True
-isUniform _ = False
 
 -- !TODO! Assert that the types align for 'combine'
 setUniformVals :: UniformMap -> ShaderMap -> ShaderMap
@@ -120,10 +111,10 @@ setUniformVar _ (Uniform ty _) =
   ioError $ userError $ "Uniform not supported: " ++ (show ty)
 
 destroyShader :: Shader -> IO ()
-destroyShader (Shader prog _) = GL.deleteObjectName prog
+destroyShader (OpenGLShader prog _) = GL.deleteObjectName prog
 
 beforeRender :: Shader -> IO ()
-beforeRender (Shader prog vars) = do
+beforeRender (OpenGLShader prog vars) = do
   -- Enable the program
   GL.currentProgram GL.$= Just prog
 
@@ -137,7 +128,7 @@ beforeRender (Shader prog vars) = do
           _ -> return ()
 
 afterRender :: Shader -> IO ()
-afterRender (Shader _ vars) = do
+afterRender (OpenGLShader _ vars) = do
   -- Disable each vertex attribute that this material needs
   mapM_ disableAttribute $ Map.elems vars
   where disableAttribute :: ShaderVar -> IO ()
@@ -233,10 +224,15 @@ handleUnlitVertex texture texMatrix = I.ShdrCode $ do
   return output
 
 genUnlitVertexShader :: Material -> I.ShaderCode
-genUnlitVertexShader (MaskedSpriteMaterial {..}) = handleUnlitVertex spriteMask spriteMaskMatrix
-genUnlitVertexShader (TexturedSpriteMaterial {..}) = handleUnlitVertex spriteTexture spriteTextureMatrix
+genUnlitVertexShader (MaskedSpriteMaterial {..}) =
+  handleUnlitVertex spriteMask spriteMaskMatrix
+genUnlitVertexShader (TexturedSpriteMaterial {..}) =
+  handleUnlitVertex spriteTexture spriteTextureMatrix
 genUnlitVertexShader m =
-  error $ "Lambency.Shader (genLitVertexShader): Cannot generate unlit vertex shader for material: " ++ show m
+  error $ concat [ "Lambency.Shader (genLitVertexShader): "
+                 , "Cannot generate unlit vertex shader for material: "
+                 , show m
+                 ]
 
 genUnlitFragmentShader :: Material -> I.ShaderCode
 genUnlitFragmentShader (MaskedSpriteMaterial{..}) =
@@ -257,7 +253,9 @@ genUnlitFragmentShader (MaskedSpriteMaterial{..}) =
 
     color <- case spriteMaskColor of
       MaterialVar (_, Nothing) ->
-        error "Lambency.Shader (genUnlitFragmentShader): Masked material must have color!"
+        error $ concat [ "Lambency.Shader (genUnlitFragmentShader): "
+                       , "Masked material must have color!"
+                       ]
       MaterialVar (name, _) -> I.newUniformVar name I.vector4fTy
 
     outColor <- I.setE I.vector4fTy $
@@ -630,10 +628,11 @@ genShadowedFragShader light mat = I.ShdrCode $ do
   shadow <- genShadowFragment
 
   ambientColor <- getAmbientColor (lightParams light) mat
-  finalColor <- I.setE I.vector3fTy $
-                I.add3f (I.mult3f (I.mkVarExpr ambientColor) (I.mkVarExpr diffuseColor)) $
-                I.scale3f (I.mkVarExpr litFragment) $
-                I.mkVarExpr shadow
+  finalColor <- I.setE I.vector3fTy
+              $ I.add3f (I.mult3f (I.mkVarExpr ambientColor)
+                                  (I.mkVarExpr diffuseColor))
+              $ I.scale3f (I.mkVarExpr litFragment)
+              $ I.mkVarExpr shadow
 
   -- !TODO! materials should be able to define opacity...
   let alpha = I.mkConstf 1.0
@@ -662,7 +661,10 @@ compileUnlitMaterial NoMaterial =
   error "Lambency.Shader (compileUnlitMaterial): Cannot compile non-material!"
 compileUnlitMaterial MinimalMaterial = createMinimalShader
 compileUnlitMaterial mat
-  | (not.isUnlit) mat = error "Lambency.Shader (compileUnlitMaterial): Material requires light!"
+  | (not.isUnlit) mat = error
+                      $ concat [ "Lambency.Shader (compileUnlitMaterial): "
+                               , "Material requires light!"
+                               ]
   | otherwise = I.generateOpenGLShader $ I.compileProgram vshdr fshdr
   where
     vshdr = genUnlitVertexShader mat

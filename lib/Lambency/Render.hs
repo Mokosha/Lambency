@@ -138,21 +138,19 @@ setupBuffer tgt xs = do
   return buf
 
 createBasicRO :: (Vertex a) => [a] -> [Int32] -> Material -> IO (RenderObject)
-
--- If there's no vertices, then there's nothing to render...
 createBasicRO [] _ _ = do
   return $ RenderObject {
     material = NoMaterial,
     objectVars = Map.empty,
+    -- If there's no vertices, then there's nothing to render...
     renderObject = \_ _ -> return (),
     flags = [],
     unloadRenderObject = return ()
   }
-
 createBasicRO verts@(v:_) idxs mat =
   let
     bindShaderVertexAttributes :: Shader -> IO ()
-    bindShaderVertexAttributes (Shader _ vars) = let
+    bindShaderVertexAttributes (OpenGLShader _ vars) = let
 
       -- Lookup the location for the given attribute name in the shader program
       lu :: String -> GL.AttribLocation
@@ -173,7 +171,7 @@ createBasicRO verts@(v:_) idxs mat =
     -- that renders the vertices for a given shader and shader variable mapping
     createRenderFunc :: GL.BufferObject -> GL.BufferObject ->
                         GL.NumArrayIndices -> Shader -> UniformMap -> IO ()
-    createRenderFunc vbo ibo nIndices shdr@(Shader _ shdrVars) shdrmap = do
+    createRenderFunc vbo ibo nIndices shdr@(OpenGLShader _ shdrVars) shdrmap = do
 
         -- Set all uniforms for this shader
         foldM_ setUniformVar 0 $ Map.elems $ setUniformVals shdrmap shdrVars

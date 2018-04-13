@@ -323,4 +323,4 @@ generateOpenGLShader (Shader vs@(ShaderProgram vs_decls _)
 
   vars <- genVariableLocs prg (vs_decls ++ fs_decls)
   
-  return $ L.Shader prg vars
+  return $ L.OpenGLShader prg vars
