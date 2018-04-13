@@ -156,9 +156,8 @@ install:
   case "$BUILD" in
     stack)
       # Add in extra-deps for older snapshots, as necessary
-      stack --no-terminal --install-ghc $ARGS test --bench --dry-run || ( \
-        stack --no-terminal install cabal-install && \
-        stack --no-terminal $ARGS init --solver )
+      stack --no-terminal install cabal-install
+      stack --no-terminal $ARGS init --solver
 
       # Build the dependencies
       stack --no-terminal --install-ghc $ARGS test --bench --only-dependencies
