@@ -62,28 +62,28 @@ matrix:
 
   - env: BUILD=stack ARGS="--resolver lts-3"
     compiler: ": #stack 7.10.2"
-    addons: {apt: {packages: [libgmp-dev]}}
+    addons: {apt: {packages: [xorg-dev,libopenal-dev,libgmp-dev]}}
 
   - env: BUILD=stack ARGS="--resolver lts-6"
     compiler: ": #stack 7.10.3"
-    addons: {apt: {packages: [libgmp-dev]}}
+    addons: {apt: {packages: [xorg-dev,libopenal-dev,libgmp-dev]}}
 
   - env: BUILD=stack ARGS="--resolver lts-7"
     compiler: ": #stack 8.0.1"
-    addons: {apt: {packages: [libgmp-dev]}}
+    addons: {apt: {packages: [xorg-dev,libopenal-dev,libgmp-dev]}}
 
   - env: BUILD=stack ARGS="--resolver lts-9"
     compiler: ": #stack 8.0.2"
-    addons: {apt: {packages: [libgmp-dev]}}
+    addons: {apt: {packages: [xorg-dev,libopenal-dev,libgmp-dev]}}
 
   - env: BUILD=stack ARGS="--resolver lts-11"
     compiler: ": #stack 8.2.2"
-    addons: {apt: {packages: [libgmp-dev]}}
+    addons: {apt: {packages: [xorg-dev,libopenal-dev,libgmp-dev]}}
 
   # Nightly builds are allowed to fail
   - env: BUILD=stack ARGS="--resolver nightly"
     compiler: ": #stack nightly"
-    addons: {apt: {packages: [libgmp-dev]}}
+    addons: {apt: {packages: [xorg-dev,libopenal-dev,libgmp-dev]}}
 
   # Build on macOS in addition to Linux
   - env: BUILD=stack ARGS=""
