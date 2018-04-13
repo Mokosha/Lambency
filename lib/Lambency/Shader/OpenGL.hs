@@ -297,7 +297,7 @@ lookupUniform _ _ = error "Internal error: Is not a uniform!"
 lookupAttrib :: GL.Program -> Declaration -> IO (String, L.ShaderVar)
 lookupAttrib prg (Attribute v@(ShdrVarRep n _ ty)) = do
   aloc <- GL.get $ GL.attribLocation prg (varName v)
-  if aloc == (GL.AttribLocation (-1))
+  if aloc == (GL.AttribLocation maxBound)
     then error $ concat ["Internal Error: Did not find attribute "
                         , n, " of type ", show ty
                         ]

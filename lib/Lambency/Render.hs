@@ -156,12 +156,12 @@ createBasicRO verts@(v:_) idxs mat =
       lu :: String -> GL.AttribLocation
       lu name =
         case Map.lookup name vars of
-           Nothing -> GL.AttribLocation (-1)
+           Nothing -> GL.AttribLocation maxBound
            Just var -> case var of
-             Uniform _ _ -> GL.AttribLocation (-1)
+             Uniform _ _ -> GL.AttribLocation maxBound
              Attribute _ (OpenGLAttributeBinding loc) -> loc
 
-      locattrib = filter ((/= GL.AttribLocation(-1)) . fst) $
+      locattrib = filter ((/= GL.AttribLocation maxBound) . fst) $
                   zip (map lu $ getAttribNames v)
                       (vertexAttributesToOpenGL . getVertexAttributes $ v)
       in flip mapM_ locattrib $ \(loc, desc) ->
