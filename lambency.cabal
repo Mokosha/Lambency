@@ -86,6 +86,7 @@ library
                        OpenGLRaw            >= 3.1,
                        parsec               >= 3.1.7,
                        profunctors,
+                       semigroups,
                        stm                  >= 2.4,
                        text,
                        time,

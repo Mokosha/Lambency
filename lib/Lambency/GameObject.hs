@@ -22,6 +22,7 @@ import Control.Wire
 import Data.Maybe
 import Data.Either (isLeft)
 import Data.Foldable
+import Data.Semigroup ()
 
 import Lambency.Render
 import Lambency.Sound
@@ -78,11 +79,11 @@ clippedContext cw w = mkGen $ \dt x ->
     Right clip -> second (clippedContext cw') <$> stepWire w dt (Right clip)
     Left i -> return (Left i, clippedContext cw' w)
 
-withVelocity :: (Monad m, Monoid s) =>
+withVelocity :: (Monad m, Semigroup s, Monoid s) =>
                 Transform -> Wire (Timed Float s) e m a Vec3f ->
                 Wire (Timed Float s) e m a Transform
 withVelocity initial velWire = velWire >>> (moveXForm initial)
-  where moveXForm :: (Monad m, Monoid s) =>
+  where moveXForm :: (Monad m, Semigroup s, Monoid s) =>
                      Transform -> Wire (Timed Float s) e m Vec3f Transform
         moveXForm xf = mkPure $ \t vel -> let
           newxform = translate (dtime t *^ vel) xf
