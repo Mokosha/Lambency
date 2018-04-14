@@ -391,6 +391,7 @@ newtype GameMonad a = GameMonad {
            , MonadFix
            , MonadPlus
            , MonadReader GameConfig
+           , MonadWriter ([OutputAction], RenderActions)
            )
 
 instance MonadGLFWInput GameMonad where

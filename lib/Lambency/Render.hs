@@ -13,10 +13,12 @@ import qualified Codec.Picture as JP
 #if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
 #endif
+import Control.Arrow (second)
 import Control.Concurrent.STM
 import Control.Monad (unless)
 import Control.Monad.RWS.Strict
 import Control.Monad.State
+import Control.Monad.Writer (censor)
 
 import Data.Array.IO
 import Data.Array.Storable
@@ -257,7 +259,7 @@ appendXform xform sm' = let
                     , ("m2wMatrix", Matrix4Val matrix)
                     ]
   in
-   Map.unionWithKey updateMatrices sm' sm
+   Map.unionWithKey updateMatrices sm sm'
 
 xformObject :: Transform -> RenderObject -> RenderObject
 xformObject xform ro = ro { objectVars = appendXform xform (objectVars ro) }
@@ -562,12 +564,11 @@ render win lights cam acts = do
   GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
   clearBuffers
   let renderPrg = performRenderActions lights cam acts
-  result <- evalStateT renderPrg initialRenderState
+  evalStateT renderPrg initialRenderState
   GL.flush
   GLFW.swapBuffers win
 
   GL.get GL.errors >>= foldM (\() e -> print e >> exitFailure) ()
-  return result
 
 -- !FIXME! This would probably be cleaner with lenses
 createClippedActions :: RenderActions -> RenderActions -> RenderActions
@@ -599,11 +600,7 @@ createTransformedActions xf new =
                   renderUI = RenderTransformed xf (renderUI new) }
 
 addTransformedRenderAction :: Transform -> GameMonad a -> GameMonad a
-addTransformedRenderAction xf prg = GameMonad . RWST $ \cfg input -> do
-  (result, finalInput, (actions, renderActions)) <-
-    runRWST (nextFrame prg) cfg input
-  let xformedActions = createTransformedActions xf renderActions
-  return (result, finalInput, (actions, xformedActions))
+addTransformedRenderAction xf = censor $ second $ createTransformedActions xf
 
 addRenderAction :: Transform -> RenderObject -> GameMonad ()
 addRenderAction xf ro = GameMonad $
