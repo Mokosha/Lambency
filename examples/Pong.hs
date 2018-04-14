@@ -69,7 +69,7 @@ ballRadius :: Float
 ballRadius = 5
 
 ballStartSpeed :: V2 Float
-ballStartSpeed = V2 (-65) (-20)
+ballStartSpeed = V2 (-85) (-40)
 
 startBall :: Ball
 startBall = Ball (0.5 *^ (vi2f2 $ V2 screenWidth screenHeight)) ballStartSpeed
