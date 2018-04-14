@@ -156,8 +156,12 @@ install:
   case "$BUILD" in
     stack)
       # Add in extra-deps for older snapshots, as necessary
-      stack --no-terminal install cabal-install
-      stack --no-terminal $ARGS init --solver
+      stack --no-terminal unpack cabal-install-1.24.0.2
+      cd cabal-install-1.24.0.2
+      stack --no-terminal init . --solver --ignore-subdirs
+      stack --no-terminal install
+      cd ..
+      stack --no-terminal $ARGS init . --solver --ignore-subdirs
 
       # Build the dependencies
       stack --no-terminal --install-ghc $ARGS test --bench --only-dependencies
