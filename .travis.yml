@@ -121,7 +121,7 @@ matrix:
   #  os: osx
   #
   ### HCodecs doesn't build on GHC 8.4 due to monoid-semigroup proposal. Need
-  ### to wait for either georgidze/HCodecs#6 or Lambency#11 before we can
+  ### to wait for either giorgidze/HCodecs#6 or Lambency#11 before we can
   ### re-enable this build
   #- env: BUILD=cabal GHCVER=8.4.1 CABALVER=2.0 HAPPYVER=1.19.5 ALEXVER=3.1.7
   #  compiler: ": #GHC 8.4.1"
