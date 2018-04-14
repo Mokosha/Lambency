@@ -249,20 +249,23 @@ appendCamXForm cam sm' =
   let sm = Map.singleton "mvpMatrix" (Matrix4Val $ getViewProjMatrix cam)
   in Map.unionWithKey updateMatrices sm' sm
 
-appendXform :: Transform -> UniformMap -> UniformMap
-appendXform xform sm' = let
-  matrix :: M44 Float
-  matrix = xform2Matrix xform
+mkModelUpdate :: Transform -> UniformMap
+mkModelUpdate xf = let matrix = xform2Matrix xf in
+  Map.fromList [ ("mvpMatrix", Matrix4Val matrix)
+               , ("m2wMatrix", Matrix4Val matrix)
+               ]
 
-  sm :: UniformMap
-  sm = Map.fromList [ ("mvpMatrix", Matrix4Val matrix)
-                    , ("m2wMatrix", Matrix4Val matrix)
-                    ]
-  in
-   Map.unionWithKey updateMatrices sm sm'
+prependXform :: Transform -> UniformMap -> UniformMap
+prependXform = flip (Map.unionWithKey updateMatrices) . mkModelUpdate
+
+appendXform :: Transform -> UniformMap -> UniformMap
+appendXform = Map.unionWithKey updateMatrices . mkModelUpdate
 
 xformObject :: Transform -> RenderObject -> RenderObject
 xformObject xform ro = ro { objectVars = appendXform xform (objectVars ro) }
+
+xformWorld :: Transform -> RenderObject -> RenderObject
+xformWorld xform ro = ro { objectVars = prependXform xform (objectVars ro) }
 
 place :: Camera -> RenderObject -> RenderObject
 place cam ro = ro { objectVars = appendCamXForm cam (objectVars ro) }
@@ -604,10 +607,10 @@ addTransformedRenderAction xf = censor $ second $ createTransformedActions xf
 
 addRenderAction :: Transform -> RenderObject -> GameMonad ()
 addRenderAction xf ro = GameMonad $
-  tell $ ([], RenderActions (RenderObjects [xformObject xf ro]) mempty)
+  tell $ ([], RenderActions (RenderObjects [xformWorld xf ro]) mempty)
 
 addRenderUIAction :: V2 Float -> RenderObject -> GameMonad ()
 addRenderUIAction (V2 x y) ro = GameMonad $
-  tell $ ([], RenderActions mempty (RenderObjects [xformObject xf ro]))
+  tell $ ([], RenderActions mempty (RenderObjects [xformWorld xf ro]))
   where
     xf = translate (V3 x y (-1)) identity
