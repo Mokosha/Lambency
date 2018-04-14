@@ -26,7 +26,7 @@ import Linear.Metric
 import Prelude hiding (concat)
 --------------------------------------------------------------------------------
 
-compareZero :: (Ord a, Epsilon a, Metric v) => v a -> Bool
+compareZero :: (Epsilon a, Metric v) => v a -> Bool
 compareZero x = nearZero $ (abs $ x `dot` x)
 
 compareClose :: (Ord a, Epsilon a, Metric v) => v a -> v a -> Bool
