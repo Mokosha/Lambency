@@ -44,9 +44,6 @@ matrix:
   - env: BUILD=cabal GHCVER=8.2.2 CABALVER=2.0 HAPPYVER=1.19.5 ALEXVER=3.1.7
     compiler: ": #GHC 8.2.2"
     addons: {apt: {packages: [xorg-dev,libopenal-dev,cabal-install-2.0,ghc-8.2.2,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
-  - env: BUILD=cabal GHCVER=8.4.1 CABALVER=2.0 HAPPYVER=1.19.5 ALEXVER=3.1.7
-    compiler: ": #GHC 8.4.1"
-    addons: {apt: {packages: [xorg-dev,libopenal-dev,cabal-install-2.0,ghc-8.4.1,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
 
   # Build with the newest GHC and cabal-install. This is an accepted failure,
   # see below.
@@ -62,10 +59,6 @@ matrix:
 
   - env: BUILD=stack ARGS="--resolver lts-3"
     compiler: ": #stack 7.10.2"
-    addons: {apt: {packages: [xorg-dev,libopenal-dev,libgmp-dev]}}
-
-  - env: BUILD=stack ARGS="--resolver lts-6"
-    compiler: ": #stack 7.10.3"
     addons: {apt: {packages: [xorg-dev,libopenal-dev,libgmp-dev]}}
 
   - env: BUILD=stack ARGS="--resolver lts-7"
@@ -95,10 +88,6 @@ matrix:
     compiler: ": #stack 7.10.2 osx"
     os: osx
 
-  - env: BUILD=stack ARGS="--resolver lts-6"
-    compiler: ": #stack 7.10.3 osx"
-    os: osx
-
   - env: BUILD=stack ARGS="--resolver lts-7"
     compiler: ": #stack 8.0.1 osx"
     os: osx
@@ -114,6 +103,29 @@ matrix:
   - env: BUILD=stack ARGS="--resolver nightly"
     compiler: ": #stack nightly osx"
     os: osx
+
+  ##############################################################################
+  ## Current issues:
+  ##
+  ### The resolver lts-6 has some dependency chain that doesn't include the
+  ### message "(user goal)" in it's error output. This causes stack to fail for
+  ### these builds. We can re-enable them once commercialhaskell/stack#3966 is
+  ### released.
+  ###
+  #- env: BUILD=stack ARGS="--resolver lts-6"
+  #  compiler: ": #stack 7.10.3"
+  #  addons: {apt: {packages: [xorg-dev,libopenal-dev,libgmp-dev]}}
+  #
+  #- env: BUILD=stack ARGS="--resolver lts-6"
+  #  compiler: ": #stack 7.10.3 osx"
+  #  os: osx
+  #
+  ### HCodecs doesn't build on GHC 8.4 due to monoid-semigroup proposal. Need
+  ### to wait for either georgidze/HCodecs#6 or Lambency#11 before we can
+  ### re-enable this build
+  #- env: BUILD=cabal GHCVER=8.4.1 CABALVER=2.0 HAPPYVER=1.19.5 ALEXVER=3.1.7
+  #  compiler: ": #GHC 8.4.1"
+  #  addons: {apt: {packages: [xorg-dev,libopenal-dev,cabal-install-2.0,ghc-8.4.1,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
 
   allow_failures:
   - env: BUILD=cabal GHCVER=head  CABALVER=head HAPPYVER=1.19.5 ALEXVER=3.1.7
