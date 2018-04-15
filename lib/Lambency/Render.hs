@@ -18,6 +18,7 @@ import Control.Concurrent.STM
 import Control.Monad (unless)
 import Control.Monad.RWS.Strict
 import Control.Monad.State
+import Control.Monad.Reader
 import Control.Monad.Writer (censor)
 
 import Data.Array.IO
@@ -63,16 +64,17 @@ data RenderStateFlag
 
 data RenderState = RenderState {
   nextStencilValue :: Int,
-  currentRenderXF :: Transform,
   currentRenderVars :: UniformMap,
   currentRenderFlags :: [RenderStateFlag]
 }
 
-type RenderContext = StateT RenderState IO
+type RenderContext =
+  ReaderT Transform (
+    StateT RenderState IO)
 type TransparentRenderAction = (Maybe Int, RenderObject)
 
 initialRenderState :: RenderState
-initialRenderState = RenderState 1 identity Map.empty []
+initialRenderState = RenderState 1 Map.empty []
 
 data ShaderCache = ShaderCache {
   unlitShaders :: Map.Map Int Shader, -- Parameterized by material hashes
@@ -258,12 +260,6 @@ mkModelUpdate xf = let matrix = xform2Matrix xf in
 prependXform :: Transform -> UniformMap -> UniformMap
 prependXform = flip (Map.unionWithKey updateMatrices) . mkModelUpdate
 
-appendXform :: Transform -> UniformMap -> UniformMap
-appendXform = Map.unionWithKey updateMatrices . mkModelUpdate
-
-xformObject :: Transform -> RenderObject -> RenderObject
-xformObject xform ro = ro { objectVars = appendXform xform (objectVars ro) }
-
 xformWorld :: Transform -> RenderObject -> RenderObject
 xformWorld xform ro = ro { objectVars = prependXform xform (objectVars ro) }
 
@@ -276,12 +272,12 @@ divideAndRenderROs [] _ _ = return []
 divideAndRenderROs ros cam light = do
   addRenderVar "eyePos" (Vector3Val $ getCamPos cam)
 
-  st <- get
+  xf <- ask
+  st <- lift $ get
   let vars = currentRenderVars st
-      xf = currentRenderXF st
       (trans, opaque) =
         partition (\ro -> Transparent `elem` (flags ro)) $
-        map (place cam . xformObject xf) ros
+        map (place cam . xformWorld xf) ros
 
   liftIO $ GL.depthFunc GL.$= (Just GL.Lequal)
   case RenderState'DepthOnly `elem` (currentRenderFlags st) of
@@ -300,17 +296,20 @@ divideAndRenderROs ros cam light = do
 
 withRenderFlag :: RenderStateFlag -> RenderContext a -> RenderContext a
 withRenderFlag flag action = do
-  st <- get
-  result <- flip withStateT action $ \s ->
-    s { currentRenderFlags = flag : (currentRenderFlags s) }
-  put st
-  return result
+  xf <- ask
+  lift $ do
+    st <- get
+    result <- flip withStateT (runReaderT action xf) $ \s ->
+      s { currentRenderFlags = flag : (currentRenderFlags s) }
+    put st
+    return result
 
 addRenderVar :: String -> ShaderValue -> RenderContext ()
-addRenderVar name val = do
-  st <- get
-  let vars = currentRenderVars st
-  put $ st { currentRenderVars = Map.insert name val vars }
+addRenderVar name val =
+  lift $ do
+    st <- get
+    let vars = currentRenderVars st
+    put $ st { currentRenderVars = Map.insert name val vars }
 
 mkLightCam :: LightType -> Camera
 -- !FIXME! light fov should be based on spotlight cos cutoff...
@@ -455,12 +454,8 @@ renderLight (RenderClipped clip action) camera light = do
 
   return $ updateTransparentStencil stencilVal <$> results
 
-renderLight (RenderTransformed xf act) camera light = do
-  oldState <- get
-  result <- flip withStateT (renderLight act camera light) $ \st ->
-    st { currentRenderXF = transform xf (currentRenderXF st) }
-  put oldState
-  return result
+renderLight (RenderTransformed xf act) camera light =
+  local (flip transform xf) $ renderLight act camera light
 
 renderLight (RenderObjects ros') camera light =
   let ros = filter (not . elem Text . flags) ros'
@@ -478,11 +473,7 @@ renderText (RenderObjects objs) camera = do
   divideAndRenderROs ros camera Nothing
 
 renderText (RenderTransformed xf act) camera = do
-  oldState <- get
-  result <- flip withStateT (renderText act camera) $ \st ->
-    st { currentRenderXF = transform xf (currentRenderXF st) }
-  put oldState
-  return result
+  local (flip transform xf) $ renderText act camera
 
 renderText (RenderClipped _ act) c = do
   -- !FIXME! ignoring clipped text...
@@ -567,7 +558,7 @@ render win lights cam acts = do
   GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
   clearBuffers
   let renderPrg = performRenderActions lights cam acts
-  evalStateT renderPrg initialRenderState
+  evalStateT (runReaderT renderPrg identity) initialRenderState
   GL.flush
   GLFW.swapBuffers win
 
@@ -607,10 +598,10 @@ addTransformedRenderAction xf = censor $ second $ createTransformedActions xf
 
 addRenderAction :: Transform -> RenderObject -> GameMonad ()
 addRenderAction xf ro = GameMonad $
-  tell $ ([], RenderActions (RenderObjects [xformWorld xf ro]) mempty)
+  tell $ ([], RenderActions (RenderTransformed xf $ RenderObjects [ro]) mempty)
 
 addRenderUIAction :: V2 Float -> RenderObject -> GameMonad ()
 addRenderUIAction (V2 x y) ro = GameMonad $
-  tell $ ([], RenderActions mempty (RenderObjects [xformWorld xf ro]))
+  tell $ ([], RenderActions mempty (RenderTransformed xf $ RenderObjects [ro]))
   where
     xf = translate (V3 x y (-1)) identity
