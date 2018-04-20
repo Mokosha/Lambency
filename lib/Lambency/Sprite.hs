@@ -31,7 +31,7 @@ import Lambency.Mesh
 import Lambency.Render
 import Lambency.Texture
 import Lambency.Transform
-import Lambency.Types
+import Lambency.Types hiding (Renderer(..))
 import Lambency.Utils
 
 import Linear hiding (trace, identity)

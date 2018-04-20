@@ -39,6 +39,7 @@ library
                        Lambency.Mesh
                        Lambency.GameObject
                        Lambency.Render
+                       Lambency.Renderer
 
                        Lambency.Loaders
                        Lambency.Loaders.OBJLoader

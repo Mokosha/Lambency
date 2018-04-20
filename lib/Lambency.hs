@@ -71,7 +71,7 @@ import Lambency.Sound
 import Lambency.Sprite
 import Lambency.Texture
 import Lambency.Transform
-import Lambency.Types
+import Lambency.Types hiding (Renderer(..))
 import Lambency.UI
 import Lambency.Utils
 

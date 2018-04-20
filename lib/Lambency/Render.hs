@@ -48,7 +48,7 @@ import Lambency.Light
 import Lambency.Shader
 import Lambency.Texture
 import Lambency.Transform
-import Lambency.Types
+import Lambency.Types hiding (Renderer(..))
 import Lambency.Vertex
 
 import Linear hiding (trace, identity)

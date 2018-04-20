@@ -13,7 +13,7 @@ import qualified Data.Map as Map
 import Lambency.Material
 import Lambency.Mesh
 import Lambency.Render
-import Lambency.Types
+import Lambency.Types hiding (Renderer(..))
 
 import qualified Lambency.Loaders.OBJLoader as OBJ
 import qualified Lambency.Loaders.MTLLoader as MTL

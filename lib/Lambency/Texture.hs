@@ -18,7 +18,7 @@ import Control.Applicative
 
 import qualified Graphics.Rendering.OpenGL as GL
 
-import Lambency.Types
+import Lambency.Types hiding (Renderer(..))
 
 import qualified Codec.Picture as JP
 import qualified Codec.Picture.Types as JP

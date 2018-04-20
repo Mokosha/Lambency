@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Lambency.Types (
@@ -9,7 +10,7 @@ module Lambency.Types (
   UniformBinding(..), AttributeBinding(..), UniformMap,
   Texture(..), TextureSize(..), TextureFormat(..), FBOHandle(..), TextureHandle(..),
   MaterialVar(..), NormalModulation(..), ReflectionInfo(..), Material(..),
-  RenderFlag(..), RenderObject(..), RenderAction(..), RenderActions(..),
+  Renderer(..), RenderFlag(..), RenderObject(..), RenderAction(..), RenderActions(..),
   Sound, SoundCommand(..), SpriteFrame(..), Sprite(..),
   OutputAction(..),
   TimeStep,
@@ -32,6 +33,9 @@ import Data.Maybe (isJust)
 import Data.Hashable
 import Data.Profunctor
 import Data.Time.Clock
+import Data.Word
+
+import Foreign.Ptr
 
 import FRP.Netwire.Input.GLFW
 
@@ -39,8 +43,11 @@ import qualified Graphics.Rendering.OpenGL as GL
 
 import Prelude hiding ((.), id)
 
-import Lambency.Utils
+import Lambency.Mesh
+import qualified Lambency.Shader.Base as I
 import qualified Lambency.Transform as XForm
+import Lambency.Utils
+import Lambency.Vertex
 
 import Linear.Matrix
 import Linear.V2
@@ -325,6 +332,19 @@ instance Monoid RenderActions where
   mempty = RenderActions mempty mempty
   mappend (RenderActions a b) (RenderActions c d) =
     RenderActions (a `mappend` c) (b `mappend` d)
+
+data Renderer = Renderer
+  { mkTexture :: forall a . Ptr a -> V2 Word32 -> TextureFormat -> IO Texture
+  , updateTexture :: forall a . Texture -> Ptr a -> V2 Word32 -> V2 Word32 -> IO ()
+  , mkDepthTexture :: V2 Word32 -> IO Texture
+  , destroyTexture :: Texture -> IO ()
+
+  , createRenderObject :: forall a . (Vertex a)
+                       => Mesh a -> Material -> IO RenderObject
+  , render :: [Light] -> Camera -> RenderActions -> IO ()
+
+  , generateShader :: I.Shader -> IO Shader
+  }
 
 data SpriteFrame = SpriteFrame {
   offset :: V2 Float,

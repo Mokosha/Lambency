@@ -32,7 +32,7 @@ import Graphics.Rendering.FreeType.Internal.Vector hiding (x, y)
 
 import Lambency.Sprite
 import Lambency.Texture
-import Lambency.Types
+import Lambency.Types hiding (Renderer(..))
 import Lambency.Utils
 
 import Linear hiding (trace)
