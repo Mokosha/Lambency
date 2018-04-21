@@ -38,8 +38,10 @@ library
                        Lambency.Material
                        Lambency.Mesh
                        Lambency.GameObject
-                       Lambency.Render
+
                        Lambency.Renderer
+                       Lambency.Renderer.OpenGL.Texture
+                       Lambency.Renderer.OpenGL.Render
 
                        Lambency.Loaders
                        Lambency.Loaders.OBJLoader

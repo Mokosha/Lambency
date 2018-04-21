@@ -32,7 +32,7 @@ import Graphics.Rendering.FreeType.Internal.Vector hiding (x, y)
 
 import Lambency.Sprite
 import Lambency.Texture
-import Lambency.Types hiding (Renderer(..))
+import Lambency.Types
 import Lambency.Utils
 
 import Linear hiding (trace)
@@ -133,13 +133,13 @@ charString :: [Char]
 charString = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ"
              ++ "[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 
-loadSystemFont :: V3 Float -> IO (Font)
-loadSystemFont (V3 r g b) = let
+loadSystemFont :: Renderer -> V3 Float -> IO Font
+loadSystemFont rr (V3 r g b) = let
   systemOffsets = [V2 x 0 | x <- [0,14..]]
   systemSizes = repeat (V2 13 24)
   in do
-    Just tex <- getDataFileName ("font" <.> "png") >>= loadTexture 
-    Just s <- loadAnimatedSpriteWithMask tex systemSizes systemOffsets
+    Just tex <- getDataFileName ("font" <.> "png") >>= loadTexture rr
+    Just s <- loadAnimatedSpriteWithMask rr tex systemSizes systemOffsets
     let sprite = changeSpriteColor (V4 r g b 1) s
     return $ mkFont sprite charString (repeat zero) (repeat zero)
 
@@ -185,23 +185,23 @@ getGlyphAdvanceOffset ft_face c = do
 
   return $ (fmap fromIntegral $ V2 advx advy, fmap fromIntegral $ V2 offx offy)
 
-uploadGlyph :: FT_Face -> Texture -> Int -> Char -> IO (Int)
-uploadGlyph ft_face tex widthAccum c = do
+uploadGlyph :: Renderer -> FT_Face -> Texture -> Int -> Char -> IO (Int)
+uploadGlyph r ft_face tex widthAccum c = do
   runFreeType $ ft_Load_Char ft_face (cvt c) ft_LOAD_RENDER
   g <- peek $ glyph ft_face
   bm <- peek $ bitmap g
-  updateTexture
+  updateTexture r
     tex
     (buffer bm)
-    (cvt widthAccum, 0) $
-    (cvt $ width bm, cvt $ rows bm)
+    (V2 (cvt widthAccum) 0)
+    (cvt <$> (V2 (width bm) (rows bm)))
   return (widthAccum + (cvt $ width bm))
   where
     cvt :: (Enum a, Enum b) => a -> b
     cvt = toEnum . fromEnum
 
-loadTTFont :: Int -> V3 Float -> FilePath -> IO (Font)
-loadTTFont fontSize (V3 fontR fontG fontB) filepath = do
+loadTTFont :: Renderer -> Int -> V3 Float -> FilePath -> IO Font
+loadTTFont r fontSize (V3 fontR fontG fontB) filepath = do
   -- Create local copy of freetype library... this will free itself once it
   -- goes out of scope...
   ft_library <- alloca $ \p -> do { runFreeType $ ft_Init_FreeType p; peek p }
@@ -222,10 +222,10 @@ loadTTFont fontSize (V3 fontR fontG fontB) filepath = do
   -- Create a texture to store all of the glyphs
   texZeroA <- ((newArray (1, texW*texH) 0) :: IO (StorableArray Int Word8))
   tex <- withStorableArray texZeroA $ \ptr ->
-    initializeTexture ptr (fromIntegral texW, fromIntegral texH) Alpha8
+    mkTexture r ptr (fromIntegral <$> V2 texW texH) Alpha8
 
   -- Place each glyph into the texture
-  foldM_ (uploadGlyph ft_face tex) 0 charString
+  foldM_ (uploadGlyph r ft_face tex) 0 charString
 
   -- Generate info for our rendering
   advOffs <- mapM (getGlyphAdvanceOffset ft_face) charString
@@ -237,5 +237,5 @@ loadTTFont fontSize (V3 fontR fontG fontB) filepath = do
       sizesV = map (\(x, y) -> V2 x y) sizes
       fontColor = V4 fontR fontG fontB 1
 
-  Just s <- loadAnimatedSpriteWithMask tex sizesV texOffsets
+  Just s <- loadAnimatedSpriteWithMask r tex sizesV texOffsets
   return $ mkFont (changeSpriteColor fontColor s) charString advances offsets

@@ -12,8 +12,7 @@ import qualified Data.Map as Map
 
 import Lambency.Material
 import Lambency.Mesh
-import Lambency.Render
-import Lambency.Types hiding (Renderer(..))
+import Lambency.Types
 
 import qualified Lambency.Loaders.OBJLoader as OBJ
 import qualified Lambency.Loaders.MTLLoader as MTL
@@ -22,11 +21,11 @@ import System.Directory (doesFileExist)
 import System.FilePath
 --------------------------------------------------------------------------------
 
-genMtlMap :: FilePath -> [MTL.MTL] -> IO (Map.Map String Material)
-genMtlMap baseDir mtls = Map.fromList <$> mapM cvtMtl mtls
+genMtlMap :: Renderer -> FilePath -> [MTL.MTL] -> IO (Map.Map String Material)
+genMtlMap r baseDir mtls = Map.fromList <$> mapM cvtMtl mtls
   where
     cvtMtl mtl = do
-      m <- MTL.mkMaterial baseDir mtl
+      m <- MTL.mkMaterial r baseDir mtl
       return (MTL.mtlName mtl, m)
 
 lookupMtl :: Map.Map String Material -> Maybe Material -> String -> Material
@@ -38,41 +37,44 @@ lookupMtl mtlmap defaultMtl str =
         Just m -> m
     Just m -> m
 
-mesh2RenderObj :: (String -> Material) -> (OBJ.OBJInfo, OBJ.OBJGeometry) -> IO (RenderObject)
-mesh2RenderObj mtlFn (OBJ.OBJInfo _ mtl _ 0 0 _, geom) =
+mesh2RenderObj :: Renderer -> (String -> Material) -> (OBJ.OBJInfo, OBJ.OBJGeometry)
+               -> IO RenderObject
+mesh2RenderObj r mtlFn (OBJ.OBJInfo _ mtl _ 0 0 _, geom) =
   let m = mtlFn mtl
       mesh = OBJ.obj2V3Mesh geom
   in
    case usesTextures m of
      False ->
        case isUnlit m of
-         True -> createRenderObject mesh m
-         False -> createRenderObject (genNormalsV3 mesh) m
+         True -> createRenderObject r mesh m
+         False -> createRenderObject r (genNormalsV3 mesh) m
      True ->
        case isUnlit m of
-         True -> createRenderObject (genTexCoordsV3 mesh) m
-         False -> createRenderObject (genTexCoordsOV3 . genNormalsV3 $ mesh) m
+         True -> createRenderObject r (genTexCoordsV3 mesh) m
+         False -> createRenderObject r (genTexCoordsOV3 . genNormalsV3 $ mesh) m
 
-mesh2RenderObj mtlFn (OBJ.OBJInfo _ mtl _ _ 0 _, geom) =
+mesh2RenderObj r mtlFn (OBJ.OBJInfo _ mtl _ _ 0 _, geom) =
   let m = mtlFn mtl
       mesh = OBJ.obj2TV3Mesh geom
   in
    case isUnlit m of
-     False -> createRenderObject (genNormalsTV3 mesh) m
-     True -> createRenderObject mesh m
+     False -> createRenderObject r (genNormalsTV3 mesh) m
+     True -> createRenderObject r mesh m
 
-mesh2RenderObj mtlFn (OBJ.OBJInfo _ mtl _ 0 _ _, geom) =
+mesh2RenderObj r mtlFn (OBJ.OBJInfo _ mtl _ 0 _ _, geom) =
   let m = mtlFn mtl
       mesh = OBJ.obj2OV3Mesh geom
   in
    case usesTextures m of
-     False -> createRenderObject mesh m
-     True -> createRenderObject (genTexCoordsOV3 mesh) m
+     False -> createRenderObject r mesh m
+     True -> createRenderObject r (genTexCoordsOV3 mesh) m
 
-mesh2RenderObj mtlFn (OBJ.OBJInfo _ mtl _ _ _ _, geom) = createRenderObject (OBJ.obj2OTV3Mesh geom) (mtlFn mtl)
+mesh2RenderObj r mtlFn (OBJ.OBJInfo _ mtl _ _ _ _, geom) =
+  createRenderObject r (OBJ.obj2OTV3Mesh geom) (mtlFn mtl)
 
-loadOBJWithDefaultMaterial :: FilePath -> (Maybe Material) -> IO [RenderObject]
-loadOBJWithDefaultMaterial fp defaultMtl = do
+loadOBJWithDefaultMaterial :: Renderer -> FilePath -> (Maybe Material)
+                           -> IO [RenderObject]
+loadOBJWithDefaultMaterial r fp defaultMtl = do
   objExists <- doesFileExist fp
   if not objExists then error ("OBJ file " ++ fp ++ " not found") else return ()
 
@@ -84,12 +86,16 @@ loadOBJWithDefaultMaterial fp defaultMtl = do
   mtls <- if not mtlExists
           then
             case defaultMtl of
-              Nothing -> error ("MTL file " ++ mtlFile ++ " not found and no default specified")
+              Nothing -> error $ concat
+                         [ "MTL file "
+                         , mtlFile
+                         , " not found and no default specified"
+                         ]
               Just _ -> return []
           else MTL.loadMTL mtlFile
 
-  mtlmap <- genMtlMap baseDir mtls
-  mapM (mesh2RenderObj $ lookupMtl mtlmap defaultMtl) meshes
+  mtlmap <- genMtlMap r baseDir mtls
+  mapM (mesh2RenderObj r $ lookupMtl mtlmap defaultMtl) meshes
 
-loadOBJ :: FilePath -> IO [RenderObject]
-loadOBJ fp = loadOBJWithDefaultMaterial fp Nothing
+loadOBJ :: Renderer -> FilePath -> IO [RenderObject]
+loadOBJ r fp = loadOBJWithDefaultMaterial r fp Nothing

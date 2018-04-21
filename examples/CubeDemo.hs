@@ -50,8 +50,9 @@ initialCam = L.mkPerspCamera
 demoCam :: L.ContWire () L.Camera
 demoCam = L.mkFreeCam initialCam
 
-loadPlane :: IO L.RenderObject
-loadPlane = L.createRenderObject L.plane (L.diffuseColoredMaterial $ V3 0.5 0.5 0.5)
+loadPlane :: L.Renderer -> IO L.RenderObject
+loadPlane r = L.createRenderObject r L.plane
+            $ L.diffuseColoredMaterial $ V3 0.5 0.5 0.5
 
 plane :: L.ContWire ((), Bool) (Maybe ())
 plane = L.bracketResource loadPlane L.unloadRenderObject
@@ -65,10 +66,10 @@ plane = L.bracketResource loadPlane L.unloadRenderObject
 unloadRenderObjects :: [L.RenderObject] -> IO ()
 unloadRenderObjects = traverse_ L.unloadRenderObject
 
-loadBunny:: IO [L.RenderObject]
-loadBunny = do
+loadBunny :: L.Renderer -> IO [L.RenderObject]
+loadBunny r = do
   objFile <- getDataFileName ("examples" </> "bunnyN" <.> "obj")
-  L.loadOBJWithDefaultMaterial objFile
+  L.loadOBJWithDefaultMaterial r objFile
     $ Just (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
 
 bunny :: L.ContWire ((), Bool) (Maybe ())
@@ -80,13 +81,13 @@ bunny = L.bracketResource loadBunny unloadRenderObjects
                 L.identity
 
 type CubeResources = (L.Texture, L.Sound, [L.RenderObject])
-loadCubeResources :: IO CubeResources
-loadCubeResources = do
+loadCubeResources :: L.Renderer -> IO CubeResources
+loadCubeResources r = do
   tex <- liftM fromJust $
-         getDataFileName ("examples" </> "crate" <.> "png") >>= L.loadTexture
+         getDataFileName ("examples" </> "crate" <.> "png") >>= L.loadTexture r
 
   objFile <- getDataFileName ("examples" </> "cube" <.> "obj")
-  meshes <- L.loadOBJWithDefaultMaterial objFile $
+  meshes <- L.loadOBJWithDefaultMaterial r objFile $
             Just (L.diffuseTexturedMaterial tex)
 
   sound <- getDataFileName ("examples" </> "stereol" <.> "wav") >>= L.loadSound
@@ -132,16 +133,16 @@ lightWire =
   in
   ((arr $ maybe (error "Light wire inhibited?") id) W.<<<)
   $ ((id &&& quitWire) W.>>>)
-  $ L.bracketResource (L.addShadowMap initial) L.removeShadowMap
+  $ L.bracketResource (flip L.addShadowMap initial) L.removeShadowMap
   $ L.withResource
   $ \l -> (W.timeF W.>>>) $ W.mkSF_ $ \t ->
   let newPos = V3 (sin(t) * 10) py pz
   in L.setLightPosition newPos $
      L.setLightDirection (negate newPos) l
 
-loadFont :: IO L.Font
-loadFont = L.loadTTFont 18 (V3 1 0 0) =<<
-           getDataFileName ("examples" </> "kenpixel" <.> "ttf")
+loadFont :: L.Renderer -> IO L.Font
+loadFont r = L.loadTTFont r 18 (V3 1 0 0) =<<
+             getDataFileName ("examples" </> "kenpixel" <.> "ttf")
 
 uiWire :: L.ContWire ((), Bool) (Maybe ())
 uiWire = L.bracketResource loadFont L.unloadFont
@@ -195,4 +196,4 @@ game =
   $ (id W.&&& quitWire) W.>>> L.joinResources [cubeWire, bunny, plane, uiWire]
 
 main :: IO ()
-main = L.withWindow 640 480 "Cube Demo" $ L.run () game
+main = L.runOpenGL 640 480 "Cube Demo" () game

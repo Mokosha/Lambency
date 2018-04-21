@@ -28,10 +28,10 @@ import Data.List (nub)
 
 import Lambency.Material
 import Lambency.Mesh
-import Lambency.Render
+import Lambency.Renderer
 import Lambency.Texture
 import Lambency.Transform
-import Lambency.Types hiding (Renderer(..))
+import Lambency.Types
 import Lambency.Utils
 
 import Linear hiding (trace, identity)
@@ -114,11 +114,11 @@ changeSpriteColor c = mapSpriteFrames $ changeSpriteFrameColor c
 addRenderFlag :: RenderFlag -> RenderObject -> RenderObject
 addRenderFlag flag = \r -> r { flags = nub $ flag : (flags r) }
 
-initStaticSprite :: Bool -> Texture -> IO (Sprite)
-initStaticSprite isMask tex = do
+initStaticSprite :: Bool -> Renderer -> Texture -> IO Sprite
+initStaticSprite isMask r tex = do
   let mat = if isMask then maskedSpriteMaterial tex else texturedSpriteMaterial tex
   ro <- (if isMask then addRenderFlag Transparent else id)
-        <$> createRenderObject quad mat
+        <$> createRenderObject r quad mat
   return $ Sprite
     { spriteFrames = cycleSingleton $ SpriteFrame
         { offset = zero
@@ -130,10 +130,11 @@ initStaticSprite isMask tex = do
           unloadRenderObject ro
     }
 
-initAnimatedSprite :: Bool -> [V2 Int] -> [V2 Int] -> Texture -> IO (Sprite)
-initAnimatedSprite isMask frameSzs offsets tex = do
+initAnimatedSprite :: Renderer -> Bool -> [V2 Int] -> [V2 Int] -> Texture
+                   -> IO Sprite
+initAnimatedSprite r isMask frameSzs offsets tex = do
   let mat = if isMask then maskedSpriteMaterial tex else texturedSpriteMaterial tex
-  ro <- createRenderObject quad mat
+  ro <- createRenderObject r quad mat
   let spriteFrames = cyclicFromList $ map (genFrame ro) (zip frameSzs offsets)
   return $ Sprite
     { spriteFrames = spriteFrames
@@ -161,39 +162,44 @@ initAnimatedSprite isMask frameSzs offsets tex = do
         (newRange (fromIntegral ox) (0, fromIntegral tx) (0, 1))
         (newRange (fromIntegral oy) (0, fromIntegral ty) (0, 1))
 
-loadSpriteWith :: FilePath -> (Texture -> IO (Sprite)) -> IO (Maybe Sprite)
-loadSpriteWith f initFn = do
-  tex <- loadTexture f
+loadSpriteWith :: Renderer -> FilePath -> (Texture -> IO (Sprite))
+               -> IO (Maybe Sprite)
+loadSpriteWith r f initFn = do
+  tex <- loadTexture r f
   case tex of
     Nothing -> return Nothing
     (Just t@(Texture _ _)) -> initFn t >>= (return . Just)
     _ -> return Nothing
 
-loadStaticSpriteWithTexture :: Texture -> IO (Sprite)
+loadStaticSpriteWithTexture :: Renderer -> Texture -> IO (Sprite)
 loadStaticSpriteWithTexture = initStaticSprite False
 
-loadStaticSpriteWithMask :: Texture -> IO (Sprite)
+loadStaticSpriteWithMask :: Renderer -> Texture -> IO (Sprite)
 loadStaticSpriteWithMask = initStaticSprite True
 
-loadStaticSprite :: FilePath -> IO (Maybe Sprite)
-loadStaticSprite f = loadSpriteWith f (initStaticSprite False)
+loadStaticSprite :: Renderer -> FilePath -> IO (Maybe Sprite)
+loadStaticSprite r f = loadSpriteWith r f (initStaticSprite False r)
 
-loadAnimatedSprite :: FilePath -> [V2 Int] -> [V2 Int] -> IO (Maybe Sprite)
-loadAnimatedSprite f frameSzs offsets =
-  loadSpriteWith f $ initAnimatedSprite False frameSzs offsets
+loadAnimatedSprite :: Renderer -> FilePath -> [V2 Int] -> [V2 Int]
+                   -> IO (Maybe Sprite)
+loadAnimatedSprite r f frameSzs offsets =
+  loadSpriteWith r f $ initAnimatedSprite r False frameSzs offsets
 
-loadAnimatedSpriteWithTexture :: Texture -> [V2 Int] -> [V2 Int] -> IO (Maybe Sprite)
-loadAnimatedSpriteWithTexture t frameSzs offsets =
-  initAnimatedSprite False frameSzs offsets t >>= (return . Just)
+loadAnimatedSpriteWithTexture :: Renderer -> Texture -> [V2 Int] -> [V2 Int]
+                              -> IO (Maybe Sprite)
+loadAnimatedSpriteWithTexture r t frameSzs offsets =
+  initAnimatedSprite r False frameSzs offsets t >>= (return . Just)
 
-loadAnimatedSpriteWithMask :: Texture -> [V2 Int] -> [V2 Int] -> IO (Maybe Sprite)
-loadAnimatedSpriteWithMask t frameSzs offsets =
+loadAnimatedSpriteWithMask :: Renderer -> Texture -> [V2 Int] -> [V2 Int]
+                           -> IO (Maybe Sprite)
+loadAnimatedSpriteWithMask r t frameSzs offsets =
   -- !HACK! Not all animated (multi-frame) mask sprites are fonts...
-  initAnimatedSprite True frameSzs offsets t >>=
+  initAnimatedSprite r True frameSzs offsets t >>=
   (return . Just . mapSpriteFrames addTextFlag)
 
-loadFixedSizeAnimatedSprite :: FilePath -> V2 Int -> [V2 Int] -> IO (Maybe Sprite)
-loadFixedSizeAnimatedSprite f frameSz = loadAnimatedSprite f (repeat frameSz)
+loadFixedSizeAnimatedSprite :: Renderer -> FilePath -> V2 Int -> [V2 Int]
+                            -> IO (Maybe Sprite)
+loadFixedSizeAnimatedSprite r f frameSz = loadAnimatedSprite r f (repeat frameSz)
 
 renderUISpriteWithSize :: Sprite -> V2 Float -> V2 Float -> GameMonad ()
 renderUISpriteWithSize sprite pos (V2 sx sy)

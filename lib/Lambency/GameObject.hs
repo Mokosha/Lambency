@@ -24,7 +24,7 @@ import Data.Either (isLeft)
 import Data.Foldable
 import Data.Semigroup ()
 
-import Lambency.Render
+import Lambency.Renderer
 import Lambency.Sound
 import Lambency.Transform
 import Lambency.Types
@@ -96,11 +96,14 @@ pulseSound = doOnce . startSound
 -- wire inhibits, at which point it unloads the resource. Once the resource is
 -- freed, the resulting wire returns Nothing indefinitely. The resulting wire
 -- also takes a signal to terminate from its input.
-bracketResource :: IO r -> (r -> IO ()) -> ResourceContextWire r a b
+bracketResource :: (Renderer -> IO r)
+                -> (r -> IO ())
+                -> ResourceContextWire r a b
                 -> ContWire (a, Bool) (Maybe b)
 bracketResource load unload (RCW rcw) = CW $ mkGen $ \dt x -> do
+  r <- renderer <$> ask
   -- TODO: Maybe should restrict this to certain types of resources?
-  resource <- GameMonad $ liftIO load
+  resource <- GameMonad (liftIO $ load r)
   stepWire (go resource rcw) dt (Right x)
     where
       go res w = mkGen $ \dt (x, quitSignal) ->

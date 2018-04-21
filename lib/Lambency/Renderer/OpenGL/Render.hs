@@ -1,10 +1,7 @@
-module Lambency.Render (
+module Lambency.Renderer.OpenGL.Render (
+  resetShaderCache,
   render,
   createRenderObject,
-  addRenderAction,
-  addRenderUIAction,
-  addClippedRenderAction,
-  addTransformedRenderAction,
 ) where
 
 --------------------------------------------------------------------------------
@@ -13,13 +10,11 @@ import qualified Codec.Picture as JP
 #if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
 #endif
-import Control.Arrow (second)
 import Control.Concurrent.STM
 import Control.Monad (unless)
 import Control.Monad.RWS.Strict
 import Control.Monad.State
 import Control.Monad.Reader
-import Control.Monad.Writer (censor)
 
 import Data.Array.IO
 import Data.Array.Storable
@@ -33,12 +28,14 @@ import qualified Data.Map as Map
 import qualified Data.Vector.Storable as Vector
 import Data.Word
 
+import Foreign.Marshal.Utils
 import Foreign.Storable
 import Foreign.Ptr
 
 import GHC.Exts (groupWith)
 
 import qualified Graphics.Rendering.OpenGL as GL
+import qualified Graphics.GL as GLRaw
 import qualified Graphics.UI.GLFW as GLFW
 
 import Lambency.Camera
@@ -46,6 +43,8 @@ import Lambency.Material
 import Lambency.Mesh
 import Lambency.Light
 import Lambency.Shader
+import qualified Lambency.Shader.OpenGL as OpenGLShader
+import Lambency.Renderer.OpenGL.Texture
 import Lambency.Texture
 import Lambency.Transform
 import Lambency.Types hiding (Renderer(..))
@@ -68,9 +67,7 @@ data RenderState = RenderState {
   currentRenderFlags :: [RenderStateFlag]
 }
 
-type RenderContext =
-  ReaderT Transform (
-    StateT RenderState IO)
+type RenderContext = ReaderT Transform (StateT RenderState IO)
 type TransparentRenderAction = (Maybe Int, RenderObject)
 
 initialRenderState :: RenderState
@@ -80,6 +77,138 @@ data ShaderCache = ShaderCache {
   unlitShaders :: Map.Map Int Shader, -- Parameterized by material hashes
   litShaders :: Map.Map Int Shader -- Parameterized by (material, light) hashes
 }
+
+-- !TODO! Assert that the types align for 'combine'
+setUniformVals :: UniformMap -> ShaderMap -> ShaderMap
+setUniformVals = Map.mergeWithKey combine setNoLoc errorOnUnset
+  where
+    combine :: String -> ShaderValue -> ShaderVar -> Maybe ShaderVar
+    combine _ v (Uniform _ loc) = Just $ Uniform v loc
+    combine _ v (Attribute _ loc) = Just $ Attribute v loc
+
+    undefinedLoc :: UniformBinding
+    undefinedLoc = OpenGLUniformBinding $ GL.UniformLocation (-1)
+
+    setNoLoc :: UniformMap -> ShaderMap
+    setNoLoc = Map.map (flip Uniform undefinedLoc)
+
+    errorOnUnset :: ShaderMap -> ShaderMap
+    errorOnUnset = Map.mapWithKey checkIfUniform
+      where
+        checkIfUniform name (Uniform _ loc)
+          | loc == undefinedLoc = error $ "Undefined uniform: " ++ name
+        checkIfUniform _ x = x
+
+getRawBinding :: UniformBinding -> GLRaw.GLint
+getRawBinding (OpenGLUniformBinding (GL.UniformLocation loc)) = loc
+
+getBinding :: UniformBinding -> GL.UniformLocation
+getBinding (OpenGLUniformBinding loc) = loc
+
+setUniformVar :: GLRaw.GLuint -> ShaderVar -> IO GLRaw.GLuint
+setUniformVar x (Uniform (Matrix4Val mat) loc) = do
+  let bind = getRawBinding loc
+  with mat $ \ptr ->
+    GLRaw.glUniformMatrix4fv bind 1 0 (castPtr (ptr :: Ptr (M44 Float)))
+  return x
+
+setUniformVar x (Uniform (Matrix3Val mat) loc) = do
+  let bind = getRawBinding loc
+  with mat $ \ptr ->
+    GLRaw.glUniformMatrix3fv bind 1 0 (castPtr (ptr :: Ptr (M33 Float)))
+  return x
+
+setUniformVar x (Uniform (Matrix2Val mat) loc) = do
+  let bind = getRawBinding loc
+  with mat $ \ptr ->
+    GLRaw.glUniformMatrix2fv bind 1 0 (castPtr (ptr :: Ptr (M22 Float)))
+  return x
+
+setUniformVar nextTexUnit (Uniform (TextureVal _ tex) loc) = do
+  GL.activeTexture GL.$= (GL.TextureUnit nextTexUnit)
+  GL.textureBinding GL.Texture2D GL.$= Just (getGLTexObj tex)
+  GL.uniform (getBinding loc) GL.$= (GL.TextureUnit nextTexUnit)
+  return $ nextTexUnit + 1
+
+setUniformVar u (Uniform (ShadowMapVal sampler sm) loc) =
+  setUniformVar u $ Uniform (TextureVal sampler (getShadowmapTexture sm)) loc
+
+setUniformVar u (Uniform (FloatVal f) loc) = do
+  GL.uniform (getBinding loc) GL.$= GL.Index1 ((realToFrac f) :: GL.GLfloat)
+  return u
+
+setUniformVar u (Uniform (Vector3Val vec) loc) =
+  let (V3 x y z) = (realToFrac :: Float -> GL.GLfloat) <$> vec
+  in GL.uniform (getBinding loc) GL.$= GL.Vertex3 x y z >> return u
+
+setUniformVar u (Uniform (Vector4Val vec) loc) =
+  let (V4 x y z w) = (realToFrac :: Float -> GL.GLfloat) <$> vec
+  in GL.uniform (getBinding loc) GL.$= GL.Vertex4 x y z w >> return u
+
+setUniformVar x (Attribute _ _) = return x
+setUniformVar _ (Uniform ty _) =
+  ioError $ userError $ "Uniform not supported: " ++ (show ty)
+
+getVertexAttributeByteSize :: VertexAttribute -> Int
+getVertexAttributeByteSize (VertexAttribute d FloatAttribTy) = 4 * d
+getVertexAttributeByteSize (VertexAttribute d IntAttribTy) = 4 * d
+getVertexAttributeByteSize (VertexAttribute d DoubleAttribTy) = 8 * d
+
+vertexAttributesToOpenGL :: [VertexAttribute] -> [GL.VertexArrayDescriptor Float]
+vertexAttributesToOpenGL attribs =
+  let bytesPerVertex = sum $ map getVertexAttributeByteSize attribs
+
+      attribTypeToGLType FloatAttribTy = GL.Float
+      attribTypeToGLType IntAttribTy = GL.Int
+      attribTypeToGLType DoubleAttribTy = GL.Double
+
+      buildVertexDescriptors _ [] = []
+      buildVertexDescriptors sz (attrib@(VertexAttribute dim ty) : rest) =
+        let desc = GL.VertexArrayDescriptor
+                   (toEnum dim)
+                   (attribTypeToGLType ty)
+                   (toEnum bytesPerVertex)
+                   (nullPtr `plusPtr` (toEnum sz))
+        in
+         desc : (buildVertexDescriptors (sz + (getVertexAttributeByteSize attrib)) rest)
+  in
+   buildVertexDescriptors 0 attribs
+
+destroyShader :: Shader -> IO ()
+destroyShader (OpenGLShader prog _) = GL.deleteObjectName prog
+
+resetShaderCache :: IO ()
+resetShaderCache = do
+  cache <- readTVarIO shaderCache
+  atomically $ modifyTVar' shaderCache $ \_ -> ShaderCache Map.empty Map.empty
+  let ls = Map.elems $ litShaders cache
+      us = Map.elems $ unlitShaders cache
+  mapM_ destroyShader (ls ++ us)
+
+beforeRender :: Shader -> IO ()
+beforeRender (OpenGLShader prog vars) = do
+  -- Enable the program
+  GL.currentProgram GL.$= Just prog
+
+  -- Enable each vertex attribute that this material needs
+  mapM_ enableAttribute $ Map.elems vars
+  where enableAttribute :: ShaderVar -> IO ()
+        enableAttribute v = case v of
+          Attribute _ (OpenGLAttributeBinding loc)
+            -> GL.vertexAttribArray loc GL.$= GL.Enabled
+          -- Attribute _ _ -> error "Unrecognized attribute binding type!"
+          _ -> return ()
+
+afterRender :: Shader -> IO ()
+afterRender (OpenGLShader _ vars) = do
+  -- Disable each vertex attribute that this material needs
+  mapM_ disableAttribute $ Map.elems vars
+  where disableAttribute :: ShaderVar -> IO ()
+        disableAttribute v = case v of
+          Attribute _ (OpenGLAttributeBinding loc)
+            -> GL.vertexAttribArray loc GL.$= GL.Disabled
+          -- Attribute _ _ -> error "Unrecognized attribute binding type!"
+          _ -> return ()
 
 shaderCache :: TVar ShaderCache
 shaderCache = unsafePerformIO $ newTVarIO (ShaderCache Map.empty Map.empty)
@@ -104,7 +233,8 @@ lookupLitShader mat light shadowmap = do
     Nothing -> do
       putStrLn $ "Compiling lit material..."
       -- putStrLn $ "Compiling lit material: " ++ show mat
-      shdr <- compileMaterial light mat shadowmap
+      shdr <- compileMaterial OpenGLShader.generateOpenGLShader
+                              light mat shadowmap
       addLitShader litHash shdr
       return shdr
 
@@ -118,7 +248,7 @@ lookupUnlitShader mat = do
     Nothing -> do
       putStrLn $ "Compiling unlit material..."
       -- putStrLn $ "Compiling unlit material: " ++ show mat
-      shdr <- compileUnlitMaterial mat
+      shdr <- compileUnlitMaterial OpenGLShader.generateOpenGLShader mat
       addUnlitShader minimalHash shdr
       return shdr
 
@@ -563,45 +693,3 @@ render win lights cam acts = do
   GLFW.swapBuffers win
 
   GL.get GL.errors >>= foldM (\() e -> print e >> exitFailure) ()
-
--- !FIXME! This would probably be cleaner with lenses
-createClippedActions :: RenderActions -> RenderActions -> RenderActions
-createClippedActions clip draw =
-  RenderActions { renderScene = RenderClipped (rs clip) (rs draw),
-                  renderUI = RenderClipped (ru clip) (ru draw) }
-  where
-    rs = renderScene
-    ru = renderUI
-
-addClippedRenderAction :: GameMonad b -> (b -> GameMonad a) -> GameMonad a
-addClippedRenderAction clip drawWithClip = GameMonad . RWST $ \cfg input -> do
-  -- Get the actions that render the clip
-  (clipResult, clipInput, (clipActions, clipRenderActions)) <-
-    runRWST (nextFrame clip) cfg input
-
-  -- Get the actions that render our clipped geometry
-  (result, finalInput, (finalActions, finalRenderActions)) <-
-    runRWST (nextFrame $ drawWithClip clipResult) cfg clipInput
-
-  -- Return with clipped actions
-  return (result, finalInput,
-          (clipActions ++ finalActions,
-           createClippedActions clipRenderActions finalRenderActions))
-
-createTransformedActions :: Transform -> RenderActions -> RenderActions
-createTransformedActions xf new =
-  RenderActions { renderScene = RenderTransformed xf (renderScene new),
-                  renderUI = RenderTransformed xf (renderUI new) }
-
-addTransformedRenderAction :: Transform -> GameMonad a -> GameMonad a
-addTransformedRenderAction xf = censor $ second $ createTransformedActions xf
-
-addRenderAction :: Transform -> RenderObject -> GameMonad ()
-addRenderAction xf ro = GameMonad $
-  tell $ ([], RenderActions (RenderTransformed xf $ RenderObjects [ro]) mempty)
-
-addRenderUIAction :: V2 Float -> RenderObject -> GameMonad ()
-addRenderUIAction (V2 x y) ro = GameMonad $
-  tell $ ([], RenderActions mempty (RenderTransformed xf $ RenderObjects [ro]))
-  where
-    xf = translate (V3 x y (-1)) identity

@@ -228,15 +228,15 @@ gameFeedback quad circle sound sysFont =
         (mkId &&& paddleWire playerOne quad handler) >>>
         collidePaddle playerOne s
 
-loadGameResources :: IO (L.Sprite, L.Sound, L.Font)
-loadGameResources = do
+loadGameResources :: L.Renderer -> IO (L.Sprite, L.Sound, L.Font)
+loadGameResources r = do
   let color = pure 255
   quad <- L.changeSpriteColor (V4 0.4 0.6 0.2 1.0) <$>
-          (L.createSolidTexture color >>= L.loadStaticSpriteWithMask)
+          (L.createSolidTexture r color >>= L.loadStaticSpriteWithMask r)
   sound <- getDataFileName ("examples" </> "pong-bloop.wav") >>= L.loadSound
 
   fontFilename <- getDataFileName ("examples" </> "kenpixel.ttf")
-  sysFont <- L.loadTTFont 36 (V3 1 1 1) fontFilename
+  sysFont <- L.loadTTFont r 36 (V3 1 1 1) fontFilename
 
   return (quad, sound, sysFont)
 
@@ -266,17 +266,14 @@ pongCam = pure zero >>> (L.mk2DCam screenWidth screenHeight)
 --------------------------------------------------
 -- Init
 
-loadGame :: IO (L.Game Int)
-loadGame = do
-  let quitWire =
-        (pure True >>> keyPressed GLFW.Key'Q) `L.withDefault` pure False
-      mainWire = (id &&& quitWire) >>> gameWire
-  return $ L.Game { L.mainCamera = pongCam,
-                    L.dynamicLights = [],
-                    L.gameLogic = mainWire }
+game :: L.Game Int
+game = L.Game pongCam [] $ (id &&& quitWire) >>> gameWire
+ where
+   quitWire =
+     (pure True >>> keyPressed GLFW.Key'Q) `L.withDefault` pure False
 
 main :: IO ()
-main = L.withWindow screenWidth screenHeight "Pong Demo" $ L.loadAndRun 0 loadGame
+main = L.runOpenGL screenWidth screenHeight "Pong Demo" 0 game
 
 --------------------------------------------------
 -- Utils

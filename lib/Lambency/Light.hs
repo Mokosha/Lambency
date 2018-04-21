@@ -24,9 +24,9 @@ module Lambency.Light (
 ) where
 
 --------------------------------------------------------------------------------
-import Lambency.Texture
 import Lambency.Shader
-import Lambency.Types hiding (Renderer(..))
+import Lambency.Types
+import Lambency.Texture
 
 import qualified Data.Map as Map
 
@@ -93,9 +93,9 @@ pointlight params pos =
     lightShadowMap = Nothing
   }
 
-addShadowMap :: Light -> IO Light
-addShadowMap l = do
-  depthTex <- createDepthTexture
+addShadowMap :: Renderer -> Light -> IO Light
+addShadowMap r l = do
+  depthTex <- mkDepthTexture r (pure 1024)
   return $ l { lightShadowMap = (Just (ShadowMap depthTex, ShadowTechnique'Simple)) }
 
 removeShadowMap :: Light -> IO ()
