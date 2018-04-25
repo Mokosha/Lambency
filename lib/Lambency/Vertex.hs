@@ -23,7 +23,6 @@ module Lambency.Vertex (
 
   VertexAttributeTy(..),
   VertexAttribute(..),
-  vertexAttributesToOpenGL,
 
   HasTextureCoordinates(..),
 
@@ -35,9 +34,6 @@ module Lambency.Vertex (
 ) where
 
 --------------------------------------------------------------------------------
-
-import qualified Graphics.Rendering.OpenGL as GL
-
 import Foreign.Storable
 
 import Linear.V2
@@ -55,11 +51,6 @@ data VertexAttributeTy = FloatAttribTy
                        deriving (Enum, Bounded, Read, Show, Eq, Ord)
 
 data VertexAttribute = VertexAttribute Int VertexAttributeTy
-
-getVertexAttributeByteSize :: VertexAttribute -> Int
-getVertexAttributeByteSize (VertexAttribute d FloatAttribTy) = 4 * d
-getVertexAttributeByteSize (VertexAttribute d IntAttribTy) = 4 * d
-getVertexAttributeByteSize (VertexAttribute d DoubleAttribTy) = 8 * d
 
 data Vertex2 = Vertex2 !Vec2f deriving (Show, Read, Eq, Ord)
 data Vertex3 = Vertex3 !Vec3f deriving (Show, Read, Eq, Ord)
@@ -171,26 +162,6 @@ instance Vertex OTVertex3 where
     VertexAttribute 3 FloatAttribTy,
     VertexAttribute 2 FloatAttribTy]
   getAttribNames _ = ["position", "normal", "texCoord"]
-
-vertexAttributesToOpenGL :: [VertexAttribute] -> [GL.VertexArrayDescriptor Float]
-vertexAttributesToOpenGL attribs =
-  let bytesPerVertex = sum $ map getVertexAttributeByteSize attribs
-
-      attribTypeToGLType FloatAttribTy = GL.Float
-      attribTypeToGLType IntAttribTy = GL.Int
-      attribTypeToGLType DoubleAttribTy = GL.Double
-
-      buildVertexDescriptors _ [] = []
-      buildVertexDescriptors sz (attrib@(VertexAttribute dim ty) : rest) =
-        let desc = GL.VertexArrayDescriptor
-                   (toEnum dim)
-                   (attribTypeToGLType ty)
-                   (toEnum bytesPerVertex)
-                   (nullPtr `plusPtr` (toEnum sz))
-        in
-         desc : (buildVertexDescriptors (sz + (getVertexAttributeByteSize attrib)) rest)
-  in
-   buildVertexDescriptors 0 attribs
 
 class HasTextureCoordinates a where
   getTextureCoordinates :: a -> Vec2f

@@ -96,7 +96,7 @@ inputWire =
   ((pure (V2 1 0) >>> keyPressed GLFW.Key'Right) <|> (pure zero)) `addVecWire`
   ((pure (V2 (-1) 0) >>> keyPressed GLFW.Key'Left) <|> (pure zero))
 
-loadGameResources :: IO (L.Sprite, L.Sprite)
+loadGameResources :: L.ResourceLoader (L.Sprite, L.Sprite)
 loadGameResources = do
   let white = pure 255
       red = V4 255 0 0 255
@@ -104,14 +104,9 @@ loadGameResources = do
   bullet <- L.createSolidTexture red >>= L.loadStaticSpriteWithTexture
   return (ship, bullet)
 
-unloadGameResources :: (L.Sprite, L.Sprite) -> IO ()
-unloadGameResources (ship, bullet) = do
-  L.unloadSprite ship
-  L.unloadSprite bullet
-
 gameWire :: L.ContWire ((), Bool) (Maybe ())
 gameWire =
-  L.bracketResource loadGameResources unloadGameResources
+  L.bracketResource loadGameResources
   $ L.withResource $ \(ship, bullet) ->
   let shipW = inputWire >>> shipWire (V2 240 320) ship bullet
 
@@ -141,13 +136,11 @@ gameWire =
 shooterCam :: L.ContWire () L.Camera
 shooterCam = pure zero >>> (L.mk2DCam screenWidth screenHeight)
 
-loadGame :: IO (L.Game ())
-loadGame =
-    let quitWire =
+game :: L.Game ()
+game = L.Game shooterCam [] $ (id &&& quitWire) >>> gameWire
+  where
+    quitWire =
           (pure True >>> keyPressed GLFW.Key'Q) `L.withDefault` pure False
-        mainWire = (id &&& quitWire) >>> gameWire
-    in return $ L.Game shooterCam [] mainWire
 
 main :: IO ()
-main = L.withWindow screenWidth screenHeight "Space Shooter Demo" $
-       L.loadAndRun () loadGame
+main = L.runOpenGL screenWidth screenHeight "Space Shooter Demo" () game

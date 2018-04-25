@@ -4,6 +4,7 @@ module Main (main) where
 #if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
 #endif
+import Control.Monad.Trans
 import Prelude hiding ((.), id)
 import Control.Wire hiding (right)
 
@@ -11,7 +12,6 @@ import Control.Wire hiding (right)
 import Data.Traversable (sequenceA)
 #endif
 import Data.List (intercalate)
-import Data.Foldable (traverse_)
 
 import qualified Graphics.UI.GLFW as GLFW
 
@@ -72,20 +72,24 @@ camLight = arr $ \c ->
 
   in L.dirlight lightParams lightDir
 
-loadObj :: FilePath -> IO [L.RenderObject]
+loadObj :: FilePath -> L.ResourceLoader [L.RenderObject]
 loadObj objfile = do
   obj <- L.loadOBJWithDefaultMaterial objfile $
          Just (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
-  putStrLn $ "OBJ contained " ++ (show $ length obj) ++ " meshes."
+  liftIO $ putStrLn $ "OBJ contained " ++ (show $ length obj) ++ " meshes."
   return obj
 
-viewerWire :: [L.RenderObject] -> L.GameWire a ()
-viewerWire ros = pure () . controlWire ros
+viewerWire :: FilePath -> L.ContWire (a, Bool) (Maybe ())
+viewerWire file =
+  L.bracketResource (loadObj file)
+    $ L.withResource
+    $ \ros -> pure () . controlWire ros
 
-loadGame :: [L.RenderObject] -> L.Game ()
-loadGame objs = L.Game cam [cam >>> camLight] $
-  (L.quitWire GLFW.Key'Q >>> viewerWire objs >>> pure (Just ()))
-  `L.withDefault` (pure Nothing)
+viewer :: FilePath -> L.Game ()
+viewer file = L.Game cam [cam >>> camLight]
+            $ viewerWire file
+            . (id &&&
+               ((pure True . L.quitWire GLFW.Key'Q) `L.withDefault` pure False))
 
 handleArgs :: [FilePath] -> Either String FilePath
 handleArgs [] = Left "Usage: lobjview OBJFILE"
@@ -96,10 +100,5 @@ main :: IO ()
 main = do
   objfile <- handleArgs <$> getArgs
   case objfile of
-    Right file -> do
-      (Just win) <- L.makeWindow 640 480 "OBJ Viewer"
-      ros <- loadObj file
-      L.run () (loadGame ros) win
-      traverse_ L.unloadRenderObject ros
-      L.destroyWindow $ Just win
+    Right file -> L.runOpenGL 640 480 "OBJ Viewer" () (viewer file)
     Left err -> putStrLn err

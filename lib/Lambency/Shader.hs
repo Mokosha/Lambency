@@ -1,14 +1,8 @@
 {-# LANGUAGE RecordWildCards #-}
 module Lambency.Shader (
-  setUniformVar,
-  setUniformVals,
-  destroyShader,
-  beforeRender, afterRender,
-
   getLightVarName,
   compileMaterial,
   compileUnlitMaterial
-
 ) where
 
 --------------------------------------------------------------------------------
@@ -16,15 +10,12 @@ import Control.Applicative
 import Control.Monad
 
 import Data.Maybe
-import qualified Data.Map as Map
 
 import Lambency.Material
-import Lambency.Texture
 import Lambency.Types
 
 import qualified Lambency.Shader.Expr as I
 import qualified Lambency.Shader.Base as I
-import qualified Lambency.Shader.OpenGL as I
 import qualified Lambency.Shader.Program as I
 import qualified Lambency.Shader.Var as I
 
@@ -32,113 +23,9 @@ import Linear.Matrix
 import Linear.V3
 import Linear.V4
 
-import Foreign.Marshal.Utils
-import Foreign.Ptr
-
-import qualified Graphics.Rendering.OpenGL as GL
-import qualified Graphics.GL as GLRaw
 --------------------------------------------------------------------------------
 
--- !TODO! Assert that the types align for 'combine'
-setUniformVals :: UniformMap -> ShaderMap -> ShaderMap
-setUniformVals = Map.mergeWithKey combine setNoLoc errorOnUnset
-  where
-    combine :: String -> ShaderValue -> ShaderVar -> Maybe ShaderVar
-    combine _ v (Uniform _ loc) = Just $ Uniform v loc
-    combine _ v (Attribute _ loc) = Just $ Attribute v loc
-
-    undefinedLoc :: UniformBinding
-    undefinedLoc = OpenGLUniformBinding $ GL.UniformLocation (-1)
-
-    setNoLoc :: UniformMap -> ShaderMap
-    setNoLoc = Map.map (flip Uniform undefinedLoc)
-
-    errorOnUnset :: ShaderMap -> ShaderMap
-    errorOnUnset = Map.mapWithKey checkIfUniform
-      where
-        checkIfUniform name (Uniform _ loc)
-          | loc == undefinedLoc = error $ "Undefined uniform: " ++ name
-        checkIfUniform _ x = x
-
-getRawBinding :: UniformBinding -> GLRaw.GLint
-getRawBinding (OpenGLUniformBinding (GL.UniformLocation loc)) = loc
-
-getBinding :: UniformBinding -> GL.UniformLocation
-getBinding (OpenGLUniformBinding loc) = loc
-
-setUniformVar :: GLRaw.GLuint -> ShaderVar -> IO GLRaw.GLuint
-setUniformVar x (Uniform (Matrix4Val mat) loc) = do
-  let bind = getRawBinding loc
-  with mat $ \ptr ->
-    GLRaw.glUniformMatrix4fv bind 1 0 (castPtr (ptr :: Ptr (M44 Float)))
-  return x
-
-setUniformVar x (Uniform (Matrix3Val mat) loc) = do
-  let bind = getRawBinding loc
-  with mat $ \ptr ->
-    GLRaw.glUniformMatrix3fv bind 1 0 (castPtr (ptr :: Ptr (M33 Float)))
-  return x
-
-setUniformVar x (Uniform (Matrix2Val mat) loc) = do
-  let bind = getRawBinding loc
-  with mat $ \ptr ->
-    GLRaw.glUniformMatrix2fv bind 1 0 (castPtr (ptr :: Ptr (M22 Float)))
-  return x
-
-setUniformVar nextTexUnit (Uniform (TextureVal _ tex) loc) = do
-  GL.activeTexture GL.$= (GL.TextureUnit nextTexUnit)
-  GL.textureBinding GL.Texture2D GL.$= Just (getGLTexObj tex)
-  GL.uniform (getBinding loc) GL.$= (GL.TextureUnit nextTexUnit)
-  return $ nextTexUnit + 1
-
-setUniformVar unit (Uniform (ShadowMapVal sampler sm) loc) =
-  setUniformVar unit $ Uniform (TextureVal sampler (getShadowmapTexture sm)) loc
-
-setUniformVar unit (Uniform (FloatVal f) loc) = do
-  GL.uniform (getBinding loc) GL.$= GL.Index1 ((realToFrac f) :: GL.GLfloat)
-  return unit
-
-setUniformVar unit (Uniform (Vector3Val vec) loc) =
-  let (V3 x y z) = (realToFrac :: Float -> GL.GLfloat) <$> vec
-  in GL.uniform (getBinding loc) GL.$= GL.Vertex3 x y z >> return unit
-
-setUniformVar unit (Uniform (Vector4Val vec) loc) =
-  let (V4 x y z w) = (realToFrac :: Float -> GL.GLfloat) <$> vec
-  in GL.uniform (getBinding loc) GL.$= GL.Vertex4 x y z w >> return unit
-
-setUniformVar x (Attribute _ _) = return x
-setUniformVar _ (Uniform ty _) =
-  ioError $ userError $ "Uniform not supported: " ++ (show ty)
-
-destroyShader :: Shader -> IO ()
-destroyShader (OpenGLShader prog _) = GL.deleteObjectName prog
-
-beforeRender :: Shader -> IO ()
-beforeRender (OpenGLShader prog vars) = do
-  -- Enable the program
-  GL.currentProgram GL.$= Just prog
-
-  -- Enable each vertex attribute that this material needs
-  mapM_ enableAttribute $ Map.elems vars
-  where enableAttribute :: ShaderVar -> IO ()
-        enableAttribute v = case v of
-          Attribute _ (OpenGLAttributeBinding loc)
-            -> GL.vertexAttribArray loc GL.$= GL.Enabled
-          -- Attribute _ _ -> error "Unrecognized attribute binding type!"
-          _ -> return ()
-
-afterRender :: Shader -> IO ()
-afterRender (OpenGLShader _ vars) = do
-  -- Disable each vertex attribute that this material needs
-  mapM_ disableAttribute $ Map.elems vars
-  where disableAttribute :: ShaderVar -> IO ()
-        disableAttribute v = case v of
-          Attribute _ (OpenGLAttributeBinding loc)
-            -> GL.vertexAttribArray loc GL.$= GL.Disabled
-          -- Attribute _ _ -> error "Unrecognized attribute binding type!"
-          _ -> return ()
-
-----------------------------------------
+type ShaderCompiler = I.Shader -> IO Shader
 
 vertMinimal :: I.ShaderCode
 vertMinimal = I.ShdrCode $ do
@@ -152,9 +39,8 @@ vertMinimal = I.ShdrCode $ do
 fragMinimal :: I.ShaderCode
 fragMinimal = I.ShdrCode $ return I.emptyO
 
-createMinimalShader :: IO (Shader)
-createMinimalShader =
-  I.generateOpenGLShader $ I.compileProgram vertMinimal fragMinimal
+createMinimalShader :: ShaderCompiler -> IO Shader
+createMinimalShader = ($ I.compileProgram vertMinimal fragMinimal)
 
 --------------------
 
@@ -642,30 +528,31 @@ genShadowedFragShader light mat = I.ShdrCode $ do
 
   return $ I.addFragmentColor outColor I.emptyO
 
-compileMaterial :: Light -> Material -> Maybe ShadowMap -> IO (Shader)
-compileMaterial light mat Nothing
-  | isUnlit mat = compileUnlitMaterial mat
+compileMaterial :: ShaderCompiler -> Light -> Material -> Maybe ShadowMap
+                -> IO Shader
+compileMaterial c light mat Nothing
+  | isUnlit mat = compileUnlitMaterial c mat
   | otherwise =
     let vshdr = genLitVertexShader mat
         fshdr = genLitFragShader light mat
-    in I.generateOpenGLShader $ I.compileProgram vshdr fshdr
-compileMaterial light mat (Just _)
-  | isUnlit mat = compileUnlitMaterial mat
+    in c $ I.compileProgram vshdr fshdr
+compileMaterial c light mat (Just _)
+  | isUnlit mat = compileUnlitMaterial c mat
   | otherwise =
     let vshdr = genLitVertexShader mat
         fshdr = genShadowedFragShader light mat
-    in I.generateOpenGLShader $ I.compileProgram vshdr fshdr
+    in c $ I.compileProgram vshdr fshdr
 
-compileUnlitMaterial :: Material -> IO (Shader)
-compileUnlitMaterial NoMaterial =
+compileUnlitMaterial :: ShaderCompiler -> Material -> IO Shader
+compileUnlitMaterial _ NoMaterial =
   error "Lambency.Shader (compileUnlitMaterial): Cannot compile non-material!"
-compileUnlitMaterial MinimalMaterial = createMinimalShader
-compileUnlitMaterial mat
+compileUnlitMaterial c MinimalMaterial = createMinimalShader c
+compileUnlitMaterial c mat
   | (not.isUnlit) mat = error
                       $ concat [ "Lambency.Shader (compileUnlitMaterial): "
                                , "Material requires light!"
                                ]
-  | otherwise = I.generateOpenGLShader $ I.compileProgram vshdr fshdr
+  | otherwise = c $ I.compileProgram vshdr fshdr
   where
     vshdr = genUnlitVertexShader mat
     fshdr = genUnlitFragmentShader mat

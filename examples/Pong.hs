@@ -2,6 +2,7 @@ module Main where
 
 --------------------------------------------------------------------------------
 import Prelude hiding ((.), id)
+import Control.Monad.Trans
 import Control.Wire
 import FRP.Netwire.Input
 import FRP.Netwire.Move
@@ -228,27 +229,22 @@ gameFeedback quad circle sound sysFont =
         (mkId &&& paddleWire playerOne quad handler) >>>
         collidePaddle playerOne s
 
-loadGameResources :: IO (L.Sprite, L.Sound, L.Font)
+loadGameResources :: L.ResourceLoader (L.Sprite, L.Sound, L.Font)
 loadGameResources = do
   let color = pure 255
   quad <- L.changeSpriteColor (V4 0.4 0.6 0.2 1.0) <$>
           (L.createSolidTexture color >>= L.loadStaticSpriteWithMask)
-  sound <- getDataFileName ("examples" </> "pong-bloop.wav") >>= L.loadSound
+  sound <- liftIO (getDataFileName $ "examples" </> "pong-bloop.wav")
+           >>= L.loadSound
 
-  fontFilename <- getDataFileName ("examples" </> "kenpixel.ttf")
+  fontFilename <- liftIO $ getDataFileName ("examples" </> "kenpixel.ttf")
   sysFont <- L.loadTTFont 36 (V3 1 1 1) fontFilename
 
   return (quad, sound, sysFont)
 
-unloadGameResources :: (L.Sprite, L.Sound, L.Font) -> IO ()
-unloadGameResources (sprite, sound, font) = do
-  L.unloadSound sound
-  L.unloadSprite sprite
-  L.unloadFont font
-
 gameWire :: L.ContWire (Int, Bool) (Maybe Int)
 gameWire =
-  L.bracketResource loadGameResources unloadGameResources
+  L.bracketResource loadGameResources
   $ L.withResource
   $ \(quad, sound, font) ->
     let feedback = gameFeedback quad quad sound font
@@ -266,17 +262,14 @@ pongCam = pure zero >>> (L.mk2DCam screenWidth screenHeight)
 --------------------------------------------------
 -- Init
 
-loadGame :: IO (L.Game Int)
-loadGame = do
-  let quitWire =
-        (pure True >>> keyPressed GLFW.Key'Q) `L.withDefault` pure False
-      mainWire = (id &&& quitWire) >>> gameWire
-  return $ L.Game { L.mainCamera = pongCam,
-                    L.dynamicLights = [],
-                    L.gameLogic = mainWire }
+game :: L.Game Int
+game = L.Game pongCam [] $ (id &&& quitWire) >>> gameWire
+ where
+   quitWire =
+     (pure True >>> keyPressed GLFW.Key'Q) `L.withDefault` pure False
 
 main :: IO ()
-main = L.withWindow screenWidth screenHeight "Pong Demo" $ L.loadAndRun 0 loadGame
+main = L.runOpenGL screenWidth screenHeight "Pong Demo" 0 game
 
 --------------------------------------------------
 -- Utils

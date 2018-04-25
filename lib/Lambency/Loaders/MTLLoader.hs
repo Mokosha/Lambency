@@ -180,7 +180,8 @@ data MTL = MTL {
 
 type LReflectivity = (L.MaterialVar (V3 Float), L.MaterialVar L.Texture)
 
-updateReflectivity :: FilePath -> ReflectivityInfo -> LReflectivity -> IO (LReflectivity)
+updateReflectivity :: FilePath -> ReflectivityInfo -> LReflectivity
+                   -> L.ResourceLoader LReflectivity
 updateReflectivity baseDir reflInfo (v1, v2) = do
   let v1n = L.getMatVarName v1
       v2n = L.getMatVarName v2
@@ -192,14 +193,14 @@ updateReflectivity baseDir reflInfo (v1, v2) = do
   v2' <- case reflMap reflInfo of
     Nothing -> return Nothing
     Just (fp, _) -> do
-      tex <- L.loadTexture $ baseDir </> fp
+      tex <- L.loadTexture (baseDir </> fp)
       case tex of
         Nothing -> return Nothing
         Just t -> return . Just $ L.TextureVal undefined t
 
   return (L.MaterialVar (v1n, v1'), L.MaterialVar (v2n, v2'))
 
-mkMaterial :: FilePath -> MTL -> IO (L.Material)
+mkMaterial :: FilePath -> MTL -> L.ResourceLoader L.Material
 mkMaterial baseDir mtl = do
   let initialMat = L.defaultBlinnPhong
 

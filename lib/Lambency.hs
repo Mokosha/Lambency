@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 module Lambency (
   initLambency,
   module Lambency.Bounds,
@@ -15,26 +16,26 @@ module Lambency (
   genTexCoordsOV3,
   triangle, cube, plane, quad,
 
-  module Lambency.Render,
+  module Lambency.Renderer,
   module Lambency.Shader,
   module Lambency.Sprite,
-  Texture, loadTexture, createSolidTexture, destroyTexture,
+  Texture, loadTexture, createSolidTexture,
   module Lambency.Transform,
   Camera, CameraType, CameraViewDistance,
   LightType, Light,
   ShaderValue(..), ShaderMap,
   Material,
-  RenderFlag(..), RenderObject(..),
+  Renderer, RenderFlag(..), RenderObject(..),
   OutputAction(..),
   TimeStep,
-  Sprite, unloadSprite,
+  Sprite,
   Game(..), GameConfig(..), GameMonad,
-  GameWire, ContWire, ResourceContext, ResourceContextWire,
+  GameWire, ContWire, ResourceLoader, ResourceContext, ResourceContextWire,
   module Lambency.UI,
   module Lambency.Utils,
 
-  makeWindow, destroyWindow, withWindow,
-  run, loadAndRun, runSimple,
+  RendererType(..),
+  run, runOpenGL,
   toggleWireframe,
   module Lambency.Sound
 ) where
@@ -51,6 +52,7 @@ import qualified Control.Wire as W
 import Data.Time
 
 import GHC.Float
+import GHC.Generics (Generic)
 
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Graphics.Rendering.OpenGL as GL
@@ -65,7 +67,8 @@ import Lambency.Light
 import Lambency.Loaders
 import Lambency.Material
 import Lambency.Mesh
-import Lambency.Render
+import Lambency.Renderer
+import Lambency.ResourceLoader
 import Lambency.Shader
 import Lambency.Sound
 import Lambency.Sprite
@@ -78,6 +81,10 @@ import Lambency.Utils
 import System.CPUTime
 import System.IO
 --------------------------------------------------------------------------------
+
+data RendererType
+  = RendererType'OpenGL
+  deriving(Eq, Ord, Bounded, Enum, Show, Read, Generic)
 
 initLambency :: IO ()
 initLambency = do
@@ -202,6 +209,7 @@ step go game t = do
            , gameLogic = CW logic}
 
 data GameLoopConfig = GameLoopConfig {
+  gameRenderer :: Renderer,
   simpleQuadSprite :: Sprite,
   glfwInputControl :: GLFWInputControl,
   glfwWin :: GLFW.Window
@@ -272,7 +280,7 @@ runGame = do
 
     renderTime = lastFramePicoseconds gls
     sprite = simpleQuadSprite gameLoopConfig
-    frameConfig = GameConfig renderTime winDims sprite
+    frameConfig = GameConfig (gameRenderer gameLoopConfig) renderTime winDims sprite
 
   -- This is the meat of the step routine. This calls runRWS on the
   -- main game wire, and uses the results to figure out what needs
@@ -289,7 +297,7 @@ runGame = do
     if needsRender
     then liftIO $ do
       t <- getCPUTime
-      render (glfwWin gameLoopConfig) lights cam renderActs
+      render (gameRenderer gameLoopConfig) lights cam renderActs
       t' <- getCPUTime
       return (t' - t)
     else return renderTime
@@ -308,8 +316,8 @@ runGame = do
       stepGame
     Nothing -> return (result, (nextSess, accum), nextGame)
 
-run :: a -> Game a -> GLFW.Window -> IO ()
-run initialGameObject initialGame win = do
+runWithGLFW :: GLFW.Window -> Renderer -> a -> Game a -> IO ()
+runWithGLFW win r initialGameObject initialGame = do
   oldBuffering <- hGetBuffering stdout
   hSetBuffering stdout NoBuffering
 
@@ -323,26 +331,23 @@ run initialGameObject initialGame win = do
 
   -- !FIXME! Use fully opaque 'mask' texture that we can change the color and
   -- size for dynamically. This isn't the best way to do this, but it'll work.
-  sprite <- createSolidTexture (pure 255) >>= loadStaticSpriteWithMask
+  (sprite, unloadSprite) <-
+    runResourceLoader r $ createSolidTexture (pure 255)
+                      >>= loadStaticSpriteWithMask
 
-  let statePrg = runReaderT (runLoop curTime) $ GameLoopConfig sprite ictl win
+  let statePrg = runReaderT (runLoop curTime) $ GameLoopConfig r sprite ictl win
   evalStateT statePrg $
     GameLoopState initialGameObject initialGame session (toEnum 0) 0
 
-  unloadSprite sprite
+  unloadSprite
   hSetBuffering stdout oldBuffering
 
-loadAndRun :: a -> IO (Game a) -> GLFW.Window -> IO ()
-loadAndRun initialGameObject loadGamePrg win =
-  loadGamePrg >>= (\g -> run initialGameObject g win)
+run :: RendererType -> Int -> Int -> String -> a -> Game a -> IO ()
+run RendererType'OpenGL w h title startObject game =
+  withWindow w h title $ \win -> runWithGLFW win (openGLRenderer win) startObject game
 
-runSimple :: Camera -> (Float -> a -> GameMonad a) -> a -> GLFW.Window -> IO ()
-runSimple cam f x win = do
-  let gameWire = W.mkGen $ \ts obj -> do
-        result <- f (W.dtime ts) obj
-        return (Right $ Just result, gameWire)
-
-  run x (Game (W.pure cam) [] (CW gameWire)) win
+runOpenGL :: Int -> Int -> String -> a -> Game a -> IO ()
+runOpenGL = run RendererType'OpenGL
 
 toggleWireframe :: Bool -> GameMonad ()
 toggleWireframe b = GameMonad $ tell $ ([WireframeAction b], mempty)

@@ -1,5 +1,7 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Lambency.Types (
   Vec2f, Vec3f, Vec4f, Quatf, Mat2f, Mat3f, Mat4f,
   Camera(..), CameraType(..), CameraViewDistance(..),
@@ -9,7 +11,8 @@ module Lambency.Types (
   UniformBinding(..), AttributeBinding(..), UniformMap,
   Texture(..), TextureSize(..), TextureFormat(..), FBOHandle(..), TextureHandle(..),
   MaterialVar(..), NormalModulation(..), ReflectionInfo(..), Material(..),
-  RenderFlag(..), RenderObject(..), RenderAction(..), RenderActions(..),
+  ResourceLoader(..), Renderer(..)
+  , RenderFlag(..), RenderObject(..), RenderAction(..), RenderActions(..),
   Sound, SoundCommand(..), SpriteFrame(..), Sprite(..),
   OutputAction(..),
   TimeStep,
@@ -25,13 +28,17 @@ import Control.Applicative
 import Control.Category
 import Control.Monad.RWS.Strict
 import Control.Monad.Reader
+import Control.Monad.Writer
 import qualified Control.Wire as W
 
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import Data.Maybe (isJust)
 import Data.Hashable
 import Data.Profunctor
 import Data.Time.Clock
+import Data.Word
+
+import Foreign.Ptr
 
 import FRP.Netwire.Input.GLFW
 
@@ -39,8 +46,10 @@ import qualified Graphics.Rendering.OpenGL as GL
 
 import Prelude hiding ((.), id)
 
-import Lambency.Utils
+import Lambency.Mesh
 import qualified Lambency.Transform as XForm
+import Lambency.Utils
+import Lambency.Vertex
 
 import Linear.Matrix
 import Linear.V2
@@ -301,7 +310,6 @@ data RenderObject = RenderObject
                     , objectVars :: UniformMap
                     , renderObject :: Shader -> UniformMap -> IO ()
                     , flags :: [RenderFlag]
-                    , unloadRenderObject :: IO ()
                     }
 
 data RenderAction = RenderObjects [RenderObject]
@@ -326,16 +334,47 @@ instance Monoid RenderActions where
   mappend (RenderActions a b) (RenderActions c d) =
     RenderActions (a `mappend` c) (b `mappend` d)
 
+data Renderer = Renderer
+  { mkTexture :: forall a
+               . Ptr a -> V2 Word32 -> TextureFormat
+              -> ResourceLoader Texture
+  , updateTexture :: forall a . Texture -> Ptr a -> V2 Word32 -> V2 Word32 -> IO ()
+  , mkDepthTexture :: V2 Word32 -> ResourceLoader Texture
+
+  , createRO :: forall a
+              . (Vertex a)
+             => Mesh a -> Material -> ResourceLoader RenderObject
+  , render :: [Light] -> Camera -> RenderActions -> IO ()
+  }
+
 data SpriteFrame = SpriteFrame {
   offset :: V2 Float,
   spriteSize :: V2 Int,
   frameRO :: RenderObject
 }
 
-data Sprite = Sprite
-  { spriteFrames :: CyclicList SpriteFrame
-  , unloadSprite :: IO ()
-  }
+newtype Sprite = Sprite { spriteFrames :: CyclicList SpriteFrame }
+
+--------------------------------------------------------------------------------
+--
+-- Resource Management
+--
+
+-- | A ResourceLoader is the interface from which we load resources that are
+-- needed by the renderer.
+newtype ResourceLoader a = ResourceLoader
+  -- Internally, we collect all of the unload functions within the context of
+  -- the ResourceLoader monad. We return them once we load all of the
+  -- resources, at which point it is the caller's job to figure out what to
+  -- do with them.
+  (ReaderT Renderer (WriterT (IO ()) IO) a)
+                         deriving ( Functor
+                                  , Applicative
+                                  , Monad
+                                  , MonadIO
+                                  , MonadReader Renderer
+                                  , MonadWriter (IO ())
+                                  )
 
 --------------------------------------------------------------------------------
 --
@@ -358,6 +397,7 @@ data OutputAction = LogAction String
 --------------------------------------------------------------------------------
 
 data GameConfig = GameConfig {
+  renderer :: Renderer,      -- The rendering system that we're using
   lastFrameTime :: Integer,  -- Picoseconds last frame took to render
   windowSize :: (Int, Int),  -- Size of the rendering window in pixels
   simpleSprite :: Sprite     -- A simple single-color sprite useful for fade-ins
@@ -379,10 +419,10 @@ type TimeStep = W.Timed Float ()
 type GameSession = W.Session IO TimeStep
 
 newtype GameMonad a = GameMonad {
-  nextFrame :: RWST GameConfig                       -- Reader
-                    ([OutputAction], RenderActions)  -- Writer
-                    GLFWInputState                   -- State
-                    IO                               -- Bottom of Monad stack
+  nextFrame :: RWST GameConfig                        -- Reader
+                    ([OutputAction], RenderActions)   -- Writer
+                    GLFWInputState                    -- State
+                    IO                                -- Bottom of Monad stack
                     a
 } deriving ( Functor
            , Applicative

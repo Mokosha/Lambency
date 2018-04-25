@@ -17,6 +17,7 @@ module Lambency.GameObject (
 import Control.Arrow
 import Control.Monad
 import Control.Monad.Reader
+import Control.Monad.Writer
 import Control.Wire
 
 import Data.Maybe
@@ -24,7 +25,7 @@ import Data.Either (isLeft)
 import Data.Foldable
 import Data.Semigroup ()
 
-import Lambency.Render
+import Lambency.Renderer
 import Lambency.Sound
 import Lambency.Transform
 import Lambency.Types
@@ -92,24 +93,30 @@ withVelocity initial velWire = velWire >>> (moveXForm initial)
 pulseSound :: Sound -> GameWire a a
 pulseSound = doOnce . startSound
 
+loadResources :: ResourceLoader a -> GameMonad (a, IO ())
+loadResources (ResourceLoader loadPrg) = GameMonad $ do
+  rr <- renderer <$> ask
+  liftIO $ runWriterT (runReaderT loadPrg rr)
+
 -- | Runs the initial loading program and uses the resource until the generated
 -- wire inhibits, at which point it unloads the resource. Once the resource is
 -- freed, the resulting wire returns Nothing indefinitely. The resulting wire
 -- also takes a signal to terminate from its input.
-bracketResource :: IO r -> (r -> IO ()) -> ResourceContextWire r a b
+bracketResource :: ResourceLoader r
+                -> ResourceContextWire r a b
                 -> ContWire (a, Bool) (Maybe b)
-bracketResource load unload (RCW rcw) = CW $ mkGen $ \dt x -> do
+bracketResource load (RCW rcw) = CW $ mkGen $ \dt x -> do
   -- TODO: Maybe should restrict this to certain types of resources?
-  resource <- GameMonad $ liftIO load
-  stepWire (go resource rcw) dt (Right x)
+  (resource, unload) <- loadResources load
+  stepWire (go unload resource rcw) dt (Right x)
     where
-      go res w = mkGen $ \dt (x, quitSignal) ->
-        let quit = do
-              GameMonad $ liftIO (unload res)
+      go unload res w = mkGen $ \dt (x, quitSignal) ->
+        let quit = GameMonad $ do
+              _ <- liftIO unload
               return (Right Nothing, pure Nothing)
         in if quitSignal then quit else do
           (result, w') <- runReaderT (stepWire w dt (Right x)) res
-          if isLeft result then quit else return (Just <$> result, go res w')
+          if isLeft result then quit else return (Just <$> result, go unload res w')
 
 liftWire :: GameWire a b -> ResourceContextWire r a b
 liftWire gw = RCW $ mkGen $ \dt x -> do

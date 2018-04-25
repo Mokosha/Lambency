@@ -13,7 +13,6 @@ import Control.Monad.Reader
 import Data.Traversable (sequenceA)
 #endif
 
-import Data.Foldable (traverse_)
 import Data.Maybe (fromJust)
 import Data.Word
 
@@ -50,11 +49,12 @@ initialCam = L.mkPerspCamera
 demoCam :: L.ContWire () L.Camera
 demoCam = L.mkFreeCam initialCam
 
-loadPlane :: IO L.RenderObject
-loadPlane = L.createRenderObject L.plane (L.diffuseColoredMaterial $ V3 0.5 0.5 0.5)
+loadPlane :: L.ResourceLoader L.RenderObject
+loadPlane = L.createRenderObject L.plane
+          $ L.diffuseColoredMaterial $ V3 0.5 0.5 0.5
 
 plane :: L.ContWire ((), Bool) (Maybe ())
-plane = L.bracketResource loadPlane L.unloadRenderObject
+plane = L.bracketResource loadPlane
         $ (L.liftWire (L.quitWire GLFW.Key'E) W.>>>)
         $ L.withResource
         $ flip L.staticObject xform
@@ -62,17 +62,14 @@ plane = L.bracketResource loadPlane L.unloadRenderObject
                 L.translate (V3 0 (-2) 0) $
                 L.identity
 
-unloadRenderObjects :: [L.RenderObject] -> IO ()
-unloadRenderObjects = traverse_ L.unloadRenderObject
-
-loadBunny:: IO [L.RenderObject]
+loadBunny :: L.ResourceLoader [L.RenderObject]
 loadBunny = do
-  objFile <- getDataFileName ("examples" </> "bunnyN" <.> "obj")
+  objFile <- liftIO $ getDataFileName ("examples" </> "bunnyN" <.> "obj")
   L.loadOBJWithDefaultMaterial objFile
     $ Just (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
 
 bunny :: L.ContWire ((), Bool) (Maybe ())
-bunny = L.bracketResource loadBunny unloadRenderObjects
+bunny = L.bracketResource loadBunny
         $ L.withResource
         $ (foldl (W.>>>) W.mkId) . map (flip L.staticObject xform)
   where xform = L.rotate (Quat.axisAngle (V3 0 1 0) pi) $
@@ -80,27 +77,23 @@ bunny = L.bracketResource loadBunny unloadRenderObjects
                 L.identity
 
 type CubeResources = (L.Texture, L.Sound, [L.RenderObject])
-loadCubeResources :: IO CubeResources
+loadCubeResources :: L.ResourceLoader CubeResources
 loadCubeResources = do
-  tex <- liftM fromJust $
-         getDataFileName ("examples" </> "crate" <.> "png") >>= L.loadTexture
+  tex <- liftM fromJust
+         $   liftIO (getDataFileName $ "examples" </> "crate" <.> "png")
+         >>= L.loadTexture
 
-  objFile <- getDataFileName ("examples" </> "cube" <.> "obj")
+  objFile <- liftIO $ getDataFileName ("examples" </> "cube" <.> "obj")
   meshes <- L.loadOBJWithDefaultMaterial objFile $
             Just (L.diffuseTexturedMaterial tex)
 
-  sound <- getDataFileName ("examples" </> "stereol" <.> "wav") >>= L.loadSound
+  sound <- liftIO (getDataFileName $ "examples" </> "stereol" <.> "wav")
+           >>= L.loadSound
   return (tex, sound, meshes)
-
-unloadCubeResources :: CubeResources -> IO ()
-unloadCubeResources (tex, sound, meshes) = do
-  L.destroyTexture tex
-  L.unloadSound sound
-  unloadRenderObjects meshes
 
 cubeWire :: L.ContWire (a, Bool) (Maybe ())
 cubeWire =
-  L.bracketResource loadCubeResources unloadCubeResources
+  L.bracketResource loadCubeResources
     $ L.withResource
     $ \(_, sound, ros) ->
       playSound sound 3.0 W.>>>
@@ -132,19 +125,19 @@ lightWire =
   in
   ((arr $ maybe (error "Light wire inhibited?") id) W.<<<)
   $ ((id &&& quitWire) W.>>>)
-  $ L.bracketResource (L.addShadowMap initial) L.removeShadowMap
+  $ L.bracketResource (L.addShadowMap initial)
   $ L.withResource
   $ \l -> (W.timeF W.>>>) $ W.mkSF_ $ \t ->
   let newPos = V3 (sin(t) * 10) py pz
   in L.setLightPosition newPos $
      L.setLightDirection (negate newPos) l
 
-loadFont :: IO L.Font
+loadFont :: L.ResourceLoader L.Font
 loadFont = L.loadTTFont 18 (V3 1 0 0) =<<
-           getDataFileName ("examples" </> "kenpixel" <.> "ttf")
+           liftIO (getDataFileName $ "examples" </> "kenpixel" <.> "ttf")
 
 uiWire :: L.ContWire ((), Bool) (Maybe ())
-uiWire = L.bracketResource loadFont L.unloadFont
+uiWire = L.bracketResource loadFont
          $ L.withResource
          $ \font -> 
          L.screen
@@ -195,4 +188,4 @@ game =
   $ (id W.&&& quitWire) W.>>> L.joinResources [cubeWire, bunny, plane, uiWire]
 
 main :: IO ()
-main = L.withWindow 640 480 "Cube Demo" $ L.run () game
+main = L.runOpenGL 640 480 "Cube Demo" () game
