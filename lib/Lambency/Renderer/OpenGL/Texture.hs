@@ -134,11 +134,11 @@ createDepthTexture (V2 w h) = do
   tell $ destroyFBO rbHandle
   tell $ destroyTexture handle
 
-  liftIO $ putStrLn $ "Created FBO :" ++ show rbHandle
-        >> putStrLn $ concat
-                    [ "  with texture of dimensions ", show (w, h)
-                    , ": ", show handle
-                    ]
+  liftIO $ putStrLn ("Created FBO: " ++ show rbHandle)
+        >> putStrLn (concat
+                     [ "  with texture of dimensions ", show (w, h)
+                     , ": ", show handle
+                     ])
 
   let shadowMapSize = TexSize $ fromEnum <$> V2 w h
   return $ RenderTexture (OpenGLTexHandle handle shadowMapSize)
