@@ -111,7 +111,7 @@ makeWindow width height title = do
 
   GLFW.setErrorCallback $ Just errorCallback
   putStr $ "Creating window of size " ++ show (width, height) ++ "..."
-  GLFW.windowHint $ GLFW.WindowHint'Samples 4
+  GLFW.windowHint $ GLFW.WindowHint'Samples (Just 4)
   jm <- GLFW.createWindow width height title Nothing Nothing
   m <- case jm of
     Nothing -> ioError (userError "Failed!")
