@@ -96,22 +96,17 @@ inputWire =
   ((pure (V2 1 0) >>> keyPressed GLFW.Key'Right) <|> (pure zero)) `addVecWire`
   ((pure (V2 (-1) 0) >>> keyPressed GLFW.Key'Left) <|> (pure zero))
 
-loadGameResources :: L.Renderer -> IO (L.Sprite, L.Sprite)
-loadGameResources r = do
+loadGameResources :: L.ResourceLoader (L.Sprite, L.Sprite)
+loadGameResources = do
   let white = pure 255
       red = V4 255 0 0 255
-  ship <- L.createSolidTexture r white >>= L.loadStaticSpriteWithTexture r
-  bullet <- L.createSolidTexture r red >>= L.loadStaticSpriteWithTexture r
+  ship <- L.createSolidTexture white >>= L.loadStaticSpriteWithTexture
+  bullet <- L.createSolidTexture red >>= L.loadStaticSpriteWithTexture
   return (ship, bullet)
-
-unloadGameResources :: (L.Sprite, L.Sprite) -> IO ()
-unloadGameResources (ship, bullet) = do
-  L.unloadSprite ship
-  L.unloadSprite bullet
 
 gameWire :: L.ContWire ((), Bool) (Maybe ())
 gameWire =
-  L.bracketResource loadGameResources unloadGameResources
+  L.bracketResource loadGameResources
   $ L.withResource $ \(ship, bullet) ->
   let shipW = inputWire >>> shipWire (V2 240 320) ship bullet
 

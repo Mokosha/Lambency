@@ -2,7 +2,7 @@ module Lambency.Sound (
   Sound, SoundCommand(..),
   initSound,
   freeSound,
-  loadSound, unloadSound,
+  loadSound,
   handleCommand,
   startSound, stopSound
 ) where
@@ -41,45 +41,49 @@ initSound = do
       AL.listenerVelocity GL.$= (GL.Vector3 0 0 0)
       AL.orientation GL.$= (GL.Vector3 0 0 (-1), GL.Vector3 0 1 0)
 
-loadSound :: FilePath -> IO (Sound)
+loadSound :: FilePath -> ResourceLoader Sound
 loadSound fp = do
   -- Generate OpenAL source
-  source <- GL.genObjectName
-  AL.pitch source GL.$= 1
-  AL.sourceGain source GL.$= 1
-  AL.sourcePosition source GL.$= (GL.Vertex3 0 0 0)
-  AL.sourceVelocity source GL.$= (GL.Vector3 0 0 0)
-  AL.loopingMode source GL.$= AL.OneShot
+  (source, buffer) <- liftIO $ do
+    src <- GL.genObjectName
 
-  -- Load wav file
-  result <- (Wav.importFile :: FilePath -> IO (Either String (Audio Int16))) fp
-  a <- case result of
-    Left s -> error s
-    Right audio -> return audio
-  samples <- thaw (sampleData a)
+    AL.pitch src GL.$= 1
+    AL.sourceGain src GL.$= 1
+    AL.sourcePosition src GL.$= (GL.Vertex3 0 0 0)
+    AL.sourceVelocity src GL.$= (GL.Vector3 0 0 0)
+    AL.loopingMode src GL.$= AL.OneShot
 
-  -- Generate OpenAL buffer
-  buffer <- GL.genObjectName
-  withStorableArray samples $ \ptr -> do
-    (sidx, eidx) <- getBounds samples
-    let nSamples = (fromIntegral eidx) - (fromIntegral sidx) + 1
-        nChannels = fromIntegral (channelNumber a)
-        -- Stereo means multiple samples per channel
-        mem = AL.MemoryRegion ptr (nChannels * nSamples)
-        format = if nChannels > 1 then AL.Stereo16 else AL.Mono16
-        freq = fromIntegral (sampleRate a)
-        soundData = AL.BufferData mem format freq
-    AL.bufferData buffer GL.$= soundData
+    -- Load wav file
+    result <- (Wav.importFile :: FilePath -> IO (Either String (Audio Int16))) fp
+    a <- case result of
+      Left s -> error s
+      Right audio -> return audio
+    samples <- thaw (sampleData a)
 
-  -- Attach the source to the buffer...
-  AL.buffer source GL.$= (Just buffer)
-  putStrLn $ "Loaded sound: " ++ (show source)
+    -- Generate OpenAL buffer
+    buf <- GL.genObjectName
+    withStorableArray samples $ \ptr -> do
+      (sidx, eidx) <- getBounds samples
+      let nSamples = (fromIntegral eidx) - (fromIntegral sidx) + 1
+          nChannels = fromIntegral (channelNumber a)
+          -- Stereo means multiple samples per channel
+          mem = AL.MemoryRegion ptr (nChannels * nSamples)
+          format = if nChannels > 1 then AL.Stereo16 else AL.Mono16
+          freq = fromIntegral (sampleRate a)
+          soundData = AL.BufferData mem format freq
+      AL.bufferData buf GL.$= soundData
+
+    -- Attach the src to the buffer...
+    AL.buffer src GL.$= (Just buf)
+    putStrLn $ "Loaded sound: " ++ (show src)
+
+    return (src, buf)
+
+  tell $ GL.deleteObjectName source
+      >> GL.deleteObjectName buffer
+      >> putStrLn ("Unloaded sound: " ++ show source)
+
   return source
-
-unloadSound :: Sound -> IO ()
-unloadSound s = do
-  GL.deleteObjectName s
-  putStrLn $ "Unloaded sound: " ++ (show s)
 
 handleCommand :: Sound -> SoundCommand -> IO ()
 handleCommand src StartSound = AL.play [src]

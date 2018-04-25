@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Lambency.Types (
   Vec2f, Vec3f, Vec4f, Quatf, Mat2f, Mat3f, Mat4f,
   Camera(..), CameraType(..), CameraViewDistance(..),
@@ -10,7 +11,8 @@ module Lambency.Types (
   UniformBinding(..), AttributeBinding(..), UniformMap,
   Texture(..), TextureSize(..), TextureFormat(..), FBOHandle(..), TextureHandle(..),
   MaterialVar(..), NormalModulation(..), ReflectionInfo(..), Material(..),
-  Renderer(..), RenderFlag(..), RenderObject(..), RenderAction(..), RenderActions(..),
+  ResourceLoader(..), Renderer(..)
+  , RenderFlag(..), RenderObject(..), RenderAction(..), RenderActions(..),
   Sound, SoundCommand(..), SpriteFrame(..), Sprite(..),
   OutputAction(..),
   TimeStep,
@@ -26,9 +28,10 @@ import Control.Applicative
 import Control.Category
 import Control.Monad.RWS.Strict
 import Control.Monad.Reader
+import Control.Monad.Writer
 import qualified Control.Wire as W
 
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import Data.Maybe (isJust)
 import Data.Hashable
 import Data.Profunctor
@@ -307,7 +310,6 @@ data RenderObject = RenderObject
                     , objectVars :: UniformMap
                     , renderObject :: Shader -> UniformMap -> IO ()
                     , flags :: [RenderFlag]
-                    , unloadRenderObject :: IO ()
                     }
 
 data RenderAction = RenderObjects [RenderObject]
@@ -333,12 +335,15 @@ instance Monoid RenderActions where
     RenderActions (a `mappend` c) (b `mappend` d)
 
 data Renderer = Renderer
-  { mkTexture :: forall a . Ptr a -> V2 Word32 -> TextureFormat -> IO Texture
+  { mkTexture :: forall a
+               . Ptr a -> V2 Word32 -> TextureFormat
+              -> ResourceLoader Texture
   , updateTexture :: forall a . Texture -> Ptr a -> V2 Word32 -> V2 Word32 -> IO ()
-  , mkDepthTexture :: V2 Word32 -> IO Texture
+  , mkDepthTexture :: V2 Word32 -> ResourceLoader Texture
 
-  , createRenderObject :: forall a . (Vertex a)
-                       => Mesh a -> Material -> IO RenderObject
+  , createRO :: forall a
+              . (Vertex a)
+             => Mesh a -> Material -> ResourceLoader RenderObject
   , render :: [Light] -> Camera -> RenderActions -> IO ()
   }
 
@@ -348,10 +353,28 @@ data SpriteFrame = SpriteFrame {
   frameRO :: RenderObject
 }
 
-data Sprite = Sprite
-  { spriteFrames :: CyclicList SpriteFrame
-  , unloadSprite :: IO ()
-  }
+newtype Sprite = Sprite { spriteFrames :: CyclicList SpriteFrame }
+
+--------------------------------------------------------------------------------
+--
+-- Resource Management
+--
+
+-- | A ResourceLoader is the interface from which we load resources that are
+-- needed by the renderer.
+newtype ResourceLoader a = ResourceLoader
+  -- Internally, we collect all of the unload functions within the context of
+  -- the ResourceLoader monad. We return them once we load all of the
+  -- resources, at which point it is the caller's job to figure out what to
+  -- do with them.
+  (ReaderT Renderer (WriterT (IO ()) IO) a)
+                         deriving ( Functor
+                                  , Applicative
+                                  , Monad
+                                  , MonadIO
+                                  , MonadReader Renderer
+                                  , MonadWriter (IO ())
+                                  )
 
 --------------------------------------------------------------------------------
 --
@@ -396,10 +419,10 @@ type TimeStep = W.Timed Float ()
 type GameSession = W.Session IO TimeStep
 
 newtype GameMonad a = GameMonad {
-  nextFrame :: RWST GameConfig                       -- Reader
-                    ([OutputAction], RenderActions)  -- Writer
-                    GLFWInputState                   -- State
-                    IO                               -- Bottom of Monad stack
+  nextFrame :: RWST GameConfig                        -- Reader
+                    ([OutputAction], RenderActions)   -- Writer
+                    GLFWInputState                    -- State
+                    IO                                -- Bottom of Monad stack
                     a
 } deriving ( Functor
            , Applicative

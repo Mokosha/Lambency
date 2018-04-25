@@ -10,7 +10,6 @@ module Lambency.Light (
   pointlight,
 
   addShadowMap,
-  removeShadowMap,
 
   getLightPosition,
   setLightPosition,
@@ -24,9 +23,10 @@ module Lambency.Light (
 ) where
 
 --------------------------------------------------------------------------------
+import Control.Monad.Reader
+
 import Lambency.Shader
 import Lambency.Types
-import Lambency.Texture
 
 import qualified Data.Map as Map
 
@@ -93,15 +93,10 @@ pointlight params pos =
     lightShadowMap = Nothing
   }
 
-addShadowMap :: Renderer -> Light -> IO Light
-addShadowMap r l = do
-  depthTex <- mkDepthTexture r (pure 1024)
+addShadowMap :: Light -> ResourceLoader Light
+addShadowMap l = do
+  depthTex <- ask >>= flip mkDepthTexture (pure 1024)
   return $ l { lightShadowMap = (Just (ShadowMap depthTex, ShadowTechnique'Simple)) }
-
-removeShadowMap :: Light -> IO ()
-removeShadowMap l = case lightShadowMap l of
-  Nothing -> return ()
-  Just (ShadowMap t, _) -> destroyTexture t
 
 getLightPosition :: Light -> Maybe (V3 Float)
 getLightPosition (Light _ (SpotLight {..}) _) =

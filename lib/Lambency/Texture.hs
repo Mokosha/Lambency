@@ -2,21 +2,20 @@ module Lambency.Texture (
   textureSize,
   createSolidTexture,
   loadTexture,
-  destroyTexture,
 ) where
 
 --------------------------------------------------------------------------------
 #if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
 #endif
+import Control.Monad.Reader
 
+import Lambency.ResourceLoader
 import Lambency.Types
-import qualified Lambency.Renderer.OpenGL.Texture as OpenGL
 
 import qualified Codec.Picture as JP
 import qualified Codec.Picture.Types as JP
 
--- import System.Directory
 import Data.Array.Storable
 import Data.Word
 import qualified Data.Vector.Storable as Vector
@@ -31,33 +30,34 @@ textureSize :: Texture -> V2 Int
 textureSize (Texture (OpenGLTexHandle _ sz) _) = getTextureSize sz
 textureSize (RenderTexture (OpenGLTexHandle _ sz) _) = getTextureSize sz
 
-
-loadTextureFromPNGorTGA :: Renderer -> JP.DynamicImage -> IO Texture
-loadTextureFromPNGorTGA r (JP.ImageRGBA8 (JP.Image width height dat)) = do
-  Vector.unsafeWith dat $ \ptr ->
+loadTextureFromPNGorTGA :: JP.DynamicImage -> ResourceLoader Texture
+loadTextureFromPNGorTGA (JP.ImageRGBA8 (JP.Image width height dat)) = do
+  r <- ask
+  runLoaderWith (Vector.unsafeWith dat) $ \ptr ->
     mkTexture r ptr (fromIntegral <$> V2 width height) RGBA8
-loadTextureFromPNGorTGA r (JP.ImageRGB8 (JP.Image width height dat)) = do
-  Vector.unsafeWith dat $ \ptr ->
+loadTextureFromPNGorTGA (JP.ImageRGB8 (JP.Image width height dat)) = do
+  r <- ask
+  runLoaderWith (Vector.unsafeWith dat) $ \ptr ->
     mkTexture r ptr (fromIntegral <$> V2 width height) RGB8
-loadTextureFromPNGorTGA _ _ = error "Unknown PNG or TGA color type"
+loadTextureFromPNGorTGA _ = error "Unknown PNG or TGA color type"
 
-loadTextureFromPNG :: Renderer -> FilePath -> IO (Maybe Texture)
-loadTextureFromPNG r filename = do
-  pngBytes <- BS.readFile filename
+loadTextureFromPNG :: FilePath -> ResourceLoader (Maybe Texture)
+loadTextureFromPNG filename = do
+  pngBytes <- liftIO $ BS.readFile filename
   case JP.decodePng pngBytes of
     Left str -> do
-      putStrLn $ "Error loading PNG file: " ++ str
+      liftIO $ putStrLn $ "Error loading PNG file: " ++ str
       return Nothing
-    Right img -> Just <$> loadTextureFromPNGorTGA r img
+    Right img -> Just <$> loadTextureFromPNGorTGA img
 
-loadTextureFromTGA :: Renderer -> FilePath -> IO (Maybe Texture)
-loadTextureFromTGA r filename = do
-  tgaBytes <- BS.readFile filename
+loadTextureFromTGA :: FilePath -> ResourceLoader (Maybe Texture)
+loadTextureFromTGA filename = do
+  tgaBytes <- liftIO $ BS.readFile filename
   case JP.decodeTga tgaBytes of
     Left str -> do
-      putStrLn $ "Error loading TGA file: " ++ str
+      liftIO $ putStrLn $ "Error loading TGA file: " ++ str
       return Nothing
-    Right img -> Just <$> loadTextureFromPNGorTGA r img
+    Right img -> Just <$> loadTextureFromPNGorTGA img
 
 flipY :: JP.Pixel a => JP.Image a -> JP.Image a
 flipY img =
@@ -66,31 +66,30 @@ flipY img =
       genPixel x y = JP.pixelAt img x (h - y - 1)
   in JP.generateImage genPixel w h
 
-loadTextureFromJPG :: Renderer -> FilePath -> IO (Maybe Texture)
-loadTextureFromJPG r filename = do
-  jpgBytes <- BS.readFile filename
-  jpgImg <- case JP.decodeJpeg jpgBytes of
-    Left str -> do
-      putStrLn $ "Error loading JPG file: " ++ str
-      return Nothing
-    Right img -> return (Just img)
+loadTextureFromJPG :: FilePath -> ResourceLoader (Maybe Texture)
+loadTextureFromJPG filename =  do
+  jpgImg <- liftIO $ do
+    jpgBytes <- BS.readFile filename
+    case JP.decodeJpeg jpgBytes of
+      Left str -> do
+        putStrLn $ "Error loading JPG file: " ++ str
+        return Nothing
+      Right img -> return (Just img)
   case jpgImg of
-    Nothing -> return Nothing
-    Just img -> do
-      case img of
-        (JP.ImageYCbCr8 i) ->
-          let (JP.ImageRGB8 (JP.Image width height dat)) =
-                JP.ImageRGB8 (JP.convertImage $ flipY i)
-          in do
-            tex <- Vector.unsafeWith dat $ \ptr ->
-              mkTexture r ptr (fromIntegral <$> V2 width height) RGB8
-            return $ Just tex
-        _ -> return Nothing
+    Just (JP.ImageYCbCr8 i) -> do
+      let (JP.ImageRGB8 (JP.Image width height dat)) =
+            JP.ImageRGB8 (JP.convertImage $ flipY i)
+      runLoaderWith (Vector.unsafeWith dat) $ \ptr -> do
+        r <- ask
+        Just <$> mkTexture r ptr (fromIntegral <$> V2 width height) RGB8
+    _ -> return Nothing
 
-createSolidTexture :: Renderer -> V4 Word8 -> IO Texture
-createSolidTexture rend (V4 r g b a) = do
-  carr <- newListArray (0 :: Integer, 3) [r, g, b, a]
-  withStorableArray carr (\ptr -> mkTexture rend ptr (pure 1) RGBA8)
+createSolidTexture :: V4 Word8 -> ResourceLoader Texture
+createSolidTexture (V4 r g b a) = do
+  carr <- liftIO $ newListArray (0 :: Integer, 3) [r, g, b, a]
+  runLoaderWith (withStorableArray carr) $ \ptr -> do
+    rend <- ask
+    mkTexture rend ptr (pure 1) RGBA8
 
 data ImageType
   = ImageType'PNG
@@ -113,20 +112,16 @@ determineImageType = fromExtension . takeExtension
     fromExtension ".TGA" = Just ImageType'TGA
     fromExtension _ = Nothing
 
-loadTextureWithType :: Renderer -> FilePath -> Maybe ImageType -> IO (Maybe Texture)
-loadTextureWithType _ fp Nothing = do
-  putStrLn $ "WARNING: Unsupported image type: " ++ fp
+loadTextureWithType :: FilePath -> Maybe ImageType
+                    -> ResourceLoader (Maybe Texture)
+loadTextureWithType fp Nothing = do
+  liftIO $ putStrLn $ "WARNING: Unsupported image type: " ++ fp
   return Nothing
-loadTextureWithType r filename (Just ImageType'PNG) = loadTextureFromPNG r filename
-loadTextureWithType r filename (Just ImageType'JPG) = loadTextureFromJPG r filename
-loadTextureWithType r filename (Just ImageType'TGA) = loadTextureFromTGA r filename
+loadTextureWithType filename (Just ImageType'PNG) = loadTextureFromPNG filename
+loadTextureWithType filename (Just ImageType'JPG) = loadTextureFromJPG filename
+loadTextureWithType filename (Just ImageType'TGA) = loadTextureFromTGA filename
 
-loadTexture :: Renderer -> FilePath -> IO (Maybe Texture)
-loadTexture r filename =
+loadTexture :: FilePath -> ResourceLoader (Maybe Texture)
+loadTexture filename =
   let imageType = determineImageType filename
-  in loadTextureWithType r filename imageType
-
-destroyTexture :: Texture -> IO ()
-destroyTexture (Texture (OpenGLTexHandle h _) _) = OpenGL.destroyTexture h
-destroyTexture (RenderTexture (OpenGLTexHandle h _) (OpenGLFBOHandle fboh)) =
-  OpenGL.destroyTexture h >> OpenGL.destroyFBO fboh
+  in loadTextureWithType filename imageType

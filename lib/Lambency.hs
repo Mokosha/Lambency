@@ -19,18 +19,18 @@ module Lambency (
   module Lambency.Renderer,
   module Lambency.Shader,
   module Lambency.Sprite,
-  Texture, loadTexture, createSolidTexture, destroyTexture,
+  Texture, loadTexture, createSolidTexture,
   module Lambency.Transform,
   Camera, CameraType, CameraViewDistance,
   LightType, Light,
   ShaderValue(..), ShaderMap,
   Material,
-  Renderer, createRenderObject, RenderFlag(..), RenderObject(..),
+  Renderer, RenderFlag(..), RenderObject(..),
   OutputAction(..),
   TimeStep,
-  Sprite, unloadSprite,
+  Sprite,
   Game(..), GameConfig(..), GameMonad,
-  GameWire, ContWire, ResourceContext, ResourceContextWire,
+  GameWire, ContWire, ResourceLoader, ResourceContext, ResourceContextWire,
   module Lambency.UI,
   module Lambency.Utils,
 
@@ -68,6 +68,7 @@ import Lambency.Loaders
 import Lambency.Material
 import Lambency.Mesh
 import Lambency.Renderer
+import Lambency.ResourceLoader
 import Lambency.Shader
 import Lambency.Sound
 import Lambency.Sprite
@@ -330,13 +331,15 @@ runWithGLFW win r initialGameObject initialGame = do
 
   -- !FIXME! Use fully opaque 'mask' texture that we can change the color and
   -- size for dynamically. This isn't the best way to do this, but it'll work.
-  sprite <- createSolidTexture r (pure 255) >>= loadStaticSpriteWithMask r
+  (sprite, unloadSprite) <-
+    runResourceLoader r $ createSolidTexture (pure 255)
+                      >>= loadStaticSpriteWithMask
 
   let statePrg = runReaderT (runLoop curTime) $ GameLoopConfig r sprite ictl win
   evalStateT statePrg $
     GameLoopState initialGameObject initialGame session (toEnum 0) 0
 
-  unloadSprite sprite
+  unloadSprite
   hSetBuffering stdout oldBuffering
 
 run :: RendererType -> Int -> Int -> String -> a -> Game a -> IO ()

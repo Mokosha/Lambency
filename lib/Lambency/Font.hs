@@ -1,5 +1,5 @@
 module Lambency.Font (
-  Font, ModifiedFont, IsFont, unloadFont,
+  Font, ModifiedFont, IsFont,
   loadSystemFont,
   loadTTFont,
   renderUIString,
@@ -12,6 +12,7 @@ module Lambency.Font (
 import Control.Applicative
 #endif
 import Control.Monad
+import Control.Monad.Reader
 
 import Data.Array.Storable
 import Data.Bits
@@ -30,6 +31,7 @@ import Graphics.Rendering.FreeType.Internal.GlyphSlot as FT_GS
 import Graphics.Rendering.FreeType.Internal.PrimitiveTypes
 import Graphics.Rendering.FreeType.Internal.Vector hiding (x, y)
 
+import Lambency.ResourceLoader
 import Lambency.Sprite
 import Lambency.Texture
 import Lambency.Types
@@ -54,10 +56,8 @@ logBase2 x = finiteBitSize x - 1 - countLeadingZeros x
 #endif
 
 --------------------------------------------------------------------------------
-data Font = Font
-            { getOrigGlyph :: Char -> Maybe (SpriteFrame, (V2 Int, V2 Int))
-            , unloadFont :: IO ()
-            }
+newtype Font = Font
+            { getOrigGlyph :: Char -> Maybe (SpriteFrame, (V2 Int, V2 Int)) }
 newtype ModifiedFont = MF {
   getModifiedGlyph :: Char -> Maybe (SpriteFrame, (V2 Int, V2 Int))
 }
@@ -97,7 +97,7 @@ renderUIString font str pos = let
       Nothing -> return ()
       Just (f, _) ->
         let V2 _ glyphSzY = fmap fromIntegral $ spriteSize f
-            fakeSprite = Sprite (cycleSingleton f) (return ())
+            fakeSprite = Sprite (cycleSingleton f)
         in renderUISprite fakeSprite $ p ^-^ (V2 0 glyphSzY)
   in do
     mapM_ (uncurry renderCharAtPos) $ zip str positions
@@ -125,7 +125,8 @@ stringWidth f str = foldl' (+) 0 sizes
 
 mkFont :: Sprite -> [Char] -> [V2 Int] -> [V2 Int] -> Font
 mkFont sprite string advances offsets =
-  flip Font (unloadSprite sprite) $ flip Map.lookup
+  Font
+  $ flip Map.lookup
   $ Map.fromList
   $ zip string (zip (cyclicToList $ spriteFrames sprite) (zip advances offsets))
 
@@ -133,13 +134,14 @@ charString :: [Char]
 charString = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ"
              ++ "[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 
-loadSystemFont :: Renderer -> V3 Float -> IO Font
-loadSystemFont rr (V3 r g b) = let
+loadSystemFont :: V3 Float -> ResourceLoader Font
+loadSystemFont (V3 r g b) = let
   systemOffsets = [V2 x 0 | x <- [0,14..]]
   systemSizes = repeat (V2 13 24)
   in do
-    Just tex <- getDataFileName ("font" <.> "png") >>= loadTexture rr
-    Just s <- loadAnimatedSpriteWithMask rr tex systemSizes systemOffsets
+    fname <- liftIO $ getDataFileName ("font" <.> "png")
+    Just tex <- loadTexture fname
+    Just s <- loadAnimatedSpriteWithMask tex systemSizes systemOffsets
     let sprite = changeSpriteColor (V4 r g b 1) s
     return $ mkFont sprite charString (repeat zero) (repeat zero)
 
@@ -200,42 +202,46 @@ uploadGlyph r ft_face tex widthAccum c = do
     cvt :: (Enum a, Enum b) => a -> b
     cvt = toEnum . fromEnum
 
-loadTTFont :: Renderer -> Int -> V3 Float -> FilePath -> IO Font
-loadTTFont r fontSize (V3 fontR fontG fontB) filepath = do
-  -- Create local copy of freetype library... this will free itself once it
-  -- goes out of scope...
-  ft_library <- alloca $ \p -> do { runFreeType $ ft_Init_FreeType p; peek p }
+loadTTFont :: Int -> V3 Float -> FilePath -> ResourceLoader Font
+loadTTFont fontSize (V3 fontR fontG fontB) filepath = do
+  (texW, texH, texZeroA, ft_face) <- liftIO $ do
+    -- Create local copy of freetype library... this will free itself once it
+    -- goes out of scope...
+    ft_library <- alloca $ \p -> do { runFreeType $ ft_Init_FreeType p; peek p }
 
-  -- Load the font
-  ft_face <- withCString filepath $ \cstr -> alloca $ \f -> do
-    runFreeType $ ft_New_Face ft_library cstr 0 f
-    peek f
+    -- Load the font
+    ft_face <- withCString filepath $ \cstr -> alloca $ \f -> do
+      runFreeType $ ft_New_Face ft_library cstr 0 f
+      peek f
 
-  -- Set the pixel size
-  runFreeType $ ft_Set_Pixel_Sizes ft_face 0 (toEnum . fromEnum $ fontSize)
+    -- Set the pixel size
+    runFreeType $ ft_Set_Pixel_Sizes ft_face 0 (toEnum . fromEnum $ fontSize)
 
-  -- Figure out the width and height of the bitmap that we need...
-  (texW, texH) <- let nextPower2 = (shiftL 1) . (+ 1) . logBase2
-                      updateWH (x, y) = (nextPower2 x, nextPower2 y)
-                   in updateWH <$> foldM (analyzeGlyph ft_face) (0, 0) charString
+    -- Figure out the width and height of the bitmap that we need...
+    (texW, texH) <- let nextPower2 = (shiftL 1) . (+ 1) . logBase2
+                        updateWH (x, y) = (nextPower2 x, nextPower2 y)
+                    in updateWH <$> foldM (analyzeGlyph ft_face) (0, 0) charString
 
-  -- Create a texture to store all of the glyphs
-  texZeroA <- ((newArray (1, texW*texH) 0) :: IO (StorableArray Int Word8))
-  tex <- withStorableArray texZeroA $ \ptr ->
+    -- Create a texture to store all of the glyphs
+    texZeroA <- ((newArray (1, texW*texH) 0) :: IO (StorableArray Int Word8))
+    return (texW, texH, texZeroA, ft_face)
+
+  r <- ask
+  tex <- runLoaderWith (withStorableArray texZeroA) $ \ptr -> do
     mkTexture r ptr (fromIntegral <$> V2 texW texH) Alpha8
 
   -- Place each glyph into the texture
-  foldM_ (uploadGlyph r ft_face tex) 0 charString
+  liftIO $ foldM_ (uploadGlyph r ft_face tex) 0 charString
 
   -- Generate info for our rendering
-  advOffs <- mapM (getGlyphAdvanceOffset ft_face) charString
+  advOffs <- liftIO $ mapM (getGlyphAdvanceOffset ft_face) charString
   let advances = map (fmap (flip div 64) . fst) advOffs
       offsets = map snd advOffs
 
-  sizes <- mapM (analyzeGlyph ft_face (0, 0)) charString
+  sizes <- liftIO $ mapM (analyzeGlyph ft_face (0, 0)) charString
   let texOffsets = snd $ mapAccumL (\a (w, _) -> (a + w, V2 a 0)) 0 sizes
       sizesV = map (\(x, y) -> V2 x y) sizes
       fontColor = V4 fontR fontG fontB 1
 
-  Just s <- loadAnimatedSpriteWithMask r tex sizesV texOffsets
+  Just s <- loadAnimatedSpriteWithMask tex sizesV texOffsets
   return $ mkFont (changeSpriteColor fontColor s) charString advances offsets

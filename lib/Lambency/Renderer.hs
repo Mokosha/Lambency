@@ -1,6 +1,7 @@
 module Lambency.Renderer
   ( nullRenderer
   , openGLRenderer
+  , createRenderObject
   , addClippedRenderAction
   , addTransformedRenderAction
   , addRenderAction
@@ -13,8 +14,10 @@ import Control.Monad.RWS.Strict
 
 import qualified Graphics.UI.GLFW as GLFW
 
+import Lambency.Mesh
 import Lambency.Types
 import Lambency.Transform
+import Lambency.Vertex
 
 import Linear hiding (identity)
 
@@ -64,12 +67,18 @@ addRenderUIAction (V2 x y) ro = GameMonad $
   where
     xf = translate (V3 x y (-1)) identity
 
+createRenderObject :: Vertex a => Mesh a -> Material
+                   -> ResourceLoader RenderObject
+createRenderObject mesh mat = do
+  r <- ask
+  createRO r mesh mat
+
 nullRenderer :: Renderer
 nullRenderer = Renderer
   { mkTexture = \ _ _ _ -> return $ error "null texture!"
   , updateTexture = \_ _ _ _ -> return ()
   , mkDepthTexture = \_ -> return $ error "null depth texture!"
-  , createRenderObject = \_ _ -> return $ error "null render object!"
+  , createRO = \_ _ -> return $ error "null render object!"
   , render = \_ _ _ -> return ()
   }
 
@@ -78,6 +87,6 @@ openGLRenderer win = Renderer
   { mkTexture = OpenGL.initializeTexture
   , updateTexture = OpenGL.updateTexture
   , mkDepthTexture = OpenGL.createDepthTexture
-  , createRenderObject = OpenGL.createRenderObject
+  , createRO = OpenGL.createRenderObject
   , render = OpenGL.render win
   } 

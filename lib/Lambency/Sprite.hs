@@ -21,9 +21,9 @@ module Lambency.Sprite (
 
 --------------------------------------------------------------------------------
 import Control.Comonad
+import Control.Monad.Reader
 import Control.Wire
 
-import Data.Foldable (traverse_)
 import Data.List (nub)
 
 import Lambency.Material
@@ -106,7 +106,7 @@ changeSpriteFrameColor :: V4 Float -> SpriteFrame -> SpriteFrame
 changeSpriteFrameColor c = mapFrameRO $ mapROMaterial $ updateColor c
 
 mapSpriteFrames :: (SpriteFrame -> SpriteFrame) -> Sprite -> Sprite
-mapSpriteFrames f (Sprite frames ul) = Sprite (fmap f frames) ul
+mapSpriteFrames f (Sprite frames) = Sprite (fmap f frames)
 
 changeSpriteColor :: V4 Float -> Sprite -> Sprite
 changeSpriteColor c = mapSpriteFrames $ changeSpriteFrameColor c
@@ -114,34 +114,29 @@ changeSpriteColor c = mapSpriteFrames $ changeSpriteFrameColor c
 addRenderFlag :: RenderFlag -> RenderObject -> RenderObject
 addRenderFlag flag = \r -> r { flags = nub $ flag : (flags r) }
 
-initStaticSprite :: Bool -> Renderer -> Texture -> IO Sprite
-initStaticSprite isMask r tex = do
-  let mat = if isMask then maskedSpriteMaterial tex else texturedSpriteMaterial tex
+initStaticSprite :: Bool -> Texture -> ResourceLoader Sprite
+initStaticSprite isMask tex = do
+  let mat = if isMask
+            then maskedSpriteMaterial tex
+            else texturedSpriteMaterial tex
   ro <- (if isMask then addRenderFlag Transparent else id)
-        <$> createRenderObject r quad mat
+        <$> createRenderObject quad mat
   return $ Sprite
     { spriteFrames = cycleSingleton $ SpriteFrame
         { offset = zero
         , spriteSize = textureSize tex
         , frameRO = ro
         }
-    , unloadSprite = do
-          destroyTexture tex
-          unloadRenderObject ro
     }
 
-initAnimatedSprite :: Renderer -> Bool -> [V2 Int] -> [V2 Int] -> Texture
-                   -> IO Sprite
-initAnimatedSprite r isMask frameSzs offsets tex = do
-  let mat = if isMask then maskedSpriteMaterial tex else texturedSpriteMaterial tex
-  ro <- createRenderObject r quad mat
-  let spriteFrames = cyclicFromList $ map (genFrame ro) (zip frameSzs offsets)
-  return $ Sprite
-    { spriteFrames = spriteFrames
-    , unloadSprite = do
-        traverse_ (unloadRenderObject . frameRO) spriteFrames
-        destroyTexture tex
-    }
+initAnimatedSprite :: Bool -> [V2 Int] -> [V2 Int] -> Texture
+                   -> ResourceLoader Sprite
+initAnimatedSprite isMask frameSzs offsets tex = do
+  let mat = if isMask
+            then maskedSpriteMaterial tex
+            else texturedSpriteMaterial tex
+  ro <- createRenderObject quad mat
+  return $ Sprite $ cyclicFromList $ map (genFrame ro) (zip frameSzs offsets)
   where
     genFrame :: RenderObject -> (V2 Int, V2 Int) -> SpriteFrame
     genFrame ro (sz, off) =
@@ -162,44 +157,45 @@ initAnimatedSprite r isMask frameSzs offsets tex = do
         (newRange (fromIntegral ox) (0, fromIntegral tx) (0, 1))
         (newRange (fromIntegral oy) (0, fromIntegral ty) (0, 1))
 
-loadSpriteWith :: Renderer -> FilePath -> (Texture -> IO (Sprite))
-               -> IO (Maybe Sprite)
-loadSpriteWith r f initFn = do
-  tex <- loadTexture r f
+loadSpriteWith :: FilePath
+               -> (Texture -> ResourceLoader Sprite)
+               -> ResourceLoader (Maybe Sprite)
+loadSpriteWith f initFn = do
+  tex <- loadTexture f
   case tex of
     Nothing -> return Nothing
     (Just t@(Texture _ _)) -> initFn t >>= (return . Just)
     _ -> return Nothing
 
-loadStaticSpriteWithTexture :: Renderer -> Texture -> IO (Sprite)
+loadStaticSpriteWithTexture :: Texture -> ResourceLoader Sprite
 loadStaticSpriteWithTexture = initStaticSprite False
 
-loadStaticSpriteWithMask :: Renderer -> Texture -> IO (Sprite)
+loadStaticSpriteWithMask :: Texture -> ResourceLoader Sprite
 loadStaticSpriteWithMask = initStaticSprite True
 
-loadStaticSprite :: Renderer -> FilePath -> IO (Maybe Sprite)
-loadStaticSprite r f = loadSpriteWith r f (initStaticSprite False r)
+loadStaticSprite :: FilePath -> ResourceLoader (Maybe Sprite)
+loadStaticSprite f = loadSpriteWith f (initStaticSprite False)
 
-loadAnimatedSprite :: Renderer -> FilePath -> [V2 Int] -> [V2 Int]
-                   -> IO (Maybe Sprite)
-loadAnimatedSprite r f frameSzs offsets =
-  loadSpriteWith r f $ initAnimatedSprite r False frameSzs offsets
+loadAnimatedSprite :: FilePath -> [V2 Int] -> [V2 Int]
+                   -> ResourceLoader (Maybe Sprite)
+loadAnimatedSprite f frameSzs offsets =
+  loadSpriteWith f $ initAnimatedSprite False frameSzs offsets
 
-loadAnimatedSpriteWithTexture :: Renderer -> Texture -> [V2 Int] -> [V2 Int]
-                              -> IO (Maybe Sprite)
-loadAnimatedSpriteWithTexture r t frameSzs offsets =
-  initAnimatedSprite r False frameSzs offsets t >>= (return . Just)
+loadAnimatedSpriteWithTexture :: Texture -> [V2 Int] -> [V2 Int]
+                              -> ResourceLoader (Maybe Sprite)
+loadAnimatedSpriteWithTexture t frameSzs offsets =
+  initAnimatedSprite False frameSzs offsets t >>= (return . Just)
 
-loadAnimatedSpriteWithMask :: Renderer -> Texture -> [V2 Int] -> [V2 Int]
-                           -> IO (Maybe Sprite)
-loadAnimatedSpriteWithMask r t frameSzs offsets =
+loadAnimatedSpriteWithMask :: Texture -> [V2 Int] -> [V2 Int]
+                           -> ResourceLoader (Maybe Sprite)
+loadAnimatedSpriteWithMask t frameSzs offsets =
   -- !HACK! Not all animated (multi-frame) mask sprites are fonts...
-  initAnimatedSprite r True frameSzs offsets t >>=
+  initAnimatedSprite True frameSzs offsets t >>=
   (return . Just . mapSpriteFrames addTextFlag)
 
-loadFixedSizeAnimatedSprite :: Renderer -> FilePath -> V2 Int -> [V2 Int]
-                            -> IO (Maybe Sprite)
-loadFixedSizeAnimatedSprite r f frameSz = loadAnimatedSprite r f (repeat frameSz)
+loadFixedSizeAnimatedSprite :: FilePath -> V2 Int -> [V2 Int]
+                            -> ResourceLoader (Maybe Sprite)
+loadFixedSizeAnimatedSprite f frameSz = loadAnimatedSprite f (repeat frameSz)
 
 renderUISpriteWithSize :: Sprite -> V2 Float -> V2 Float -> GameMonad ()
 renderUISpriteWithSize sprite pos (V2 sx sy)
@@ -207,7 +203,7 @@ renderUISpriteWithSize sprite pos (V2 sx sy)
   $ addRenderUIAction pos (frameRO . extract $ spriteFrames sprite)
 
 renderUISprite :: Sprite -> V2 Float -> GameMonad ()
-renderUISprite s@(Sprite frames _) pos =
+renderUISprite s@(Sprite frames) pos =
   renderUISpriteWithSize s pos $ fromIntegral <$> (spriteSize $ extract frames)
 
 renderFrameAt :: RenderObject -> V2 Int -> Float -> V2 Float -> GameMonad ()
@@ -224,7 +220,7 @@ renderSprite s = renderSpriteWithAlpha s 1.0
 -- Renders a sprite for the given alpha, scale, depth, and position
 renderSpriteWithAlpha :: Sprite -> Float -> V2 Int -> Float -> V2 Float ->
                          GameMonad ()
-renderSpriteWithAlpha (Sprite frames _) a =
+renderSpriteWithAlpha (Sprite frames) a =
   renderFrameAt (setAlpha . frameRO . extract $ frames)
   where
     setAlpha ro = ro { material = updateAlpha a (material ro),
@@ -239,14 +235,14 @@ data SpriteAnimationType
     deriving(Eq, Ord, Show, Enum)
 
 animatedWire :: Sprite -> SpriteAnimationType -> GameWire a Sprite
-animatedWire (Sprite (CyclicList _ _ []) _) SpriteAnimationType'Forward = mkEmpty
-animatedWire s@(Sprite frames ul) SpriteAnimationType'Forward =
+animatedWire (Sprite (CyclicList _ _ [])) SpriteAnimationType'Forward = mkEmpty
+animatedWire s@(Sprite frames) SpriteAnimationType'Forward =
   mkGenN $ \ _ -> do
-    let nextSprite = Sprite (advance frames) ul
+    let nextSprite = Sprite (advance frames)
     return (Right s, animatedWire nextSprite SpriteAnimationType'Forward)
 
-animatedWire (Sprite (CyclicList p c n) ul) SpriteAnimationType'Backward =
-  animatedWire (Sprite (CyclicList n c p) ul) SpriteAnimationType'Forward
+animatedWire (Sprite (CyclicList p c n)) SpriteAnimationType'Backward =
+  animatedWire (Sprite (CyclicList n c p)) SpriteAnimationType'Forward
 
 animatedWire s SpriteAnimationType'Loop =
   let w = animatedWire s SpriteAnimationType'Forward

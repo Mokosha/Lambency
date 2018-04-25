@@ -43,6 +43,8 @@ library
                        Lambency.Renderer.OpenGL.Texture
                        Lambency.Renderer.OpenGL.Render
 
+                       Lambency.ResourceLoader
+
                        Lambency.Loaders
                        Lambency.Loaders.OBJLoader
                        Lambency.Loaders.MTLLoader

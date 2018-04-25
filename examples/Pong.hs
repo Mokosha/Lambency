@@ -2,6 +2,7 @@ module Main where
 
 --------------------------------------------------------------------------------
 import Prelude hiding ((.), id)
+import Control.Monad.Trans
 import Control.Wire
 import FRP.Netwire.Input
 import FRP.Netwire.Move
@@ -228,27 +229,22 @@ gameFeedback quad circle sound sysFont =
         (mkId &&& paddleWire playerOne quad handler) >>>
         collidePaddle playerOne s
 
-loadGameResources :: L.Renderer -> IO (L.Sprite, L.Sound, L.Font)
-loadGameResources r = do
+loadGameResources :: L.ResourceLoader (L.Sprite, L.Sound, L.Font)
+loadGameResources = do
   let color = pure 255
   quad <- L.changeSpriteColor (V4 0.4 0.6 0.2 1.0) <$>
-          (L.createSolidTexture r color >>= L.loadStaticSpriteWithMask r)
-  sound <- getDataFileName ("examples" </> "pong-bloop.wav") >>= L.loadSound
+          (L.createSolidTexture color >>= L.loadStaticSpriteWithMask)
+  sound <- liftIO (getDataFileName $ "examples" </> "pong-bloop.wav")
+           >>= L.loadSound
 
-  fontFilename <- getDataFileName ("examples" </> "kenpixel.ttf")
-  sysFont <- L.loadTTFont r 36 (V3 1 1 1) fontFilename
+  fontFilename <- liftIO $ getDataFileName ("examples" </> "kenpixel.ttf")
+  sysFont <- L.loadTTFont 36 (V3 1 1 1) fontFilename
 
   return (quad, sound, sysFont)
 
-unloadGameResources :: (L.Sprite, L.Sound, L.Font) -> IO ()
-unloadGameResources (sprite, sound, font) = do
-  L.unloadSound sound
-  L.unloadSprite sprite
-  L.unloadFont font
-
 gameWire :: L.ContWire (Int, Bool) (Maybe Int)
 gameWire =
-  L.bracketResource loadGameResources unloadGameResources
+  L.bracketResource loadGameResources
   $ L.withResource
   $ \(quad, sound, font) ->
     let feedback = gameFeedback quad quad sound font

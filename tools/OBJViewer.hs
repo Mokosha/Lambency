@@ -4,6 +4,7 @@ module Main (main) where
 #if __GLASGOW_HASKELL__ <= 708
 import Control.Applicative
 #endif
+import Control.Monad.Trans
 import Prelude hiding ((.), id)
 import Control.Wire hiding (right)
 
@@ -11,7 +12,6 @@ import Control.Wire hiding (right)
 import Data.Traversable (sequenceA)
 #endif
 import Data.List (intercalate)
-import Data.Foldable (traverse_)
 
 import qualified Graphics.UI.GLFW as GLFW
 
@@ -72,16 +72,16 @@ camLight = arr $ \c ->
 
   in L.dirlight lightParams lightDir
 
-loadObj :: L.Renderer -> FilePath -> IO [L.RenderObject]
-loadObj r objfile = do
-  obj <- L.loadOBJWithDefaultMaterial r objfile $
+loadObj :: FilePath -> L.ResourceLoader [L.RenderObject]
+loadObj objfile = do
+  obj <- L.loadOBJWithDefaultMaterial objfile $
          Just (L.shinyColoredMaterial $ V3 0.26 0.5 0.26)
-  putStrLn $ "OBJ contained " ++ (show $ length obj) ++ " meshes."
+  liftIO $ putStrLn $ "OBJ contained " ++ (show $ length obj) ++ " meshes."
   return obj
 
 viewerWire :: FilePath -> L.ContWire (a, Bool) (Maybe ())
 viewerWire file =
-  L.bracketResource (flip loadObj file) (traverse_ L.unloadRenderObject)
+  L.bracketResource (loadObj file)
     $ L.withResource
     $ \ros -> pure () . controlWire ros
 

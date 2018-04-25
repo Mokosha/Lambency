@@ -271,15 +271,15 @@ setupBuffer tgt xs = do
     \ptr -> GL.bufferData tgt GL.$= (ptrsize xs, ptr, GL.StaticDraw)
   return buf
 
-createBasicRO :: (Vertex a) => [a] -> [Int32] -> Material -> IO (RenderObject)
+createBasicRO :: (Vertex a) => [a] -> [Int32] -> Material
+              -> ResourceLoader RenderObject
 createBasicRO [] _ _ = do
   return $ RenderObject {
     material = NoMaterial,
     objectVars = Map.empty,
     -- If there's no vertices, then there's nothing to render...
     renderObject = \_ _ -> return (),
-    flags = [],
-    unloadRenderObject = return ()
+    flags = []
   }
 createBasicRO verts@(v:_) idxs mat =
   let
@@ -318,10 +318,12 @@ createBasicRO verts@(v:_) idxs mat =
 
         -- Render
         GL.drawElements GL.Triangles nIndices GL.UnsignedInt nullPtr
-
   in do
-    vbo <- setupBuffer GL.ArrayBuffer verts
-    ibo <- setupBuffer GL.ElementArrayBuffer idxs
+    (vbo, ibo) <- liftIO $ do
+      vbo <- setupBuffer GL.ArrayBuffer verts
+      ibo <- setupBuffer GL.ElementArrayBuffer idxs
+      return (vbo, ibo)
+    tell $ GL.deleteObjectName vbo >> GL.deleteObjectName ibo
     return $ RenderObject {
       -- materialVars = mat,
       -- !FIXME! These should be the variables extracted from the
@@ -329,11 +331,10 @@ createBasicRO verts@(v:_) idxs mat =
       material = mat,
       objectVars = Map.empty,
       renderObject = createRenderFunc vbo ibo $ fromIntegral (length idxs),
-      flags = [],
-      unloadRenderObject = GL.deleteObjectName vbo >> GL.deleteObjectName ibo
+      flags = []
     }
 
-createRenderObject :: Vertex a => Mesh a -> Material -> IO RenderObject
+createRenderObject :: Vertex a => Mesh a -> Material -> ResourceLoader RenderObject
 createRenderObject m = createBasicRO (vertices m) (indices m)
 
 updateMatrices :: String -> ShaderValue -> ShaderValue -> ShaderValue
