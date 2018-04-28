@@ -459,14 +459,17 @@ genShadowFragment = do
      (I.mkConstf 0.001))
     (I.finishSwizzleS . I._w_ . I.swizzle4D $ I.mkVarExpr lightPersp)
 
-  I.assignE lightPersp $
-    I.div4f (I.mkVarExpr lightPersp) $
-    I.finishSwizzleS . I._w_ . I.swizzle4D $
-    I.mkVarExpr lightPersp
+  I.assignE lightPersp
+    $ I.div4f (I.mkVarExpr lightPersp)
+    $ I.finishSwizzleS . I._w_ . I.swizzle4D
+    $ I.mkVarExpr lightPersp
 
-  I.assignE lightPersp $
-    I.add4f (I.mkVec4f_1111 (I.mkConstf 0.5) (I.mkConstf 0.5) (I.mkConstf 0.5) (I.mkConstf 0.5)) $
-    I.scale4f (I.mkVarExpr lightPersp) (I.mkConstf 0.5)
+  I.assignE lightPersp
+    $ I.add4f (I.mkVec4f_1111 (I.mkConstf 0.5)
+                              (I.mkConstf 0.5)
+                              (I.mkConstf 0.5)
+                              (I.mkConstf 0.5))
+    $ I.scale4f (I.mkVarExpr lightPersp) (I.mkConstf 0.5)
 
   I.setE I.floatTy $
     I.finishSwizzleS . I._z_ . I.swizzle4D $
