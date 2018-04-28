@@ -51,7 +51,6 @@ import qualified Control.Wire as W
 
 import Data.Time
 
-import GHC.Float
 import GHC.Generics (Generic)
 
 import qualified Graphics.UI.GLFW as GLFW
@@ -63,6 +62,7 @@ import Lambency.Bounds
 import Lambency.Camera
 import Lambency.Font
 import Lambency.GameObject
+import Lambency.GameSession
 import Lambency.Light
 import Lambency.Loaders
 import Lambency.Material
@@ -160,13 +160,6 @@ withWindow width height title f = do
       return undefined
   destroyWindow mwin
   return x
-
--- The physics framerate in frames per second
-physicsDeltaTime :: Double
-physicsDeltaTime = 1.0 / 60.0
-
-physicsDeltaUTC :: NominalDiffTime
-physicsDeltaUTC = fromRational . toRational $ physicsDeltaTime
 
 maximumFramerate :: NominalDiffTime
 maximumFramerate = fromRational . toRational $ (1.0 / 10.0 :: Double)
@@ -324,7 +317,6 @@ runWithGLFW win r initialGameObject initialGame = do
 
   GLFW.swapInterval 1
   ictl <- mkInputControl win
-  let session = W.countSession (double2Float physicsDeltaTime) W.<*> W.pure ()
   curTime <- getCurrentTime
 
   -- Stick in an initial poll events call...
@@ -338,7 +330,13 @@ runWithGLFW win r initialGameObject initialGame = do
 
   let statePrg = runReaderT (runLoop curTime) $ GameLoopConfig r sprite ictl win
   evalStateT statePrg $
-    GameLoopState initialGameObject initialGame session (toEnum 0) 0
+    GameLoopState
+    { currentGameValue = initialGameObject
+    , currentGameLogic = initialGame
+    , currentGameSession = mkGameSession
+    , currentPhysicsAccum = toEnum 0
+    , lastFramePicoseconds = 0
+    }
 
   unloadSprite
   hSetBuffering stdout oldBuffering

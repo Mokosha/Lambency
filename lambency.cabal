@@ -38,6 +38,7 @@ library
                        Lambency.Material
                        Lambency.Mesh
                        Lambency.GameObject
+                       Lambency.GameSession
 
                        Lambency.Renderer
                        Lambency.Renderer.OpenGL.Texture
