@@ -289,9 +289,10 @@ runGame = do
       liftIO $ runRWST (nextFrame gameStep) frameConfig ipt
 
   -- The ReaderT RenderConfig IO program that will do the actual rendering
-  let needsRender = case result of
+  let accumRemainder = accum - physicsDeltaUTC
+      needsRender = case result of
         Nothing -> False
-        Just _ -> (accum - physicsDeltaUTC) < physicsDeltaUTC
+        Just _ -> accumRemainder < physicsDeltaUTC
 
   frameTime <-
     if needsRender
@@ -312,7 +313,7 @@ runGame = do
   -- If our main wire inhibited, return immediately.
   case result of
     Just obj -> do
-      put $ GameLoopState obj nextGame nextSess (accum - physicsDeltaUTC) frameTime
+      put $ GameLoopState obj nextGame nextSess accumRemainder frameTime
       stepGame
     Nothing -> return (result, (nextSess, accum), nextGame)
 
