@@ -49,9 +49,7 @@ import Control.Monad.State
 import Control.Wire ((.))
 import qualified Control.Wire as W
 
-import Data.Maybe (fromJust)
 import Data.Time
-import Data.Word
 
 import GHC.Generics (Generic)
 
@@ -169,16 +167,13 @@ withWindow width height title f = do
 maximumFramerate :: NominalDiffTime
 maximumFramerate = fromRational . toRational $ (1.0 / 10.0 :: Double)
 
+-- When we handle actions, only really print logs and play any sounds
+-- that may need to start or stop.
 handleAction :: OutputAction -> IO ()
 handleAction (SoundAction sound cmd) = handleCommand sound cmd
 handleAction (LogAction s) = putStrLn s
 handleAction (WireframeAction True) = GL.polygonMode GL.$= (GL.Line, GL.Line)
 handleAction (WireframeAction False) = GL.polygonMode GL.$= (GL.Fill, GL.Fill)
-
--- When we handle actions, only really print logs and play any sounds
--- that may need to start or stop.
-handleActions :: [OutputAction] -> IO ()
-handleActions = mapM_ handleAction
 
 step :: a -> Game a -> TimeStep ->
         GameMonad (Maybe a, Camera, [Light], Game a)
@@ -301,7 +296,7 @@ runGame = do
 
   _ <- liftIO $ do
     -- Actually do the associated actions
-    handleActions actions
+    mapM_ handleAction actions
 
     -- Poll the input
     when hasInput $ case glfwInputControl gameLoopConfig of
