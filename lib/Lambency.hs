@@ -49,7 +49,9 @@ import Control.Monad.State
 import Control.Wire ((.))
 import qualified Control.Wire as W
 
+import Data.Maybe (fromJust)
 import Data.Time
+import Data.Word
 
 import GHC.Generics (Generic)
 
@@ -77,6 +79,8 @@ import Lambency.Transform
 import Lambency.Types
 import Lambency.UI
 import Lambency.Utils
+
+import Linear
 
 import System.CPUTime
 import System.IO
@@ -112,6 +116,7 @@ makeWindow width height title = do
   GLFW.setErrorCallback $ Just errorCallback
   putStr $ "Creating window of size " ++ show (width, height) ++ "..."
   GLFW.windowHint $ GLFW.WindowHint'Samples (Just 4)
+  GLFW.windowHint $ GLFW.WindowHint'Resizable False
   jm <- GLFW.createWindow width height title Nothing Nothing
   m <- case jm of
     Nothing -> ioError (userError "Failed!")
@@ -199,13 +204,14 @@ step go game t = do
     newGame cam lights logic =
       Game { mainCamera = CW cam
            , dynamicLights = CW <$> lights
-           , gameLogic = CW logic}
+           , gameLogic = CW logic
+           }
 
 data GameLoopConfig = GameLoopConfig {
   gameRenderer :: Renderer,
   simpleQuadSprite :: Sprite,
-  glfwInputControl :: GLFWInputControl,
-  glfwWin :: GLFW.Window
+  glfwInputControl :: Maybe GLFWInputControl,
+  windowDimensions :: V2 Int
 }
 
 data GameLoopState a = GameLoopState {
@@ -231,10 +237,7 @@ runLoop prevFrameTime = do
     Just gobj -> do
       ls <- get
       put $ GameLoopState gobj nextGame nextsession accum (lastFramePicoseconds ls)
-      needsQuit <- glfwWin <$> ask >>= (liftIO . GLFW.windowShouldClose)
-      case needsQuit of
-        True -> return ()
-        False -> runLoop thisFrameTime
+      runLoop thisFrameTime
     Nothing -> return ()
 
 type TimeStepper = (GameSession, NominalDiffTime)
@@ -250,13 +253,12 @@ runGame :: GameLoopM a (Maybe a, TimeStepper, Game a)
 runGame = do
   gameLoopConfig <- ask
   gls <- get
-  ipt <- liftIO $ getInput (glfwInputControl gameLoopConfig)
+  (hasInput, ipt) <- liftIO $ case glfwInputControl gameLoopConfig of
+    Just glfwIpt -> getInput glfwIpt >>= (\x -> return (True, x))
+    Nothing -> return (False, emptyGLFWState)
 
   -- Retreive the next time step from our game session
   (ts, nextSess) <- liftIO $ W.stepSession (currentGameSession gls)
-
-  -- Collect the window dimensions at the current time.
-  winDims <- liftIO $ GLFW.getWindowSize (glfwWin gameLoopConfig)
 
   let
     -- The game step is the complete GameMonad computation that
@@ -271,6 +273,7 @@ runGame = do
     -- we finally decide to render.
     accum = currentPhysicsAccum gls
 
+    winDims = windowDimensions gameLoopConfig
     renderTime = lastFramePicoseconds gls
     sprite = simpleQuadSprite gameLoopConfig
     frameConfig = GameConfig (gameRenderer gameLoopConfig) renderTime winDims sprite
@@ -301,7 +304,9 @@ runGame = do
     handleActions actions
 
     -- Poll the input
-    pollGLFW newIpt (glfwInputControl gameLoopConfig)
+    when hasInput $ case glfwInputControl gameLoopConfig of
+      Just glfwIpt -> pollGLFW newIpt glfwIpt >> return ()
+      Nothing -> return ()
 
   -- If our main wire inhibited, return immediately.
   case result of
@@ -310,8 +315,14 @@ runGame = do
       stepGame
     Nothing -> return (result, (nextSess, accum), nextGame)
 
+-- TODO: This function uses a  hacky method of quitting the game currently
+-- which doesn't release all of the resources associated with the game logic.
+-- As such, care should be taken to make sure that you're not actually trying to
+-- relaunch GLFW commands within the same window after this function returns.
+-- It's OK that we leak resources here since we're usually using this with a
+-- call to withWindow...
 runWithGLFW :: GLFW.Window -> Renderer -> a -> Game a -> IO ()
-runWithGLFW win r initialGameObject initialGame = do
+runWithGLFW win r initialGameObject (Game cam lights (CW logic)) = do
   oldBuffering <- hGetBuffering stdout
   hSetBuffering stdout NoBuffering
 
@@ -328,11 +339,30 @@ runWithGLFW win r initialGameObject initialGame = do
     runResourceLoader r $ createSolidTexture (pure 255)
                       >>= loadStaticSpriteWithMask
 
-  let statePrg = runReaderT (runLoop curTime) $ GameLoopConfig r sprite ictl win
+  -- Collect the window dimensions. TODO: This should be done every frame so
+  -- that we can properly update our UI on state changes. For now, we just tell
+  -- GLFW to prevent the user from resizing the window, but that need not be a
+  -- restriction.
+  winDims <- uncurry V2 <$> liftIO (GLFW.getWindowSize win)
+
+  let statePrg = runReaderT (runLoop curTime)
+               $ GameLoopConfig r sprite (Just ictl) winDims
+
+      -- Amend the game logic such that it actually quits if we hit the little
+      -- x in the corner of the window.
+      quitLogic = let mkQuitter w = W.mkGen $ \dt x -> do
+                        needsQuit <- GameMonad
+                                   $ liftIO $ GLFW.windowShouldClose win
+                        (res, w') <- W.stepWire w dt (Right x)
+                        if needsQuit
+                          then return (Right Nothing, mkQuitter w')
+                          else return (res, mkQuitter w')
+                  in CW $ mkQuitter logic
+
   evalStateT statePrg $
     GameLoopState
     { currentGameValue = initialGameObject
-    , currentGameLogic = initialGame
+    , currentGameLogic = Game cam lights quitLogic
     , currentGameSession = mkGameSession
     , currentPhysicsAccum = toEnum 0
     , lastFramePicoseconds = 0

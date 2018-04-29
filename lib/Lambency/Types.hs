@@ -399,7 +399,7 @@ data OutputAction = LogAction String
 data GameConfig = GameConfig {
   renderer :: Renderer,      -- The rendering system that we're using
   lastFrameTime :: Integer,  -- Picoseconds last frame took to render
-  windowSize :: (Int, Int),  -- Size of the rendering window in pixels
+  windowSize :: V2 Int,      -- Size of the rendering window in pixels
   simpleSprite :: Sprite     -- A simple single-color sprite useful for fade-ins
                              -- and simple UI element backgrounds
   }
@@ -418,6 +418,7 @@ data Game a = Game {
 type TimeStep = W.Timed Float ()
 type GameSession = W.Session IO TimeStep
 
+-- TODO: We need to parameterize this via GLFW
 newtype GameMonad a = GameMonad {
   nextFrame :: RWST GameConfig                        -- Reader
                     ([OutputAction], RenderActions)   -- Writer

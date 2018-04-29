@@ -64,7 +64,7 @@ widgetRenderFn dt input lytInfo widgetState =
         second (keyPressed key) >>> uiw
       eventWire e@(WidgetEvent'OnMouseOver uiw) = mkGen $ \dt' (lyt, ipt) -> do
         (Right (mx, my), _) <- stepWire mouseCursor dt' $ Right undefined
-        (wx, wy) <- windowSize <$> ask
+        (V2 wx wy) <- windowSize <$> ask
         let bx0 = Y.nodeLeft lytInfo / fromIntegral wx
             bx1 = (bx0 + Y.nodeWidth lytInfo) / fromIntegral wx
             by0 = Y.nodeTop lytInfo / fromIntegral wy
@@ -122,7 +122,7 @@ widgetWire (Widget lyt) = mkGen $ \dt input -> do
 
 screenPrg :: Monoid b => [Widget a b] -> GameMonad (Widget a b)
 screenPrg children = do
-  (wx, wy) <- windowSize <$> ask
+  (V2 wx wy) <- windowSize <$> ask
   return . Widget $
     ($ blankState) $
     Y.withDimensions (fromIntegral wx) (fromIntegral wy) $
@@ -132,14 +132,14 @@ screen :: Monoid b => [Widget a b] -> GameWire a b
 screen children = wireFrom (windowSize <$> ask) $ runScreen $
                   wireFrom (screenPrg children) widgetWire
   where
-    runScreen ui_wire (old_wx, old_wy) =
+    runScreen ui_wire oldWinDims =
       let getUIWire False = wireFrom (screenPrg children) widgetWire
           getUIWire True = ui_wire
       in mkGen $ \dt input -> do
-        (wx, wy) <- windowSize <$> ask
-        let ui = getUIWire (wx == old_wx && wy == old_wy)
+        winDims <- windowSize <$> ask
+        let ui = getUIWire (winDims == oldWinDims)
         (result, next_wire') <- stepWire ui dt $ Right input
-        return (result, runScreen next_wire' (wx, wy))
+        return (result, runScreen next_wire' winDims)
 
 renderSpriteAt :: Sprite -> Y.LayoutInfo -> GameMonad ()
 renderSpriteAt sprite lytInfo = do
@@ -148,13 +148,13 @@ renderSpriteAt sprite lytInfo = do
         Y.nodeTop lytInfo,
         Y.nodeWidth lytInfo,
         Y.nodeHeight lytInfo)
-  (_, wy) <- windowSize <$> ask
+  (V2 _ wy) <- windowSize <$> ask
   renderUISpriteWithSize sprite (V2 x (fromIntegral wy - y - h)) (V2 w h)
 
 renderStringAt :: Font -> String -> Y.LayoutInfo -> GameMonad()
 renderStringAt font str lytInfo = do
   let (x, y) = (Y.nodeLeft lytInfo, Y.nodeTop lytInfo)
-  (_, wy) <- windowSize <$> ask
+  (V2 _ wy) <- windowSize <$> ask
   renderUIString font str $ V2 x (fromIntegral wy - y - stringHeight font str)
 
 animatedRenderer :: Monoid b => GameWire a Sprite -> GameWire a b -> UIWire a b
