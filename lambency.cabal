@@ -37,6 +37,8 @@ library
                        Lambency.Light
                        Lambency.Material
                        Lambency.Mesh
+
+                       Lambency.GameLoop
                        Lambency.GameObject
                        Lambency.GameSession
 
