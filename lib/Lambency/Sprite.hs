@@ -220,8 +220,10 @@ renderSprite s = renderSpriteWithAlpha s 1.0
 -- Renders a sprite for the given alpha, scale, depth, and position
 renderSpriteWithAlpha :: Sprite -> Float -> V2 Int -> Float -> V2 Float ->
                          GameMonad ()
-renderSpriteWithAlpha (Sprite frames) a =
-  renderFrameAt (setAlpha . frameRO . extract $ frames)
+renderSpriteWithAlpha (Sprite frames) a
+  | a == 0.0 = \_ _ _ -> return ()
+  | a == 1.0 = renderFrameAt (frameRO $ extract frames)
+  | otherwise = renderFrameAt (setAlpha . frameRO . extract $ frames)
   where
     setAlpha ro = ro { material = updateAlpha a (material ro),
                        flags = nub $ Transparent : (flags ro) }
@@ -232,7 +234,7 @@ data SpriteAnimationType
   | SpriteAnimationType'Loop
   | SpriteAnimationType'LoopBack
   | SpriteAnimationType'PingPong
-    deriving(Eq, Ord, Show, Enum)
+    deriving (Eq, Ord, Show, Enum, Bounded)
 
 animatedWire :: Sprite -> SpriteAnimationType -> GameWire a Sprite
 animatedWire (Sprite (CyclicList _ _ [])) SpriteAnimationType'Forward = mkEmpty
