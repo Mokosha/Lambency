@@ -1,5 +1,5 @@
 module Lambency.GameObject (
-  wireFrom,
+  wireFrom, contWireFrom,
   bracketResource, liftWire, withResource, joinResources, withDefault,
   transformedContext, transformedResourceContext,
   clippedContext, clippedResourceContext,
@@ -43,14 +43,19 @@ wireFrom prg fn = mkGen $ \dt val -> do
   seed <- prg
   stepWire (fn seed) dt (Right val)
 
+contWireFrom :: GameMonad a -> (a -> ContWire b c) -> ContWire b c
+contWireFrom prg fn = mkContWire $ \dt val -> do
+  seed <- prg
+  stepContWire (fn seed) dt val
+
 doOnce :: GameMonad () -> GameWire a a
 doOnce pgm = wireFrom pgm $ const Control.Wire.id
 
 doOnceWithInput :: (a -> GameMonad ()) -> GameWire a a
 doOnceWithInput fn = mkGenN $ \x -> fn x >> return (Right x, mkId)
 
-everyFrame :: (a -> GameMonad b) -> GameWire a b
-everyFrame fn = mkGen_ $ \x -> Right <$> (fn x)
+everyFrame :: (a -> GameMonad b) -> ContWire a b
+everyFrame fn = CW $ mkGen_ $ \x -> Right <$> (fn x)
 
 mkObject :: RenderObject -> GameWire a Transform -> GameWire a a
 mkObject ro xfw = mkGen $ \dt val -> do

@@ -30,7 +30,7 @@ module Lambency (
   TimeStep,
   Sprite,
   Game(..), GameConfig(..), GameMonad,
-  GameWire, ContWire, ResourceLoader, ResourceContext, ResourceContextWire,
+  GameWire, ContWire(..), ResourceLoader, ResourceContext, ResourceContextWire,
   module Lambency.UI,
   module Lambency.Utils,
 
