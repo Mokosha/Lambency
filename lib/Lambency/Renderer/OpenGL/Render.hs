@@ -686,7 +686,7 @@ performRenderActions lights camera actions = do
 render :: GLFW.Window -> [Light] -> Camera -> RenderActions -> IO ()
 render win lights cam acts = do
   -- !FIXME! This should be moved to the camera...
-  GL.clearColor GL.$= GL.Color4 0.0 0.0 0.0 1
+  GL.clearColor GL.$= GL.Color4 0.29 0.64 0.86 1
   clearBuffers
   let renderPrg = performRenderActions lights cam acts
   evalStateT (runReaderT renderPrg identity) initialRenderState
