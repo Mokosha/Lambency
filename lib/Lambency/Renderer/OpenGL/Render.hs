@@ -410,7 +410,6 @@ divideAndRenderROs ros cam light = do
         partition (\ro -> Transparent `elem` (flags ro)) $
         map (place cam . xformWorld xf) ros
 
-  liftIO $ GL.depthFunc GL.$= (Just GL.Lequal)
   case RenderState'DepthOnly `elem` (currentRenderFlags st) of
     True -> liftIO $ do
       shdr <- lookupMinimalShader
@@ -629,12 +628,13 @@ sortAndRenderTransparent :: Maybe Light -> [TransparentRenderAction]
                          -> RenderContext ()
 sortAndRenderTransparent _ [] = return ()
 sortAndRenderTransparent light acts = do
-  liftIO $ GL.depthFunc GL.$= Nothing
+  GL.depthMask GL.$= GL.Disabled
   let ros = collapse <$> sortByCamDist acts
   vars <- currentRenderVars <$> get
   case light of
     Nothing -> liftIO $ renderUnlitROs ros vars
     Just l  -> liftIO $ renderLitROs ros l Nothing vars
+  GL.depthMask GL.$= GL.Enabled
 
   where
     collapse :: TransparentRenderAction -> RenderObject
@@ -644,7 +644,6 @@ sortAndRenderTransparent light acts = do
          -- Enable drawing to the color buffers, and disable drawing to the stencil
          -- and depth buffers
          GL.stencilTest GL.$= GL.Enabled
-         GL.depthMask GL.$= GL.Disabled
          GL.colorMask GL.$=
            (GL.Color4 GL.Enabled GL.Enabled GL.Enabled GL.Enabled)
          GL.stencilMask GL.$= 0
@@ -688,6 +687,11 @@ render win lights cam acts = do
   -- !FIXME! This should be moved to the camera...
   GL.clearColor GL.$= GL.Color4 0.29 0.64 0.86 1
   clearBuffers
+
+  -- By default, rendering into the depth buffer is *on*
+  GL.depthMask GL.$= GL.Enabled
+  GL.depthFunc GL.$= (Just GL.Lequal)
+
   let renderPrg = performRenderActions lights cam acts
   evalStateT (runReaderT renderPrg identity) initialRenderState
   GL.flush
