@@ -405,6 +405,9 @@ data GameConfig = GameConfig {
   }
 
 -- Game
+-- TODO: Camera and lights shouldn't really be here. But since they are, they
+-- should really be parameterized based on 'a' in order to be able to respond
+-- to gameplay events.
 data Game a = Game {
   mainCamera :: ContWire () Camera,
   dynamicLights :: [ContWire () Light],
