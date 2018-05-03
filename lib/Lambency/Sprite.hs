@@ -199,8 +199,10 @@ loadFixedSizeAnimatedSprite f frameSz = loadAnimatedSprite f (repeat frameSz)
 
 renderUISpriteWithSize :: Sprite -> V2 Float -> V2 Float -> GameMonad ()
 renderUISpriteWithSize sprite pos (V2 sx sy)
-  = addTransformedRenderAction (nonuniformScale (V3 sx sy 1) identity)
-  $ addRenderUIAction pos (frameRO . extract $ spriteFrames sprite)
+  = let (V2 px py) = pos
+    in addTransformedRenderAction (nonuniformScale (V3 sx sy 1) identity)
+     $ addRenderUIAction (V2 (px / sx) (py / sy))
+                         (frameRO . extract $ spriteFrames sprite)
 
 renderUISprite :: Sprite -> V2 Float -> GameMonad ()
 renderUISprite s@(Sprite frames) pos =
