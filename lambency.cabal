@@ -53,6 +53,9 @@ library
                        Lambency.Loaders.MTLLoader
                        Lambency.Loaders.Utils
 
+                       Lambency.Network
+                       Lambency.Network.EventServer
+
                        Lambency.Shader
                        Lambency.Shader.Base
                        Lambency.Shader.Expr
@@ -75,6 +78,7 @@ library
   ghc-options:         -Wall -O3
   build-depends:       base                 >  4,
                        array,
+                       binary,
                        bytestring,
                        comonad,
                        containers,
@@ -89,6 +93,7 @@ library
                        netwire              >= 5.0.0,
                        netwire-input        >= 0.0.3,
                        netwire-input-glfw   >= 0.0.9,
+                       network,
                        OpenAL,
                        OpenGL               >= 2.9.2.0,
                        OpenGLRaw            >= 3.1,
