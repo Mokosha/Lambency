@@ -67,51 +67,44 @@ newtype NetworkedWire a b = NCW { getNetworkedWire :: RawNetworkedWire a b }
                                    , ArrowLoop
                                    )
 
-data Packet a
+networkIO :: IO a -> NetworkContext a
+networkIO = lift . GameMonad . liftIO
+
+data Packet
   = Packet'ConnectionRequest
   | Packet'ConnectionAccepted Int
   | Packet'ConnectionDenied
   | Packet'ConnectionDisconnect Int
-  | Packet'Payload Int !a
+    -- TODO: Maybe ShortByteString is better?
+  | Packet'Payload Int [BS.ByteString]
     deriving (Generic, Eq, Ord, Show)
 
-instance Binary b => Binary (Packet b)
+instance Binary Packet
 
 kMaxPayloadSize :: Integral a => a
 kMaxPayloadSize = 1024
 
-encPkt :: (Binary a) => Packet a -> BS.ByteString
+encPkt :: Packet -> BS.ByteString
 encPkt = BSL.toStrict . encode
 
 sendConnRequest :: Socket -> SockAddr -> IO Int
-sendConnRequest sock addr =
-  let pkt :: Packet ()
-      pkt = Packet'ConnectionRequest
-  in sendTo sock (encPkt pkt) addr
+sendConnRequest sock = sendTo sock (encPkt Packet'ConnectionRequest)
 
 sendAccepted :: Int -> Socket -> SockAddr -> IO Int
-sendAccepted clientID sock addr =
-  let pkt :: Packet ()
-      pkt = Packet'ConnectionAccepted clientID
-  in sendTo sock (encPkt pkt) addr
+sendAccepted clientID sock =
+  sendTo sock (encPkt $ Packet'ConnectionAccepted clientID)
 
 sendDisconnected :: Int -> Socket -> SockAddr -> IO Int
-sendDisconnected clientID sock addr =
-  let pkt :: Packet ()
-      pkt = Packet'ConnectionDisconnect clientID
-  in sendTo sock (encPkt pkt) addr
+sendDisconnected clientID sock =
+  sendTo sock (encPkt $ Packet'ConnectionDisconnect clientID)
 
 sendConnDenied :: Socket -> SockAddr -> IO Int
-sendConnDenied sock addr =
-  let pkt :: Packet ()
-      pkt = Packet'ConnectionDenied
-  in sendTo sock (encPkt pkt) addr
+sendConnDenied sock = sendTo sock (encPkt Packet'ConnectionDenied)
 
-sendPayload :: (Binary a) => a -> Int -> Socket -> SockAddr -> IO Int
-sendPayload x clientID sock addr =
-  sendTo sock (encPkt $ Packet'Payload clientID x) addr
+sendPayload :: Int -> [BS.ByteString] -> Socket -> SockAddr -> IO Int
+sendPayload cid dat sock = sendTo sock (encPkt $ Packet'Payload cid dat)
 
-decodePkt :: (Binary a) => BSL.ByteString -> Maybe (Packet a)
+decodePkt :: BSL.ByteString -> Maybe Packet
 decodePkt bytes = case decodeOrFail bytes of
   Right (_, _, x) -> Just x
   _ -> Nothing
@@ -142,17 +135,50 @@ withinNetwork = NCW . mapWire (\m -> StateT $ \x -> (,x) <$> m)
 withNetworkState :: NetworkedWire a b -> NetworkState -> GameWire a b
 withNetworkState (NCW w) s = mkGen $ \dt x -> do
   ((res, w'), s') <- runStateT (stepWire w dt (Right x)) s
-  return (res, withNetworkState (NCW w) s')
+  return (res, withNetworkState (NCW w') s')
 
 connectedClient :: Int -> NetworkedWire a a -> NetworkedWire a a
-connectedClient clientID (NCW _w) = networkWireFrom addClient (\_ -> clientW _w)
+connectedClient clientID (NCW _w) =
+  networkWireFrom addClient (\_ -> NCW $ clientW _w)
   where
     addClient = modify $ \s -> s { localClientID = clientID }
 
-    clientW :: RawNetworkedWire a a -> NetworkedWire a a
-    clientW = undefined
-    -- clientW w = NCW $ mkGen $ \dt x -> do
-      -- Send out all of the outgoing packets as a single packet
+    clientW :: RawNetworkedWire a a -> RawNetworkedWire a a
+    clientW w = mkGen $ \dt x -> do
+      -- Grab all of the existing data from the server and place it in the
+      -- corresponding list
+      sock <- localSocket <$> get
+      sa <- serverAddr <$> get
+      (bytes, pktAddr) <- networkIO $ recvFrom sock kMaxPayloadSize
+      c <- if (pktAddr /= sa || BS.length bytes == 0) then return True else do
+        case decodePkt (BSL.fromStrict bytes) of
+          Just (Packet'Payload cid bs) -> do
+            modify $ \s ->
+              s { packetsIn = Map.insertWith (++) cid bs (packetsIn s) }
+            return True
+          Just (Packet'ConnectionDisconnect cid)
+            | cid == clientID -> return False
+            | otherwise -> do
+              modify $ \s -> s { packetsIn = Map.delete cid (packetsIn s) }
+              return True
+
+          -- Ignore all other packets
+          _ -> return True
+
+      -- Run the wire
+      (res, w') <- stepWire w dt (Right x)
+
+      -- If we've been disconnected, switch to the empty wire
+      if not c then return (res, mkEmpty) else do
+        -- If we're still connected, Send out all of the outgoing data as a
+        -- single packet
+        outPackets <- packetsOut <$> get
+        _ <- networkIO $ sendPayload clientID outPackets sock sa
+
+        -- Reset all of the outgoing packets
+        modify $ \s -> s { packetsOut = [] }
+
+        return (res, clientW w')
 
 data ConnectionFailure
   = ConnectionFailure'Timeout
@@ -205,9 +231,6 @@ runClientWire addr whileConnecting onFailure (NCW client) =
     connectionResult ConnectionState'Connecting = False
     connectionResult _ = True
 
-    networkIO :: IO b -> NetworkContext b
-    networkIO = lift . GameMonad . liftIO
-
     connectServer :: RawNetworkedWire a a
                   -> RawNetworkedWire (a, Float) (a, ConnectionState)
     connectServer w = mkGen $ \dt (x, t) -> do
@@ -225,7 +248,7 @@ runClientWire addr whileConnecting onFailure (NCW client) =
           (bytes, pktAddr) <- networkIO $ recvFrom sock kMaxPayloadSize
           if (pktAddr /= sa || BS.length bytes == 0)
             then returnConn ConnectionState'Connecting
-            else case (decodePkt (BSL.fromStrict bytes)) :: Maybe (Packet ()) of
+            else case (decodePkt (BSL.fromStrict bytes)) of
               Just (Packet'ConnectionAccepted clientID) ->
                 returnConn $ ConnectionState'Connected clientID
               Just (Packet'ConnectionDenied) ->
