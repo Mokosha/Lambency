@@ -22,6 +22,7 @@ import qualified Data.IntMap.Strict   as IMap
 import Data.List (sortBy)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict      as Map
+import Data.Maybe (isJust)
 import Data.Profunctor
 
 import GHC.Generics
@@ -139,6 +140,9 @@ networkWireFrom prg fn = NCW $ mkGen $ \dt val -> do
   seed <- prg
   stepWire (getNetworkedWire $ fn seed) dt (Right val)
 
+filterForWireID :: Int -> IntMap [(a, WirePacket)] -> IntMap [(a, WirePacket)]
+filterForWireID w = IMap.map (filter ((== w) . wpNetworkID . snd))
+
 networkedCopiesClient :: forall a
                        . Binary a
                       => (Int, Int)
@@ -160,8 +164,7 @@ networkedCopiesClient (clientID, wireID) =
     peers connectedPlayers = mkGenN $ \_ -> do
       -- Find all packets that correspond to this wireID but not this clientID
       playerData <- IMap.filterWithKey (\k _ -> k /= clientID) . packetsIn <$> get
-      let wireData =
-            IMap.map (filter (\(_, WirePacket _ wid) -> wid == wireID)) playerData
+      let wireData = filterForWireID wireID playerData
           newPlayers = IMap.difference wireData connectedPlayers
           -- Slot zero is reserved for local player
           numConnectedPlayers = 1 + IMap.size connectedPlayers
@@ -179,14 +182,31 @@ networkedCopiesClient (clientID, wireID) =
 
       return $ (Right result, peers newConnectedPlayers)
 
-networkedCopiesServer :: Int -> NetworkedWire a (IntMap (Maybe a))
-networkedCopiesServer = NCW . peers IMap.empty
+networkedCopiesServer :: forall a
+                       . Binary a => Int -> NetworkedWire a (IntMap (Maybe a))
+networkedCopiesServer = NCW . peers
   where
     -- TODO: No guarantee that players appear to connect in the same order!
     -- Packets sent from server might arrive OOO on the clients, meaning that
     -- they will generate different mappings for each player.
-    peers :: IntMap Int -> Int -> RawNetworkedWire a (IntMap (Maybe a))
-    peers connectedPlayers wireID = undefined
+    peers :: Int -> RawNetworkedWire a (IntMap (Maybe a))
+    peers wireID = mkGen_ $ \_ -> do
+      -- Get all packets with this wire ID
+      pkts <- filterForWireID wireID .  packetsIn <$> get
+      players <- connectedClients <$> get
+      results <- forM (Map.elems players) $ \pid ->
+        case (sortBy (compare `on` fst)) <$> (IMap.lookup pid pkts) of
+          Nothing -> return (pid, Nothing)
+          Just [] -> return (pid, Nothing)
+          Just ((_, wp):_) -> do
+            modify $ \s -> s { packetsOutServer =
+                                  IMap.adjust (wp:) pid (packetsOutServer s) }
+            return (pid, Just $ decode (BSL.fromStrict $ wpPayload wp))
+
+      -- We need to reset the packets from the input state here
+      forM_ (fst <$> filter (isJust . snd) results) $ \pid ->
+        modify $ \s -> s { packetsIn = IMap.adjust tail pid (packetsIn s) }
+      return . Right . IMap.fromList $ results
 
 networkedCopies :: Binary a => NetworkedWire a (IntMap (Maybe a))
 networkedCopies = networkWireFrom registerWire $ \r -> case r of
@@ -341,6 +361,14 @@ runServerWire numPlayers initW =
       (res, w') <- stepWire w dt (Right x)
 
       -- Send data produced by stepWire
+      packetsOut <- packetsOutServer <$> get
+      clients <- connectedClients <$> get
+      forM_ (Map.toList clients) $ \(addr, pid) ->
+        case IMap.lookup pid packetsOut of
+          Nothing -> return ()
+          Just pkts -> do
+            _ <- networkIO $ sendPayload seqNo pid pkts (localSocket st) addr
+            return ()
 
       -- TODO: We terminate when everyone disconnects -- need to identify that
       -- case?
@@ -354,7 +382,6 @@ runServer numPlayers initVal (NCW w) = do
       st = mkLoopState initVal game
   runGameLoop st config
   unloadSprite
-
 
 runClientWire :: forall a
                . (Word8, Word8, Word8, Word8)
