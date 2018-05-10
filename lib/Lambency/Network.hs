@@ -289,8 +289,23 @@ runServerWire numPlayers initW =
                , packetsOutServer = IMap.empty
                }
 
-    handlePlayerData :: BS.ByteString -> Int -> NetworkContext ()
-    handlePlayerData bytes pid = undefined
+    handlePlayerData :: BS.ByteString -> Int -> SockAddr
+                     -> NetworkContext ()
+    handlePlayerData bytes pid addr =
+      case (decodePkt (BSL.fromStrict bytes)) of
+        -- Handle connection requests
+        Just Packet'ConnectionRequest -> do
+          sock <- localSocket <$> get
+          _ <- networkIO $ sendAccepted pid sock addr
+          return ()
+
+        -- Handle incoming data
+        Just (Packet'Payload cid seqNo pkt) ->
+          if pid /= cid then return () else modify $ \s ->
+          s { packetsIn = IMap.insertWith (++) pid ((seqNo,) <$> pkt) (packetsIn s) }
+
+        -- Ignore everything else
+        _ -> return ()
 
     handlePotentialNewPlayer :: BS.ByteString -> SockAddr -> NetworkContext ()
     handlePotentialNewPlayer bytes addr =
@@ -320,7 +335,7 @@ runServerWire numPlayers initW =
       -- more packets than that.
       (bytes, pktAddr) <- networkIO $ recvFrom (localSocket st) kMaxPayloadSize
       case (Map.lookup pktAddr $ connectedClients st) of
-        Just pid -> handlePlayerData bytes pid
+        Just pid -> handlePlayerData bytes pid pktAddr
         Nothing -> handlePotentialNewPlayer bytes pktAddr
 
       (res, w') <- stepWire w dt (Right x)
