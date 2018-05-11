@@ -50,6 +50,7 @@ createUDPSocket port = do
   sock <- socket AF_INET Datagram 0
   let localhost = tupleToHostAddress (127, 0, 0, 1)
   bind sock $ SockAddrInet (fromIntegral port) localhost
+  setNonBlockIfNeeded (fdSocket sock)
   return sock
 
 data WirePacket =
@@ -245,7 +246,9 @@ connectedClient :: Int -> NetworkedWire a a -> NetworkedWire a a
 connectedClient clientID (NCW _w) =
   networkWireFrom addClient (\_ -> NCW $ clientW 0 _w)
   where
-    addClient = modify $ \s -> s { localClientID = clientID }
+    addClient = do
+      networkIO $ putStrLn "Connected to server!"
+      modify $ \s -> s { localClientID = clientID }
 
     clientW :: Word64 -> RawNetworkedWire a a -> RawNetworkedWire a a
     clientW seqNo w = mkGen $ \dt x -> do
@@ -303,7 +306,9 @@ runServerWire numPlayers initW =
   wireFrom mkNetworkState $ withNetworkState (NCW $ runW 0 initW)
   where
     mkNetworkState = do
-      sock <- GameMonad $ liftIO $ createUDPSocket 18152
+      sock <- GameMonad $ liftIO $ do
+        putStrLn "Creating server on port 18152."
+        createUDPSocket 18152
       return $ ServerNetworkState
                { localSocket = sock
                , nextWireID = 0
@@ -340,6 +345,8 @@ runServerWire numPlayers initW =
           if nextPlayerID >= numPlayers
             then networkIO (sendConnDenied (localSocket st) addr) >> return ()
             else do
+              networkIO $ putStrLn $
+                "Received connection request -- assigning slot " ++ show nextPlayerID
               put $ st { connectedClients =
                             Map.insert addr nextPlayerID (connectedClients st) }
               _ <- networkIO $ sendAccepted nextPlayerID (localSocket st) addr
@@ -401,12 +408,15 @@ runClientWire addr whileConnecting onFailure (NCW client) =
     $ (NCW $ switch $ second mkResult . connectServer wcn . (id &&& timeF))
   where
     mkNetworkState = do
-      sock <- GameMonad $ liftIO $ createUDPSocket 21518
+      sock <- GameMonad $ liftIO $ do
+        putStrLn $
+          "Connecting to server at address " ++ show addr ++ " on port 18152"
+        createUDPSocket 21518
       return $ ClientNetworkState
                { localSocket = sock
                , localClientID = (-1)
                , nextWireID = 0
-               , serverAddr = SockAddrInet 21518 $ tupleToHostAddress addr
+               , serverAddr = SockAddrInet 18152 $ tupleToHostAddress addr
                , packetsIn = IMap.empty
                , packetsOutClient = []
                }
@@ -432,21 +442,31 @@ runClientWire addr whileConnecting onFailure (NCW client) =
       (result, w') <- stepWire w dt (Right x)
       let returnConn c = return ((,c) <$> result, connectServer w')
       if t > kTimeout
-        then returnConn (ConnectionState'Failure ConnectionFailure'Timeout)
+        then do
+          networkIO $ putStrLn "Timed out connecting to server!"
+          returnConn (ConnectionState'Failure ConnectionFailure'Timeout)
         else do
           -- Send connecting packet
+          networkIO $ putStrLn "Sending connection request"
           sock <- localSocket <$> get
           sa <- serverAddr <$> get
           _ <- networkIO $ sendConnRequest sock sa
+          networkIO $ putStrLn "Connection request sent"
 
           -- Receive incoming packet and see what's up
+          networkIO $ putStrLn "Checking received packets"
           (bytes, pktAddr) <- networkIO $ recvFrom sock kMaxPayloadSize
+          networkIO $ putStrLn $
+            "Received packet with " ++ show (BS.length bytes) ++ " bytes"
           if (pktAddr /= sa || BS.length bytes == 0)
             then returnConn ConnectionState'Connecting
             else case (decodePkt (BSL.fromStrict bytes)) of
-              Just (Packet'ConnectionAccepted clientID) ->
+              Just (Packet'ConnectionAccepted clientID) -> do
+                networkIO $ putStrLn $
+                  "Received connection accept! ClientID: " ++ show clientID
                 returnConn $ ConnectionState'Connected clientID
-              Just (Packet'ConnectionDenied) ->
+              Just (Packet'ConnectionDenied) -> do
+                networkIO $ putStrLn "Received connection denied!"
                 returnConn $ ConnectionState'Failure ConnectionFailure'Refused
 
               -- Otherwise just ignore the packet

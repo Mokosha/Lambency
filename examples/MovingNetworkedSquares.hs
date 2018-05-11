@@ -56,9 +56,9 @@ networkedSquare = arr (\_ -> ())
                L.getContinuousWire renderSquare . playerWithOffset (0, 0)
       where
         playerWithOffset off = mkSFN $ \m ->
-          case m IMap.! n of
-            Just off' -> (off', playerWithOffset off')
-            Nothing -> (off, playerWithOffset off)
+          case IMap.lookup n m of
+            Just (Just off') -> (off', playerWithOffset off')
+            _ -> (off, playerWithOffset off)
 
 -- The movement is modeled by an offset, represented with a Float for each
 -- axis. This offset will be changing over time, so we use a wire.
@@ -114,7 +114,7 @@ clientWire =
   L.runClientWire (127, 0, 0, 1) (pure ()) (const $ pure ()) networkedSquare
 
 gameWire :: L.ContWire () (Maybe ())
-gameWire = (arr $ \(b, x) -> if b then Just x else Nothing)
+gameWire = (arr $ \(b, x) -> if b then Nothing else Just x)
          . (quitWire &&& (clientWire `L.withDefault` pure ()))
 
 game :: L.Game ()
