@@ -8,6 +8,7 @@ module Lambency (
   module Lambency.Light,
   module Lambency.Loaders,  
   module Lambency.Material,
+  module Lambency.Network,
 
   Mesh,
   genNormalsV3,
@@ -62,6 +63,7 @@ import Lambency.Light
 import Lambency.Loaders
 import Lambency.Material
 import Lambency.Mesh
+import Lambency.Network
 import Lambency.Renderer
 import Lambency.Shader
 import Lambency.Sound

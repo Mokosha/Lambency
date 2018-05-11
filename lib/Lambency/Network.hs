@@ -3,7 +3,10 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Lambency.Network
-  ( runClientWire
+  ( NetworkedWire
+  , withinNetwork
+
+  , runClientWire
   , networkedCopies
   , runServer
   ) where
