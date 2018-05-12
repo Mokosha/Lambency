@@ -111,7 +111,7 @@ dynamicLights = []
 
 clientWire :: L.GameWire () ()
 clientWire =
-  L.runClientWire (127, 0, 0, 1) (pure ()) (const $ pure ()) networkedSquare
+  L.runClientWire (127, 0, 0, 1) 2 (pure ()) (const $ pure ()) networkedSquare
 
 gameWire :: L.ContWire () (Maybe ())
 gameWire = (arr $ \(b, x) -> if b then Nothing else Just x)
