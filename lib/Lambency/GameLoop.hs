@@ -23,6 +23,8 @@ import Lambency.Texture
 import Lambency.Types
 import Lambency.GameSession
 
+import Network (withSocketsDo)
+
 import System.Console.Concurrent
 import System.CPUTime
 
@@ -131,9 +133,11 @@ runLoop prevFrameTime = do
     Nothing -> return ()
 
 runGameLoop :: GameLoopState a -> GameLoopConfig -> IO ()
-runGameLoop st config = withConcurrentOutput $ do
-  curTime <- getCurrentTime
-  evalStateT (runReaderT (runLoop curTime) config) st
+runGameLoop st config =
+  withSocketsDo $
+  withConcurrentOutput $ do
+    curTime <- getCurrentTime
+    evalStateT (runReaderT (runLoop curTime) config) st
 
 type TimeStepper = (GameSession, NominalDiffTime)
 

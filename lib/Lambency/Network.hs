@@ -624,7 +624,7 @@ runServerWire numPlayers initW =
         Right _ -> return $ (Just <$> res, runW (seqNo + 1) tid w')
 
 runServer :: Int -> a -> NetworkedWire a a -> IO ()
-runServer numPlayers initVal (NCW w) = withConcurrentOutput $ do
+runServer numPlayers initVal (NCW w) = do
   (config, unloadSprite) <- mkLoopConfig nullRenderer Nothing
   let game = Game (mk2DCam 0 0 . pure (V2 0.0 0.0)) []
            $ CW (runServerWire numPlayers w)
