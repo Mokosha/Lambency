@@ -54,7 +54,6 @@ library
                        Lambency.Loaders.Utils
 
                        Lambency.Network
-                       Lambency.Network.EventServer
 
                        Lambency.Shader
                        Lambency.Shader.Base
