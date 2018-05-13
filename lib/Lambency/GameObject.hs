@@ -4,7 +4,7 @@ module Lambency.GameObject (
   transformedContext, transformedResourceContext,
   clippedContext, clippedResourceContext,
   withSubResource,
-  mkContWire, stepContWire,
+  mkContWire, mkContSF, mkContSFN, stepContWire,
   doOnce, doOnceWithInput, everyFrame,
   quitWire,
   mkObject,
@@ -187,6 +187,12 @@ withSubResource :: (r' -> r)
 withSubResource f (RCW w) = RCW $ mkGen $ \dt x -> do
   (r, w') <- withReaderT f $ stepWire w dt (Right x)
   return (r, getResourceWire $ withSubResource f (RCW w'))
+
+mkContSF :: (TimeStep -> a -> (b, ContWire a b)) -> ContWire a b
+mkContSF f = CW $ mkSF $ \dt x -> let (x', CW w') = f dt x in (x', w')
+
+mkContSFN :: (a -> (b, ContWire a b)) -> ContWire a b
+mkContSFN f = CW $ mkSFN $ \x -> let (x', CW w') = f x in (x', w')
 
 mkContWire :: (TimeStep -> a -> GameMonad (b, ContWire a b)) -> ContWire a b
 mkContWire f = CW $ mkGen $ \dt x -> do

@@ -51,13 +51,13 @@ networkedSquare :: L.NetworkedWire () ()
 networkedSquare = arr (\_ -> ())
                 . (player 0 &&& player 1)
                 . L.networkedCopies
-                . L.withinNetwork (L.getContinuousWire squareOffset)
+                . L.withinNetwork squareOffset
   where
     player :: Int -> L.NetworkedWire (IntMap (Maybe (Float, Float))) ()
     player n = L.withinNetwork $
-               L.getContinuousWire renderSquare . playerWithOffset (0, 0)
+               renderSquare . playerWithOffset (0, 0)
       where
-        playerWithOffset off = mkSFN $ \m ->
+        playerWithOffset off = L.mkContSFN $ \m ->
           case IMap.lookup n m of
             Just (Just off') -> (off', playerWithOffset off')
             _ -> (off, playerWithOffset off)
@@ -111,13 +111,13 @@ stationaryCamera = L.mk2DCam kWindowWidth kWindowHeight . pure (V2 0 0)
 dynamicLights :: [L.ContWire () L.Light]
 dynamicLights = []
 
-clientWire :: Word16 -> L.GameWire () ()
+clientWire :: Word16 -> L.ContWire () ()
 clientWire port =
   L.runClientWire (127, 0, 0, 1) port 2 (pure ()) (const $ pure ()) networkedSquare
 
 gameWire :: Word16 -> L.ContWire () (Maybe ())
 gameWire port = (arr $ \(b, x) -> if b then Nothing else Just x)
-              . (quitWire &&& (clientWire port `L.withDefault` pure ()))
+              . (quitWire &&& clientWire port)
 
 game :: Word16 -> L.Game ()
 game port = L.Game stationaryCamera dynamicLights (gameWire port)

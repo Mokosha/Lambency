@@ -268,8 +268,8 @@ authority :: GameWire a b -> NetworkedWire a b
 authority w = undefined
 --}
 
-withinNetwork :: GameWire a b -> NetworkedWire a b
-withinNetwork = NCW . mapWire (\m -> StateT $ \x -> (,x) <$> m)
+withinNetwork :: ContWire a b -> NetworkedWire a b
+withinNetwork = NCW . mapWire (\m -> StateT $ \x -> (,x) <$> m) . getContinuousWire
 
 withNetworkState :: NetworkedWire a b -> NetworkState -> GameWire a b
 withNetworkState (NCW w) s = mkGen $ \dt x -> do
@@ -409,15 +409,15 @@ runClientWire :: forall a
               -- ^ Port to connect to
               -> Int
               -- ^ Num Players
-              -> GameWire a a
+              -> ContWire a a
               -- ^ GameWire to run while connecting
-              -> (ConnectionFailure -> GameWire a a)
+              -> (ConnectionFailure -> ContWire a a)
               -- ^ GameWire to switch to if the connection failed
               -> NetworkedWire a a
               -- ^ Wire to run once connected
-              -> GameWire a a
+              -> ContWire a a
 runClientWire addr port numPlayers whileConnecting onFailure (NCW client) =
-  wireFrom mkNetworkState $ \(st, tid) ->
+  CW $ wireFrom mkNetworkState $ \(st, tid) ->
     flip withNetworkState st
     $ (NCW $ switch $ second (mkResult tid) . connectServer wcn)
   where
