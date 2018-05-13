@@ -7,6 +7,8 @@ import Prelude hiding (id, (.))
 import Control.Applicative  ((<|>))
 import Control.Monad.Reader (ask)
 
+import Data.Word  (Word16)
+import Data.Maybe (maybe)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IMap
 
@@ -109,16 +111,25 @@ stationaryCamera = L.mk2DCam kWindowWidth kWindowHeight . pure (V2 0 0)
 dynamicLights :: [L.ContWire () L.Light]
 dynamicLights = []
 
-clientWire :: L.GameWire () ()
-clientWire =
-  L.runClientWire (127, 0, 0, 1) 2 (pure ()) (const $ pure ()) networkedSquare
+clientWire :: Word16 -> L.GameWire () ()
+clientWire port =
+  L.runClientWire (127, 0, 0, 1) port 2 (pure ()) (const $ pure ()) networkedSquare
 
-gameWire :: L.ContWire () (Maybe ())
-gameWire = (arr $ \(b, x) -> if b then Nothing else Just x)
-         . (quitWire &&& (clientWire `L.withDefault` pure ()))
+gameWire :: Word16 -> L.ContWire () (Maybe ())
+gameWire port = (arr $ \(b, x) -> if b then Nothing else Just x)
+              . (quitWire &&& (clientWire port `L.withDefault` pure ()))
 
-game :: L.Game ()
-game = L.Game stationaryCamera dynamicLights gameWire
+game :: Word16 -> L.Game ()
+game port = L.Game stationaryCamera dynamicLights (gameWire port)
+
+parsePort :: IO (Maybe Word16)
+parsePort = parsePortFromArgs <$> getArgs
+  where
+    parsePortFromArgs :: [String] -> Maybe Word16
+    parsePortFromArgs [] = Nothing
+    parsePortFromArgs [_] = Nothing
+    parsePortFromArgs ("--port":x:_) = Just (read x)
+    parsePortFromArgs (_:xs) = parsePortFromArgs xs
 
 main :: IO ()
 main = do
@@ -129,4 +140,5 @@ main = do
       L.runServer 2 () networkedSquare
     else do
       putStrLn "Running as client..."
-      L.runOpenGL kWindowWidth kWindowHeight kWindowTitle () game
+      maybe 21815 id <$> parsePort
+        >>= L.runOpenGL kWindowWidth kWindowHeight kWindowTitle () . game

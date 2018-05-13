@@ -46,6 +46,8 @@ import Prelude hiding ((.), id)
 
 import Network.Socket hiding (sendTo, recvFrom)
 import Network.Socket.ByteString
+
+import System.Console.Concurrent
 --------------------------------------------------------------------------------
 
 createUDPSocket :: Word16 -> IO Socket
@@ -119,6 +121,9 @@ newtype NetworkedWire a b = NCW { getNetworkedWire :: RawNetworkedWire a b }
 networkIO :: IO a -> NetworkContext a
 networkIO = lift . GameMonad . liftIO
 
+netStrLn :: String -> IO ()
+netStrLn s = outputConcurrent $ s ++ ['\n']
+
 data Packet
   = Packet'ConnectionRequest
   | Packet'ConnectionAccepted Int
@@ -165,7 +170,7 @@ networkWireFrom prg fn = NCW $ mkGen $ \dt val -> do
   stepWire (getNetworkedWire $ fn seed) dt (Right val)
 
 networkedCopiesPeers :: forall a b
-                      . Binary a
+                      . (Show a, Binary a)
                      => Int -> RawNetworkedWire b (IntMap (Maybe a))
 networkedCopiesPeers wireID = mkGen_ $ \_ -> do
   -- Find all packets for connected players that correspond to this wireID
@@ -193,7 +198,7 @@ networkedCopiesPeers wireID = mkGen_ $ \_ -> do
   return $ Right result
 
 networkedCopiesClient :: forall a
-                       . Binary a
+                       . (Show a, Binary a)
                       => Int
                       -> NetworkedWire a (IntMap (Maybe a))
 networkedCopiesClient wireID =
@@ -224,21 +229,24 @@ networkedCopiesClient wireID =
       return $ Right (Just x)
 
 networkedCopiesServer :: forall a
-                       . Binary a => Int -> NetworkedWire a (IntMap (Maybe a))
+                       . (Show a, Binary a)
+                      => Int -> NetworkedWire a (IntMap (Maybe a))
 networkedCopiesServer wireID = NCW $ sendAllPackets . networkedCopiesPeers wireID
   where
     sendAllPackets :: RawNetworkedWire (IntMap (Maybe a)) (IntMap (Maybe a))
     sendAllPackets = mkGen_ $ \m -> do
-      forM_ (IMap.keys m) $ \pid ->
-        case IMap.lookup pid m of
+      forM_ (IMap.toList m) $ \(pid, x) ->
+        case x of
           Nothing -> return ()
-          Just x ->
-            let pkt = WirePacket (BSL.toStrict $ encode x) wireID
-            in modify $ \s -> s {
-              packetsOutServer = IMap.adjust (pkt:) pid (packetsOutServer s) }
+          Just dat -> 
+            let pkt = WirePacket (BSL.toStrict $ encode dat) wireID
+            in do
+              modify' $ \s -> s {
+                packetsOutServer =
+                   IMap.insertWith (++) pid [pkt] (packetsOutServer s) }
       return (Right m)
 
-networkedCopies :: Binary a => NetworkedWire a (IntMap (Maybe a))
+networkedCopies :: (Binary a, Show a) => NetworkedWire a (IntMap (Maybe a))
 networkedCopies = networkWireFrom registerWire $ \r -> case r of
   Left wid -> networkedCopiesClient wid
   Right wid -> networkedCopiesServer wid
@@ -276,12 +284,12 @@ data ConnectionState
   | ConnectionState'Connecting
   | ConnectionState'Connected
 
--- Measured in picoseconds
+-- Measured in seconds
 kTimeout :: Integer
-kTimeout = 5000000000000
+kTimeout = 5
 
 clientReceiveLoop :: ReaderT NetworkState IO ()
-clientReceiveLoop = startConnThread >>= connectClient
+clientReceiveLoop = startConnThread >>= (withConcurrentOutput . connectClient)
   where
     sendConnPkts :: UTCTime -> NetworkState -> IO ()
     sendConnPkts startTime st = do
@@ -292,10 +300,7 @@ clientReceiveLoop = startConnThread >>= connectClient
              writeTVar (localClientID st) (Just $ Left ConnectionFailure'Timeout)
         else do
           -- Send connecting packet
-          -- TODO: What if the server never receives it??
-          putStrLn "Sending connection request"
           _ <- sendConnRequest (localSocket st) (serverAddr st)
-          putStrLn "Connection request sent"
           threadDelay 33333  -- approx 30 pkts/s
           sendConnPkts startTime st
 
@@ -312,20 +317,17 @@ clientReceiveLoop = startConnThread >>= connectClient
 
       -- Receive incoming packet and see what's up
       liftIO $ do
-        putStrLn "Checking received packets"
         (bytes, pktAddr) <- recvFrom (localSocket st) kMaxPayloadSize
-        putStrLn $
-            "Received packet with " ++ show (BS.length bytes) ++ " bytes"
         if (pktAddr /= serverAddr st)
           then runReaderT (connectClient connectingThread) st
           else case (decodePkt (BSL.fromStrict bytes)) of
             Just (Packet'ConnectionAccepted clientID) -> do
-              putStrLn $ "Received connection accept! ClientID: " ++ show clientID
+              netStrLn $ "Received connection accept! ClientID: " ++ show clientID
               killThread connectingThread
               atomically $ writeTVar (localClientID st) (Just $ Right clientID)
               runReaderT clientConnectedLoop st
             Just Packet'ConnectionDenied -> do
-              putStrLn "Received connection denied!"
+              netStrLn "Received connection denied!"
               killThread connectingThread
               atomically $ writeTVar (localClientID st) $
                 Just $ Left ConnectionFailure'Refused
@@ -349,7 +351,7 @@ clientReceiveLoop = startConnThread >>= connectClient
                    pkts <- readArray (packetsIn st) cid
                    let newPkt = (seqNo, wpPayload wp)
                    writeArray (packetsIn st) cid $
-                     IMap.adjust (newPkt:) (wpNetworkID wp) pkts
+                     IMap.insertWith (++) (wpNetworkID wp) [newPkt] pkts
                  return True
                Just (Packet'ConnectionDisconnect cid)
                  | Just (Right cid) == clientID -> return False
@@ -364,7 +366,6 @@ clientReceiveLoop = startConnThread >>= connectClient
       if not c
         then liftIO $ atomically $ writeTVar (localClientID st) Nothing
         else clientConnectedLoop
-
 
 connectedClient :: ThreadId -> NetworkedWire a a -> NetworkedWire a a
 connectedClient tid (NCW _w) = NCW $ clientW 0 _w
@@ -404,6 +405,8 @@ connectedClient tid (NCW _w) = NCW $ clientW 0 _w
 runClientWire :: forall a
                . (Word8, Word8, Word8, Word8)
               -- ^ Address to connect to
+              -> Word16
+              -- ^ Port to connect to
               -> Int
               -- ^ Num Players
               -> GameWire a a
@@ -413,16 +416,21 @@ runClientWire :: forall a
               -> NetworkedWire a a
               -- ^ Wire to run once connected
               -> GameWire a a
-runClientWire addr numPlayers whileConnecting onFailure (NCW client) =
+runClientWire addr port numPlayers whileConnecting onFailure (NCW client) =
   wireFrom mkNetworkState $ \(st, tid) ->
     flip withNetworkState st
     $ (NCW $ switch $ second (mkResult tid) . connectServer wcn)
   where
     mkNetworkState = GameMonad . liftIO $ do
       sock <- do
-        putStrLn $
-          "Connecting to server at address " ++ show addr ++ " on port 18152"
-        createUDPSocket 21518
+        netStrLn $ concat ["Connecting via port "
+                          , show port
+                          , " to server at address "
+                          , show addr
+                          , " on port 18152"
+                          ]
+
+        createUDPSocket port
       cidVar <- newTVarIO Nothing
       pktsInVar <- atomically $ newArray (0, numPlayers - 1) IMap.empty
 
@@ -557,7 +565,7 @@ serverReceiveLoop = do
           openSlot <- findOpenSlot
           liftIO $ case openSlot of
             Just x -> do
-              putStrLn $ "Received connection request -- assigning slot " ++ show x
+              netStrLn $ "Received connection request -- assigning slot " ++ show x
               atomically $ writeArray (connectedClients st) x (Just addr)
               _ <- sendAccepted x (localSocket st) addr
               return ()
@@ -572,7 +580,7 @@ runServerWire numPlayers initW =
     withNetworkState (NCW $ runW 0 tid initW) st
   where
     mkNetworkState = GameMonad . liftIO $ do
-      putStrLn "Creating server on port 18152."
+      netStrLn "Creating server on port 18152."
       sock <- createUDPSocket 18152
 
       pktsInArr <- atomically $ newArray (0, numPlayers - 1) IMap.empty
@@ -603,8 +611,9 @@ runServerWire numPlayers initW =
 
       forM_ clients $ \addr ->
         forM_ (IMap.toList $ packetsOutServer st) $ \(pid, pkts) -> do
-          _ <- networkIO $ sendPayload seqNo pid pkts (localSocket st) addr
-          return ()
+          networkIO (sendPayload seqNo pid pkts (localSocket st) addr)
+            >> return ()
+      modify' $ \s -> s { packetsOutServer = IMap.empty }
 
       -- TODO: We terminate when everyone disconnects -- need to identify that
       -- case?
@@ -615,7 +624,7 @@ runServerWire numPlayers initW =
         Right _ -> return $ (Just <$> res, runW (seqNo + 1) tid w')
 
 runServer :: Int -> a -> NetworkedWire a a -> IO ()
-runServer numPlayers initVal (NCW w) = do
+runServer numPlayers initVal (NCW w) = withConcurrentOutput $ do
   (config, unloadSprite) <- mkLoopConfig nullRenderer Nothing
   let game = Game (mk2DCam 0 0 . pure (V2 0.0 0.0)) []
            $ CW (runServerWire numPlayers w)

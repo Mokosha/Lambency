@@ -23,6 +23,7 @@ import Lambency.Texture
 import Lambency.Types
 import Lambency.GameSession
 
+import System.Console.Concurrent
 import System.CPUTime
 
 import Linear
@@ -130,7 +131,7 @@ runLoop prevFrameTime = do
     Nothing -> return ()
 
 runGameLoop :: GameLoopState a -> GameLoopConfig -> IO ()
-runGameLoop st config = do
+runGameLoop st config = withConcurrentOutput $ do
   curTime <- getCurrentTime
   evalStateT (runReaderT (runLoop curTime) config) st
 

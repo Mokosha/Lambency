@@ -82,6 +82,7 @@ library
                        bytestring,
                        comonad,
                        containers,
+                       concurrent-output,
                        filepath,
                        freetype2,
                        GLFW-b               >= 3.2.1.0,
