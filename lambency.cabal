@@ -223,7 +223,7 @@ executable lambmovesquare
 executable lambnetmovesquares
   main-is:        MovingNetworkedSquares.hs
   hs-source-dirs: examples
-  ghc-options:    -Wall -O3 -threaded
+  ghc-options:    -Wall -O3
   build-depends:  base          <  5,
                   netwire       >= 5.0.0,
                   netwire-input >= 0.0.3,
