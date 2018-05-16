@@ -111,13 +111,13 @@ stationaryCamera = L.mk2DCam kWindowWidth kWindowHeight . pure (V2 0 0)
 dynamicLights :: [L.ContWire () L.Light]
 dynamicLights = []
 
-clientWire :: Word16 -> L.ContWire () ()
+clientWire :: Word16 -> L.ContWire (Bool, ()) (Maybe ())
 clientWire port =
-  L.runClientWire (127, 0, 0, 1) port 2 (pure ()) (const $ pure ()) networkedSquare
+  L.runClientWire (127, 0, 0, 1) port 2 (pure ()) (const $ pure Nothing)
+                  networkedSquare
 
 gameWire :: Word16 -> L.ContWire () (Maybe ())
-gameWire port = (arr $ \(b, x) -> if b then Nothing else Just x)
-              . (quitWire &&& clientWire port)
+gameWire port = clientWire port . (quitWire &&& id)
 
 game :: Word16 -> L.Game ()
 game port = L.Game stationaryCamera dynamicLights (gameWire port)

@@ -367,11 +367,11 @@ clientReceiveLoop = startConnThread >>= (withConcurrentOutput . connectClient)
         then liftIO $ atomically $ writeTVar (localClientID st) Nothing
         else clientConnectedLoop
 
-connectedClient :: ThreadId -> NetworkedWire a a -> NetworkedWire a a
+connectedClient :: ThreadId -> NetworkedWire a a -> NetworkedWire (Bool, a) (Maybe a)
 connectedClient tid (NCW _w) = NCW $ clientW 0 _w
   where
-    clientW :: Word64 -> RawNetworkedWire a a -> RawNetworkedWire a a
-    clientW seqNo w = mkGen $ \dt x -> do
+    clientW :: Word64 -> RawNetworkedWire a a -> RawNetworkedWire (Bool, a) (Maybe a)
+    clientW seqNo w = mkGen $ \dt (disc, x) -> do
       -- Run the wire
       (res, w') <- stepWire w dt (Right x)
 
@@ -382,25 +382,36 @@ connectedClient tid (NCW _w) = NCW $ clientW 0 _w
         -- Disconnected?
         Nothing -> do
           networkIO $ killThread tid
-          return (res, mkEmpty)
+          return (Right Nothing, pure Nothing)
 
         -- Connection failure of some sort?
         Just (Left _) -> do
           networkIO $ killThread tid
-          return (res, mkEmpty)
+          return (Right Nothing, pure Nothing)
 
         -- If we're still connected, Send out all of the outgoing data as a
         -- single packet
         Just (Right cid) -> do
-          outPackets <- packetsOutClient <$> get
-          let sock = localSocket st
-              sa = serverAddr st
-          _ <- networkIO $ sendPayload seqNo cid outPackets sock sa
+          if disc
+            then do
+              -- Client chose to disconnect?
+              networkIO $ do
+                _ <- sendDisconnected cid (localSocket st) (serverAddr st)
+                killThread tid
+              return (Right Nothing, pure Nothing)
 
-          -- Reset all of the outgoing packets
-          modify $ \s -> s { packetsOutClient = [] }
+            else do
+              -- We're still connected and we don't want to disconnect -- send
+              -- all the queued packets!
+              outPackets <- packetsOutClient <$> get
+              let sock = localSocket st
+                  sa = serverAddr st
+              _ <- networkIO $ sendPayload seqNo cid outPackets sock sa
 
-          return (res, clientW (seqNo + 1) w')
+              -- Reset all of the outgoing packets
+              modify $ \s -> s { packetsOutClient = [] }
+
+              return (Just <$> res, clientW (seqNo + 1) w')
 
 runClientWire :: forall a
                . (Word8, Word8, Word8, Word8)
@@ -410,27 +421,26 @@ runClientWire :: forall a
               -> Int
               -- ^ Num Players
               -> ContWire a a
-              -- ^ GameWire to run while connecting
-              -> (ConnectionFailure -> ContWire a a)
-              -- ^ GameWire to switch to if the connection failed
+              -- ^ Wire to run while connecting
+              -> (ConnectionFailure -> ContWire (Bool, a) (Maybe a))
+              -- ^ Wire to switch to if the connection failed
               -> NetworkedWire a a
               -- ^ Wire to run once connected
-              -> ContWire a a
+              -> ContWire (Bool, a) (Maybe a)
 runClientWire addr port numPlayers whileConnecting onFailure (NCW client) =
   CW $ wireFrom mkNetworkState $ \(st, tid) ->
     flip withNetworkState st
     $ (NCW $ switch $ second (mkResult tid) . connectServer wcn)
   where
+    mkNetworkState :: GameMonad (NetworkState, ThreadId)
     mkNetworkState = GameMonad . liftIO $ do
-      sock <- do
-        netStrLn $ concat ["Connecting via port "
-                          , show port
-                          , " to server at address "
-                          , show addr
-                          , " on port 18152"
-                          ]
-
-        createUDPSocket port
+      let serverPort :: PortNumber  -- TODO: Should be configurable from CLI
+          serverPort = 18152
+      netStrLn $ concat ["Connecting via port ", show port
+                        , " to server at address "
+                        , show addr, ":", show serverPort
+                        ]
+      sock <- createUDPSocket port
       cidVar <- newTVarIO Nothing
       pktsInVar <- atomically $ newArray (0, numPlayers - 1) IMap.empty
 
@@ -439,7 +449,7 @@ runClientWire addr port numPlayers whileConnecting onFailure (NCW client) =
                , nextWireID = 0
                , packetsIn = pktsInVar
                , localClientID = cidVar
-               , serverAddr = SockAddrInet 18152 $ tupleToHostAddress addr
+               , serverAddr = SockAddrInet serverPort $ tupleToHostAddress addr
                , packetsOutClient = []
                }
 
@@ -450,11 +460,9 @@ runClientWire addr port numPlayers whileConnecting onFailure (NCW client) =
     wcn :: RawNetworkedWire a a
     wcn = getNetworkedWire $ withinNetwork whileConnecting
 
-    mkResult :: ThreadId
-             -> RawNetworkedWire ConnectionState (Event (RawNetworkedWire a a))
     mkResult tid = fmap (getNetworkedWire . toResultW tid) <$> became connectionResult
 
-    toResultW :: ThreadId -> ConnectionState -> NetworkedWire a a
+    toResultW :: ThreadId -> ConnectionState -> NetworkedWire (Bool, a) (Maybe a)
     toResultW _ ConnectionState'Connecting = error "Still connecting..."
     toResultW _ (ConnectionState'Failure f) = withinNetwork $ onFailure f
     toResultW tid ConnectionState'Connected = connectedClient tid (NCW client)
@@ -464,10 +472,13 @@ runClientWire addr port numPlayers whileConnecting onFailure (NCW client) =
     connectionResult _ = True
 
     connectServer :: RawNetworkedWire a a
-                  -> RawNetworkedWire a (a, ConnectionState)
-    connectServer w = mkGen $ \dt x -> do
+                  -> RawNetworkedWire (Bool, a) (Maybe a, ConnectionState)
+    connectServer w = mkGen $ \dt (disc, x) -> do
       (result, w') <- stepWire w dt (Right x)
-      let returnConn c = return ((,c) <$> result, connectServer w')
+      let returnConn c =
+            if disc
+            then return (Right (Nothing, c), connectServer w')
+            else return ((,c) . Just <$> result, connectServer w')
       st <- get
       cid <- networkIO $ atomically $ readTVar (localClientID st)
       case cid of
@@ -509,6 +520,20 @@ serverReceiveLoop = do
   serverReceiveLoop
 
   where
+    disconnectPlayer :: Int -> ReaderT NetworkState IO ()
+    disconnectPlayer pid = do
+      liftIO $ netStrLn $ "Disconnecting player: " ++ show pid
+      -- Send a disconnect notification to all other connected clients
+      clients <- connectedClients <$> ask
+      addrs <- fmap (catMaybes . map snd . filter ((/= pid) . fst)) $
+               liftIO $ atomically $ getAssocs clients
+      sock <- localSocket <$> ask
+      liftIO $ do
+        forM_ addrs $ sendDisconnected pid sock
+
+        -- Remove client from connected clients
+        atomically $ writeArray clients pid Nothing
+
     handlePlayerData :: BS.ByteString -> Int -> SockAddr
                      -> ReaderT NetworkState IO ()
     handlePlayerData bytes pid addr =
@@ -518,6 +543,10 @@ serverReceiveLoop = do
           sock <- localSocket <$> ask
           _ <- liftIO $ sendAccepted pid sock addr
           return ()
+
+        -- Handle disconnects
+        Just (Packet'ConnectionDisconnect cid) ->
+          if pid == cid then disconnectPlayer cid else return ()
 
         -- Handle incoming data
         Just (Packet'Payload cid seqNo pkts) -> do
