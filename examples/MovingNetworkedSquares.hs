@@ -47,13 +47,13 @@ kSquareColor = V4 1.0 0.0 0.0 1.0
 kSquareSize :: Int
 kSquareSize = 30  -- in pixels
 
-networkedSquare :: L.NetworkedWire () ()
+networkedSquare :: L.NetworkedWire Int () ()
 networkedSquare = arr (\_ -> ())
                 . (player 0 &&& player 1)
                 . L.networkedCopies
                 . L.withinNetwork squareOffset
   where
-    player :: Int -> L.NetworkedWire (IntMap (Maybe (Float, Float))) ()
+    player :: Int -> L.NetworkedWire Int (IntMap (Maybe (Float, Float))) ()
     player n = L.withinNetwork $
                renderSquare . playerWithOffset (0, 0)
       where
@@ -114,7 +114,7 @@ dynamicLights = []
 clientWire :: Word16 -> L.ContWire (Bool, ()) (Maybe ())
 clientWire port =
   L.runClientWire (127, 0, 0, 1) port 2 (pure ()) (const $ pure Nothing)
-                  networkedSquare
+                  (\_ -> networkedSquare)
 
 gameWire :: Word16 -> L.ContWire () (Maybe ())
 gameWire port = clientWire port . (quitWire &&& id)
@@ -137,7 +137,7 @@ main = do
   if "--server" `elem` args
     then do
       putStrLn "Running as server..."
-      L.runServer 2 () networkedSquare
+      L.runServer 2 () 0 networkedSquare
     else do
       putStrLn "Running as client..."
       maybe 21815 id <$> parsePort
