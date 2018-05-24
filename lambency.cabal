@@ -54,6 +54,12 @@ library
                        Lambency.Loaders.Utils
 
                        Lambency.Network
+                       Lambency.Network.Client
+                       Lambency.Network.Copies
+                       Lambency.Network.Packet
+                       Lambency.Network.Server
+                       Lambency.Network.Types
+                       Lambency.Network.Utils
 
                        Lambency.Shader
                        Lambency.Shader.Base
