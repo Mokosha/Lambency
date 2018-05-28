@@ -1,6 +1,6 @@
 module Lambency.GameObject (
-  wireFrom, contWireFrom,
-  bracketResource, liftWireRCW, withResource, joinResources, withDefault,
+  wireFrom, contWireFrom, liftWire, liftWireRCW,
+  bracketResource, withResource, joinResources, withDefault,
   transformedContext, transformedResourceContext,
   clippedContext, clippedResourceContext,
   withSubResource,
