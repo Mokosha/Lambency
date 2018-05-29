@@ -125,8 +125,10 @@ clientReceiveLoop = startConnThread >>= connectClient
     clientConnectedLoop :: ReaderT (NetworkState s) IO ()
     clientConnectedLoop = do
       st <- ask
-      clientID <- liftIO $ atomically $ readTVar (localClientID st)
-      (bytes, pktAddr) <- liftIO $ recvFrom (localSocket st) kMaxPayloadSize
+      (clientID, bytes, pktAddr) <- liftIO $ do
+        cid <- atomically $ readTVar (localClientID st)
+        (b, addr) <- recvFrom (localSocket st) kMaxPayloadSize
+        return (cid, b, addr)
       c <- if (pktAddr /= serverAddr st)
            then return True
            else do
@@ -140,17 +142,16 @@ clientReceiveLoop = startConnThread >>= connectClient
                  return True
                Just (Packet'ConnectionDisconnect cid)
                  | Just (Right cid) == clientID -> return False
-                 | otherwise -> do
-                   liftIO $ atomically $ do
+                 | otherwise -> liftIO . atomically $ do
                      writeArray (packetsIn st) cid IMap.empty
-                   return True
+                     return True
 
                -- Ignore all other packets
                _ -> return True
 
-      if not c
-        then liftIO $ atomically $ writeTVar (localClientID st) Nothing
-        else clientConnectedLoop
+      if c
+        then clientConnectedLoop
+        else liftIO $ atomically $ writeTVar (localClientID st) Nothing
 
 connectedClient :: ThreadId -> NetworkedWire s a a
                 -> NetworkedWire s (Bool, a) (Maybe a)
