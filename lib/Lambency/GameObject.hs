@@ -1,6 +1,6 @@
 module Lambency.GameObject (
-  wireFrom, contWireFrom,
-  bracketResource, liftWire, withResource, joinResources, withDefault,
+  wireFrom, contWireFrom, liftWire, liftWireRCW,
+  bracketResource, withResource, joinResources, withDefault,
   transformedContext, transformedResourceContext,
   clippedContext, clippedResourceContext,
   withSubResource,
@@ -123,14 +123,16 @@ bracketResource load (RCW rcw) = CW $ mkGen $ \dt x -> do
           (result, w') <- runReaderT (stepWire w dt (Right x)) res
           if isLeft result then quit else return (Just <$> result, go unload res w')
 
-liftWire :: GameWire a b -> ResourceContextWire r a b
-liftWire gw = RCW $ mkGen $ \dt x -> do
-  (r, RCW gw') <- second liftWire <$> (ReaderT $ \_ -> stepWire gw dt (Right x))
-  return (r, gw')
+liftWireRCW :: GameWire a b -> ResourceContextWire r a b
+liftWireRCW = RCW . liftWire
+
+liftWire :: (Monad m, MonadTrans t, Monad (t m))
+          => Wire s e m a b -> Wire s e (t m) a b
+liftWire = mapWire lift
 
 withResource :: (r -> GameWire a b) -> ResourceContextWire r a b
 withResource wireGen = RCW $ mkGen $ \dt x -> do
-  (r, RCW w) <- second liftWire <$>
+  (r, w) <- second liftWire <$>
                 (ReaderT $ \r -> stepWire (wireGen r) dt (Right x))
   return (r, w)
 
@@ -143,7 +145,7 @@ transformedResourceContext :: ResourceContextWire r a Transform
                            -> ResourceContextWire r a b
                            -> ResourceContextWire r a b
 transformedResourceContext xf w = RCW $ mkGen $ \dt x ->
-  second (getResourceWire . liftWire) <$>
+  second liftWire <$>
   (ReaderT $ \r ->
     let xf' = withinContext r xf
         w' = withinContext r w
@@ -154,7 +156,7 @@ clippedResourceContext :: ResourceContextWire r a b
                        -> ResourceContextWire r b c
                        -> ResourceContextWire r a c
 clippedResourceContext cw w = RCW $ mkGen $ \dt x ->
-  second (getResourceWire . liftWire) <$>
+  second liftWire <$>
   (ReaderT $ \r ->
     let cw' = withinContext r cw
         w' = withinContext r w
