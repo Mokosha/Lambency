@@ -62,7 +62,7 @@ clientReceiveLoop = startConnThread >>= connectClient
         startTime <- getCurrentTime
         forkIO $ sendConnPkts startTime st
 
-    receiveInitialState :: [(Word64, Int, Int, BS.ByteString)]
+    receiveInitialState :: [(SequenceNumber, Int, Int, BS.ByteString)]
                         -> ReaderT (NetworkState s) IO ()
     receiveInitialState pktsSoFar = do
       st <- ask
@@ -157,7 +157,7 @@ connectedClient :: ThreadId -> NetworkedWire s a a
                 -> NetworkedWire s (Bool, a) (Maybe a)
 connectedClient tid (NCW _w) = NCW $ clientW 0 _w
   where
-    clientW :: Word64 -> RawNetworkedWire s a a
+    clientW :: SequenceNumber -> RawNetworkedWire s a a
             -> RawNetworkedWire s (Bool, a) (Maybe a)
     clientW seqNo w = mkGen $ \dt (disc, x) -> do
       -- Run the wire
@@ -232,12 +232,14 @@ runClientWire addr port numPlayers whileConnecting onFailure mkClient =
       sock <- createUDPSocket port
       cidVar <- newTVarIO Nothing
       pktsInVar <- atomically $ newArray (0, numPlayers - 1) IMap.empty
+      pktsRecvdArr <- atomically $ newArray (0, numPlayers - 1) IMap.empty
       gstvar <- newTVarIO Nothing
 
       let st = ClientNetworkState
                { localSocket = sock
                , nextWireID = 0
                , packetsIn = pktsInVar
+               , packetsReceived = pktsRecvdArr
                , clientGameState = gstvar
                , localClientID = cidVar
                , serverAddr = SockAddrInet serverPort $ tupleToHostAddress addr

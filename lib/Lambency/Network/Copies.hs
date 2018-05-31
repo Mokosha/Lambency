@@ -42,7 +42,7 @@ networkedCopiesPeers wireID = mkGen_ $ \_ -> do
           writeArray packetsInArray pid $ IMap.insert wireID xs pdat
           return (pid, Just x)
 
-  let mkResult :: (Word64, BS.ByteString) -> a
+  let mkResult :: (c, BS.ByteString) -> a
       mkResult = decode . BSL.fromStrict . snd
 
       result = IMap.fromList $ map (second $ fmap mkResult) playerData
@@ -76,8 +76,8 @@ networkedCopiesClient wireID =
       -- TODO: Use clientID to actually make sure that we're receiving packets
       -- in order as we expect
       let dat = BSL.toStrict $ encode x
-      modify' $ \s -> s {
-        packetsOutClient = WirePacket dat wireID : (packetsOutClient s) }
+          wp = WirePacket dat wireID False 0
+      modify' $ \s -> s { packetsOutClient = wp : packetsOutClient s }
       return $ Right (Just x)
 
 networkedCopiesServer :: forall a s
@@ -91,11 +91,10 @@ networkedCopiesServer wireID = NCW $ sendAllPackets . networkedCopiesPeers wireI
         case x of
           Nothing -> return ()
           Just dat -> 
-            let pkt = WirePacket (BSL.toStrict $ encode dat) wireID
-            in do
-              modify' $ \s -> s {
-                packetsOutServer =
-                   IMap.insertWith (++) pid [pkt] (packetsOutServer s) }
+            let pkt = WirePacket (BSL.toStrict $ encode dat) wireID False 0
+            in modify' $ \s -> s {
+              packetsOutServer =
+                 IMap.insertWith (++) pid [pkt] (packetsOutServer s) }
       return (Right m)
 
 networkedCopies :: Binary a => NetworkedWire s a (IntMap (Maybe a))

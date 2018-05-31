@@ -99,7 +99,7 @@ serverReceiveLoop = do
               then return ()  -- Ignore out of bounds
               else do
                 wireData <- readArray pktsIn cid
-                let getPkt :: WirePacket -> (Int, [(Word64, BS.ByteString)])
+                let getPkt :: WirePacket -> (Int, [(SequenceNumber, BS.ByteString)])
                     getPkt wp = (wpNetworkID wp, [(seqNo, wpPayload wp)])
 
                     newData = IMap.fromList $ map getPkt pkts
@@ -156,6 +156,7 @@ runServerWire numPlayers initGS initW =
       sock <- createUDPSocket 18152
 
       pktsInArr <- atomically $ newArray (0, numPlayers - 1) IMap.empty
+      pktsRecvdArr <- atomically $ newArray (0, numPlayers - 1) IMap.empty
       clients <- atomically $ newArray (0, numPlayers - 1) Nothing
       gstVar <- newTVarIO initGS
 
@@ -163,6 +164,7 @@ runServerWire numPlayers initGS initW =
                { localSocket = sock
                , nextWireID = 0
                , packetsIn = pktsInArr
+               , packetsReceived = pktsRecvdArr
                , serverGameState = gstVar
                , connectedClients = clients
                , packetsOutServer = IMap.empty
@@ -172,7 +174,7 @@ runServerWire numPlayers initGS initW =
       t <- getCurrentTime
       return (tid, st, t)
 
-    runW :: UTCTime -> Word64 -> ThreadId -> RawNetworkedWire s a a
+    runW :: UTCTime -> SequenceNumber -> ThreadId -> RawNetworkedWire s a a
          -> RawNetworkedWire s a (Maybe a)
     runW lastStateSent seqNo tid w = mkGen $ \dt x -> do
       (res, w') <- stepWire w dt (Right x)
