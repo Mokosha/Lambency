@@ -50,7 +50,7 @@ sendConnDenied sock = sendTo sock (encPkt Packet'ConnectionDenied)
 
 sendPayload :: SequenceNumber -> Int -> [WirePacket] -> Socket -> SockAddr -> IO Int
 sendPayload pktNo cid dat sock =
-  sendTo sock (encPkt $ Packet'Payload cid pktNo dat)
+  sendTo sock (encPkt $ Packet'Payload pktNo cid dat)
 
 sendGameState :: SequenceNumber -> BS.ByteString -> Socket -> SockAddr -> IO Int
 sendGameState pktNo st sock addr =

@@ -90,7 +90,7 @@ serverReceiveLoop = do
           if pid == cid then disconnectPlayer cid else return ()
 
         -- Handle incoming data
-        Just (Packet'Payload cid seqNo pkts) -> do
+        Just (Packet'Payload seqNo cid pkts) -> do
           pktsIn <- packetsIn <$> ask
           liftIO $ atomically $ do
             (pMin, pMax) <- getBounds pktsIn

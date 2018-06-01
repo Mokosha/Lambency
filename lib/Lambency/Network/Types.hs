@@ -43,7 +43,7 @@ data Packet
   | Packet'ConnectionDenied
   | Packet'ConnectionDisconnect Int
     -- TODO: Maybe ShortByteString is better?
-  | Packet'Payload Int SequenceNumber [WirePacket]
+  | Packet'Payload SequenceNumber Int [WirePacket]
   | Packet'GameState SequenceNumber Int Int BS.ByteString
     deriving (Generic, Eq, Ord, Show)
 

@@ -133,7 +133,7 @@ clientReceiveLoop = startConnThread >>= connectClient
            then return True
            else do
              case decodePkt bytes of
-               Just (Packet'Payload cid seqNo wps) -> do
+               Just (Packet'Payload seqNo cid wps) -> do
                  liftIO $ atomically $ forM_ wps $ \wp -> do
                    pkts <- readArray (packetsIn st) cid
                    let newPkt = (seqNo, wpPayload wp)
