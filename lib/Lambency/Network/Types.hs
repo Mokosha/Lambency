@@ -37,6 +37,14 @@ data WirePacket =
 
 instance Binary WirePacket
 
+data ReceivedWirePacket =
+  ReceivedWirePacket
+  { rwpPayload :: BS.ByteString
+  , rwpRequired :: Bool
+  , rwpPreviousRequired :: SequenceNumber
+  , rwpSequenceNumber :: SequenceNumber
+  } deriving (Generic, Eq, Ord, Show)
+
 data Packet
   = Packet'ConnectionRequest
   | Packet'ConnectionAccepted Int
@@ -54,7 +62,7 @@ instance Binary Packet
 --     For each wireID in the current simulation:
 --       Store a priority queue of wire packets based on their sequence number
 -- type IncomingPackets = TArray Int (IntMap (Heap (SequenceNumber, BS.ByteString)))
-type IncomingPackets = TArray Int (IntMap [(SequenceNumber, BS.ByteString)])
+type IncomingPackets = TArray Int (IntMap [ReceivedWirePacket])
 
 -- | A sequence number is a monotonically increasing value that can be thought
 -- of as a timestamp for when a packet is sent across the wire.

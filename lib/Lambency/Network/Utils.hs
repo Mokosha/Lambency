@@ -15,6 +15,14 @@ import Prelude hiding ((.), id)
 
 import System.Console.Concurrent
 --------------------------------------------------------------------------------
+receiveWirePacket :: SequenceNumber -> WirePacket -> ReceivedWirePacket
+receiveWirePacket seqNo wp =
+  ReceivedWirePacket
+  { rwpPayload = wpPayload wp
+  , rwpRequired = wpRequired wp
+  , rwpPreviousRequired = wpPreviousRequired wp
+  , rwpSequenceNumber = seqNo
+  }
 
 createUDPSocket :: Word16 -> IO Socket
 createUDPSocket port = do

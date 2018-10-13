@@ -12,9 +12,7 @@ import Data.Array.MArray
 import Data.Binary hiding (get, put)
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as BSL
-import Data.Function (on)
 import qualified Data.IntMap.Strict   as IMap
-import Data.List (sortBy)
 import Data.Maybe (fromJust, isJust, catMaybes)
 import Data.Time
 
@@ -99,12 +97,10 @@ serverReceiveLoop = do
               then return ()  -- Ignore out of bounds
               else do
                 wireData <- readArray pktsIn cid
-                let getPkt :: WirePacket -> (Int, [(SequenceNumber, BS.ByteString)])
-                    getPkt wp = (wpNetworkID wp, [(seqNo, wpPayload wp)])
-
+                let getPkt :: WirePacket -> (Int, [ReceivedWirePacket])
+                    getPkt wp = (wpNetworkID wp, [receiveWirePacket seqNo wp])
                     newData = IMap.fromList $ map getPkt pkts
-                writeArray pktsIn cid $ IMap.map (sortBy (compare `on` fst))
-                                      $ IMap.unionWith (++) wireData newData
+                writeArray pktsIn cid $ IMap.unionWith (++) wireData newData
 
         -- Ignore everything else
         _ -> return ()

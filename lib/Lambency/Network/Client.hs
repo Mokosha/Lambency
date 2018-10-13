@@ -39,6 +39,8 @@ data ConnectionState s
 kTimeout :: Integer
 kTimeout = 5
 
+-- | Initiates a connection to the server, waits for an initial state to be
+-- received, and then uses that initial state to start the network context wire.
 clientReceiveLoop :: forall s . Binary s => ReaderT (NetworkState s) IO ()
 clientReceiveLoop = startConnThread >>= connectClient
   where
@@ -79,7 +81,7 @@ clientReceiveLoop = startConnThread >>= connectClient
             | otherwise -> do
               let newpkt = (seqNo, pktIdx, numPkts, p)
                   getPktIdx (_, i, _, _) = i
-                in case pktsSoFar of
+               in case pktsSoFar of
                 [] -> receiveInitialState [newpkt]
                 (curSeqNo, _, curNumPkts, _):_
                   | seqNo > curSeqNo -> receiveInitialState [newpkt]
@@ -136,7 +138,7 @@ clientReceiveLoop = startConnThread >>= connectClient
                Just (Packet'Payload seqNo cid wps) -> do
                  liftIO $ atomically $ forM_ wps $ \wp -> do
                    pkts <- readArray (packetsIn st) cid
-                   let newPkt = (seqNo, wpPayload wp)
+                   let newPkt = receiveWirePacket seqNo wp
                    writeArray (packetsIn st) cid $
                      IMap.insertWith (++) (wpNetworkID wp) [newPkt] pkts
                  return True
@@ -253,7 +255,8 @@ runClientWire addr port numPlayers whileConnecting onFailure mkClient =
     wcn :: RawNetworkedWire s a a
     wcn = getNetworkedWire $ withinNetwork whileConnecting
 
-    mkResult tid = fmap (getNetworkedWire . toResultW tid) <$> became connectionResult
+    mkResult tid =
+      fmap (getNetworkedWire . toResultW tid) <$> became connectionResult
 
     toResultW :: ThreadId -> ConnectionState s -> NetworkedWire s (Bool, a) (Maybe a)
     toResultW _ ConnectionState'Connecting = error "Still connecting..."
