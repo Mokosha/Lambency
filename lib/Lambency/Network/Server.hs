@@ -88,19 +88,20 @@ serverReceiveLoop = do
           if pid == cid then disconnectPlayer cid else return ()
 
         -- Handle incoming data
-        Just (Packet'Payload seqNo cid pkts) -> do
+        Just (Packet'Payload pkts) -> do
           pktsIn <- packetsIn <$> ask
           liftIO $ atomically $ do
             (pMin, pMax) <- getBounds pktsIn
-            let within a b x = x >= a && x <= b
-            if not (within pMin pMax cid)
-              then return ()  -- Ignore out of bounds
-              else do
-                wireData <- readArray pktsIn cid
-                let getPkt :: WirePacket -> (Int, [ReceivedWirePacket])
-                    getPkt wp = (wpNetworkID wp, [receiveWirePacket seqNo wp])
-                    newData = IMap.fromList $ map getPkt pkts
-                writeArray pktsIn cid $ IMap.unionWith (++) wireData newData
+            forM_ [pMin..pMax] $ \cid -> do
+              let playerPkts = filter ((== cid) . wpPlayerID) pkts
+                  fixSeqNo wp = wp { wpLocalSequenceNumber = wpSequenceNumber wp
+                                   , wpSequenceNumber = 0
+                                   }
+                  newData = IMap.fromList $ [ (wpNetworkID wp, [fixSeqNo wp])
+                                            | wp <- playerPkts
+                                            ]
+              wireData <- readArray pktsIn cid
+              writeArray pktsIn cid $ IMap.unionWith (++) wireData newData
 
         -- Ignore everything else
         _ -> return ()
@@ -152,15 +153,17 @@ runServerWire numPlayers initGS initW =
       sock <- createUDPSocket 18152
 
       pktsInArr <- atomically $ newArray (0, numPlayers - 1) IMap.empty
-      pktsRecvdArr <- atomically $ newArray (0, numPlayers - 1) IMap.empty
       clients <- atomically $ newArray (0, numPlayers - 1) Nothing
+      ackStates <- atomically $
+                   newArray (0, numPlayers - 1) $ AckState (0, AckMask 0)
       gstVar <- newTVarIO initGS
 
       let st = ServerNetworkState
                { localSocket = sock
                , nextWireID = 0
                , packetsIn = pktsInArr
-               , packetsReceived = pktsRecvdArr
+               , packetQueues = IMap.empty
+               , clientPacketsAcked = ackStates
                , serverGameState = gstVar
                , connectedClients = clients
                , packetsOutServer = IMap.empty
@@ -185,8 +188,10 @@ runServerWire numPlayers initGS initW =
 
       forM_ clients $ \addr ->
         forM_ (IMap.toList $ packetsOutServer st) $ \(pid, pkts) -> do
-          networkIO (sendPayload seqNo pid pkts (localSocket st) addr)
-            >> return ()
+          let fixPacket wp = wp { wpPlayerID = pid
+                                , wpSequenceNumber = seqNo
+                                }
+          networkIO (sendPayload (fixPacket <$> pkts) (localSocket st) addr)
       modify' $ \s -> s { packetsOutServer = IMap.empty }
 
       -- Send the state every 2 seconds

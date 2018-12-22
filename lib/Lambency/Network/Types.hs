@@ -30,20 +30,14 @@ data ConnectionFailure
 data WirePacket =
   WirePacket
   { wpPayload :: BS.ByteString
+  , wpPlayerID :: Int
   , wpNetworkID :: Int
-  , wpRequired :: Bool
-  , wpPreviousRequired :: SequenceNumber
+  , wpLocalSequenceNumber :: SequenceNumber
+  , wpSequenceNumber :: SequenceNumber
+  , wpDestinationQueues :: [Int]
   } deriving (Generic, Eq, Ord, Show)
 
 instance Binary WirePacket
-
-data ReceivedWirePacket =
-  ReceivedWirePacket
-  { rwpPayload :: BS.ByteString
-  , rwpRequired :: Bool
-  , rwpPreviousRequired :: SequenceNumber
-  , rwpSequenceNumber :: SequenceNumber
-  } deriving (Generic, Eq, Ord, Show)
 
 data Packet
   = Packet'ConnectionRequest
@@ -51,7 +45,7 @@ data Packet
   | Packet'ConnectionDenied
   | Packet'ConnectionDisconnect Int
     -- TODO: Maybe ShortByteString is better?
-  | Packet'Payload SequenceNumber Int [WirePacket]
+  | Packet'Payload [WirePacket]
   | Packet'GameState SequenceNumber Int Int BS.ByteString
     deriving (Generic, Eq, Ord, Show)
 
@@ -61,8 +55,8 @@ instance Binary Packet
 --   For each player connected to the server:
 --     For each wireID in the current simulation:
 --       Store a priority queue of wire packets based on their sequence number
--- type IncomingPackets = TArray Int (IntMap (Heap (SequenceNumber, BS.ByteString)))
-type IncomingPackets = TArray Int (IntMap [ReceivedWirePacket])
+-- type IncomingPackets = TArray Int (IntMap (Heap WirePacket))
+type IncomingPackets = TArray Int (IntMap [WirePacket])
 
 -- | A sequence number is a monotonically increasing value that can be thought
 -- of as a timestamp for when a packet is sent across the wire.
@@ -81,11 +75,14 @@ newtype AckMask = AckMask { rawAckMask :: Word64 }
 newtype AckState = AckState (SequenceNumber, AckMask)
                  deriving (Eq, Ord, Show, Generic, Binary)
 
--- | For each player:
---     For each wire:
---       Keep track of the packets received and the most recently received
---       sequence number
-type PacketsReceived = TArray Int (IntMap AckState)
+-- | For each queue:
+--     Keep track of the packets received, and the player to which they
+--     correspond. To do client-side prediction, we have to recognize when we
+--     have placed packets in a queue out of order. This will be whenever we see
+--     misordering in a local queue with respect to local and foreign sequence
+--     numbers.
+-- type PacketsReceived = IntMap (Heap WirePacket)
+type PacketsReceived = IntMap [WirePacket]
 
 -- Until client is connected, this is Nothing. Then is either the client's ID on
 -- the server or the reason why we couldn't connect.
@@ -96,9 +93,10 @@ data NetworkState s
     { localSocket :: Socket
     , nextWireID :: Int
     , packetsIn :: IncomingPackets
-    , packetsReceived :: PacketsReceived
+    , packetQueues :: PacketsReceived
 
       -- Client specific
+    , serverPacketsAcked :: TVar AckState
     , clientGameState :: TVar (Maybe s)
     , localClientID :: ClientIDVar
     , serverAddr :: SockAddr
@@ -108,16 +106,36 @@ data NetworkState s
     { localSocket :: Socket
     , nextWireID :: Int
     , packetsIn :: IncomingPackets
-    , packetsReceived :: PacketsReceived
+    , packetQueues :: PacketsReceived
 
       -- Server specific
+    , clientPacketsAcked :: TArray Int AckState
     , serverGameState :: TVar s
     , connectedClients :: TArray Int (Maybe SockAddr)
     , packetsOutServer :: IntMap [WirePacket]
     } deriving (Eq)
 
+data NetworkException = NoNetworkException
+                      | QueueOrderingException Int SequenceNumber
+                      | MultipleNetworkExceptions [NetworkException]
+                        deriving (Eq, Ord, Show, Generic)
+
+instance Semigroup NetworkException where
+  NoNetworkException <> x = x
+  x <> NoNetworkException = x
+  (MultipleNetworkExceptions xs) <> (MultipleNetworkExceptions ys) =
+    MultipleNetworkExceptions $ xs <> ys
+  (MultipleNetworkExceptions xs) <> x = MultipleNetworkExceptions (x : xs)
+  x <> (MultipleNetworkExceptions xs) = MultipleNetworkExceptions (x : xs)
+  x <> y = MultipleNetworkExceptions [x, y]
+
+instance Monoid NetworkException where
+  mempty = NoNetworkException
+  mappend = (<>)
+
 type NetworkContext b = StateT (NetworkState b) GameMonad
-type RawNetworkedWire s a b = Wire TimeStep String (NetworkContext s) a b
+type RawNetworkedWire s a b =
+  Wire TimeStep NetworkException (NetworkContext s) a b
 newtype NetworkedWire s a b = NCW { getNetworkedWire :: RawNetworkedWire s a b }
                           deriving ( Functor
                                    , Applicative

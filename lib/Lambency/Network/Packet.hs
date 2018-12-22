@@ -48,9 +48,8 @@ sendDisconnected clientID sock =
 sendConnDenied :: Socket -> SockAddr -> IO Int
 sendConnDenied sock = sendTo sock (encPkt Packet'ConnectionDenied)
 
-sendPayload :: SequenceNumber -> Int -> [WirePacket] -> Socket -> SockAddr -> IO Int
-sendPayload pktNo cid dat sock =
-  sendTo sock (encPkt $ Packet'Payload pktNo cid dat)
+sendPayload :: [WirePacket] -> Socket -> SockAddr -> IO Int
+sendPayload dat sock = sendTo sock (encPkt $ Packet'Payload dat)
 
 sendGameState :: SequenceNumber -> BS.ByteString -> Socket -> SockAddr -> IO Int
 sendGameState pktNo st sock addr =

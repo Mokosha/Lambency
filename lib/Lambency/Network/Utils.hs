@@ -15,14 +15,6 @@ import Prelude hiding ((.), id)
 
 import System.Console.Concurrent
 --------------------------------------------------------------------------------
-receiveWirePacket :: SequenceNumber -> WirePacket -> ReceivedWirePacket
-receiveWirePacket seqNo wp =
-  ReceivedWirePacket
-  { rwpPayload = wpPayload wp
-  , rwpRequired = wpRequired wp
-  , rwpPreviousRequired = wpPreviousRequired wp
-  , rwpSequenceNumber = seqNo
-  }
 
 createUDPSocket :: Word16 -> IO Socket
 createUDPSocket port = do
@@ -44,11 +36,22 @@ networkWireFrom prg fn = NCW $ mkGen $ \dt val -> do
   seed <- prg
   stepWire (getNetworkedWire $ fn seed) dt (Right val)
 
-withinNetwork :: ContWire a b -> NetworkedWire s a b
-withinNetwork = NCW . mapWire (\m -> StateT $ \x -> (,x) <$> m) . getContinuousWire
-
 withNetworkState :: NetworkedWire s a b -> NetworkState s -> GameWire a b
 withNetworkState (NCW w) st = mkGen $ \dt x -> do
   ((res, w'), st') <- runStateT (stepWire w dt (Right x)) st
-  return (res, withNetworkState (NCW w') st')
+  case res of
+    Left networkException ->
+      return (Left $ show networkException, withNetworkState (NCW w') st')
+    Right x' ->
+      return (Right x', withNetworkState (NCW w') st')
 
+withinNetwork :: ContWire a b -> NetworkedWire s a b
+withinNetwork =
+  NCW . mapE . mapWire (\m -> StateT $ \x -> (,x) <$> m) . getContinuousWire
+  where
+    mapE w = mkGen $ \dt x -> do
+      (res, w') <- stepWire w dt (Right x)
+      case res of
+        Left _ -> error "Continuous wire inhibited??"
+        Right x' -> return (Right x', mapE w')
+    

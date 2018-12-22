@@ -135,12 +135,11 @@ clientReceiveLoop = startConnThread >>= connectClient
            then return True
            else do
              case decodePkt bytes of
-               Just (Packet'Payload seqNo cid wps) -> do
+               Just (Packet'Payload wps) -> do
                  liftIO $ atomically $ forM_ wps $ \wp -> do
-                   pkts <- readArray (packetsIn st) cid
-                   let newPkt = receiveWirePacket seqNo wp
-                   writeArray (packetsIn st) cid $
-                     IMap.insertWith (++) (wpNetworkID wp) [newPkt] pkts
+                   pkts <- readArray (packetsIn st) (wpPlayerID wp)
+                   writeArray (packetsIn st) (wpPlayerID wp) $
+                     IMap.insertWith (++) (wpNetworkID wp) [wp] pkts
                  return True
                Just (Packet'ConnectionDisconnect cid)
                  | Just (Right cid) == clientID -> return False
@@ -196,7 +195,11 @@ connectedClient tid (NCW _w) = NCW $ clientW 0 _w
               outPackets <- packetsOutClient <$> get
               let sock = localSocket st
                   sa = serverAddr st
-              _ <- networkIO $ sendPayload seqNo cid outPackets sock sa
+
+                  fixPackets wp = wp { wpPlayerID = cid
+                                     , wpSequenceNumber = seqNo
+                                     }
+              _ <- networkIO $ sendPayload (fixPackets <$> outPackets) sock sa
 
               -- Reset all of the outgoing packets
               modify $ \s -> s { packetsOutClient = [] }
@@ -234,14 +237,15 @@ runClientWire addr port numPlayers whileConnecting onFailure mkClient =
       sock <- createUDPSocket port
       cidVar <- newTVarIO Nothing
       pktsInVar <- atomically $ newArray (0, numPlayers - 1) IMap.empty
-      pktsRecvdArr <- atomically $ newArray (0, numPlayers - 1) IMap.empty
+      pktsAcked <- newTVarIO $ AckState (0, AckMask 0)
       gstvar <- newTVarIO Nothing
 
       let st = ClientNetworkState
                { localSocket = sock
                , nextWireID = 0
                , packetsIn = pktsInVar
-               , packetsReceived = pktsRecvdArr
+               , packetQueues = IMap.empty
+               , serverPacketsAcked = pktsAcked
                , clientGameState = gstvar
                , localClientID = cidVar
                , serverAddr = SockAddrInet serverPort $ tupleToHostAddress addr
