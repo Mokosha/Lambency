@@ -69,10 +69,9 @@ canAccept ackState seqNo
 --   1. For the given player, did we have a wire packet ready to use here?
 --   2. A list of finalizers to apply once we've collected the updates for
 --      each player.
-type WirePacketHandlerResult s a = (Maybe a, NetworkContext s ())
+type WirePacketHandlerResult s a = ([a], NetworkContext s ())
 type WirePacketHandler s a
    = Int  -- player ID
-  -> Int  -- Wire ID
   -> [WirePacket]
   -> STM (WirePacketHandlerResult s a)
 
@@ -82,10 +81,8 @@ modifyArray array ix f = readArray array ix >>= writeArray array ix . f
 getServerPacketHandler :: forall s a . Binary a
                        => NetworkContext s (WirePacketHandler s a)
 getServerPacketHandler = do
-  packetsInArray <- packetsIn <$> get
   packetsAcked <- clientPacketsAcked <$> get
-
-  return $ \playerID wireID ->
+  return $ \playerID ->
     let -- If we've accepted a packet, then we want to drop it from the
         -- list of queue'd packets, and return it as the next packet
         -- accepted. If we haven't accepted it, then we need to decide
@@ -95,37 +92,32 @@ getServerPacketHandler = do
         --     the queue and try again next time.
         --   * If it's not required and we have other packets pending,
         --     drop the packet from the queue.
-        consumePackets :: [WirePacket] -> STM (Maybe a, NetworkContext s ())
-        consumePackets [] = return (Nothing, return ())
-        consumePackets pkts = do
-          playerPackets <- readArray packetsInArray playerID
-          let (wp:wps) = sortBy (compare `on` wpLocalSequenceNumber) pkts
-              dropPacket = writeArray packetsInArray playerID $
-                           IMap.insert wireID wps playerPackets
+        consumePackets :: [WirePacket] -> STM ([a], NetworkContext s ())
+        consumePackets = liftM (first reverse) . foldM addPkt ([], return ())
 
-              wirePkt = decode $ BSL.fromStrict (wpPayload wp)
-
+        addPkt :: ([a], NetworkContext s ()) -> WirePacket
+               -> STM ([a], NetworkContext s ())
+        addPkt (pkts, finalizers) pkt = do
+          let wirePkt = decode $ BSL.fromStrict (wpPayload pkt)
           ackedPlayer <- readArray packetsAcked playerID
-          case canAccept ackedPlayer (wpLocalSequenceNumber wp) of
-            Nothing -> dropPacket >> consumePackets wps
+          case canAccept ackedPlayer (wpLocalSequenceNumber pkt) of
             Just True ->
               let finalizer = do
-                    addPacketToQueues wp
+                    addPacketToQueues pkt
                     networkIO $ atomically $
                       modifyArray packetsAcked playerID $
-                      flip updateAckState (wpLocalSequenceNumber wp)
-              in dropPacket >> return (Just wirePkt, finalizer)
-            Just False -> return (Nothing, return ())
+                      flip updateAckState (wpLocalSequenceNumber pkt)
+              in return (wirePkt : pkts, finalizers >> finalizer)
+            _ -> return (pkts, finalizers)
 
-      in consumePackets
+      in consumePackets . sortBy (compare `on` wpLocalSequenceNumber)
 
 getClientPacketHandler :: forall s a . Binary a
                        => NetworkContext s (WirePacketHandler s a)
 getClientPacketHandler = do
-  packetsInArray <- packetsIn <$> get
   packetsAcked <- serverPacketsAcked <$> get
 
-  return $ \playerID wireID ->
+  return $ \_ ->
     let -- If we've accepted a packet, then we want to drop it from the
         -- list of queue'd packets, and return it as the next packet
         -- accepted. If we haven't accepted it, then we need to decide
@@ -135,36 +127,31 @@ getClientPacketHandler = do
         --     the queue and try again next time.
         --   * If it's not required and we have other packets pending,
         --     drop the packet from the queue.
-        consumePackets :: [WirePacket] -> STM (Maybe a, NetworkContext s ())
-        consumePackets [] = return (Nothing, return ())
-        consumePackets pkts = do
-          playerPackets <- readArray packetsInArray playerID
-          let (wp:wps) = sortBy (compare `on` wpSequenceNumber) pkts
-              dropPacket = writeArray packetsInArray playerID $
-                           IMap.insert wireID wps playerPackets
+        consumePackets :: [WirePacket] -> STM ([a], NetworkContext s ())
+        consumePackets = liftM (first reverse) . foldM addPkt ([], return ())
 
-              wirePkt = decode $ BSL.fromStrict (wpPayload wp)
+        addPkt :: ([a], NetworkContext s ()) -> WirePacket
+               -> STM ([a], NetworkContext s ())
+        addPkt (pkts, finalizers) pkt = do
+          let wirePkt = decode $ BSL.fromStrict (wpPayload pkt)
+          ackedPlayer <- readTVar packetsAcked
+          case canAccept ackedPlayer (wpSequenceNumber pkt) of
+            Just True ->
+              let finalizer = do
+                    addPacketToQueues pkt
+                    networkIO $ atomically $
+                      writeTVar packetsAcked $
+                      updateAckState ackedPlayer (wpSequenceNumber pkt)
+              in return (wirePkt : pkts, finalizers >> finalizer)
+            _ -> return (pkts, finalizers)
 
-          ackState <- readTVar packetsAcked
-          case canAccept ackState (wpSequenceNumber wp) of
-            Nothing -> dropPacket >> consumePackets wps
-            Just True -> do
-              dropPacket
-              return (Just wirePkt, do
-                         addPacketToQueues wp
-                         networkIO $ atomically $
-                           writeTVar packetsAcked $
-                           updateAckState ackState (wpSequenceNumber wp)
-                     )
-            Just False -> return (Nothing, return ())
-
-      in consumePackets
+      in consumePackets . sortBy (compare `on` wpSequenceNumber)
 
 networkedCopiesPeers :: forall a b s
                       . Binary a
                      => WirePacketHandler s a
                      -> Int
-                     -> RawNetworkedWire s b (IntMap (Maybe a))
+                     -> RawNetworkedWire s b (IntMap [a])
 networkedCopiesPeers handler wireID = mkGen_ $ \_ -> do
   -- Find all packets for connected players that correspond to this wireID
   -- and dequeue the first packet in the list
@@ -177,9 +164,9 @@ networkedCopiesPeers handler wireID = mkGen_ $ \_ -> do
     forM [playerMin..playerMax] $ \playerID -> do
       playerPackets <- readArray packetsInArray playerID
       case IMap.lookup wireID playerPackets of
-        Nothing -> return ((playerID, Nothing), return ())
+        Nothing -> return ((playerID, []), return ())
         Just wirePackets -> do
-          (result, finalizer) <- handler playerID wireID wirePackets
+          (result, finalizer) <- handler playerID wirePackets
           return ((playerID, result), finalizer)
 
   -- Update packet queues with received packets.
@@ -189,7 +176,7 @@ networkedCopiesPeers handler wireID = mkGen_ $ \_ -> do
 networkedCopiesClient :: forall a s
                        . Binary a
                       => Int
-                      -> NetworkedWire s a (IntMap (Maybe a))
+                      -> NetworkedWire s a (IntMap [a])
 networkedCopiesClient wireID =
   networkWireFrom getClientPacketHandler $ \h ->
   NCW (swapFirstPlayer . (client &&& networkedCopiesPeers h wireID))
@@ -201,8 +188,7 @@ networkedCopiesClient wireID =
         Just (Left _) -> error "Client never connected??"
         Just (Right cid) -> return cid
 
-    swapFirstPlayer :: RawNetworkedWire s (Maybe a, IntMap (Maybe a))
-                                          (IntMap (Maybe a))
+    swapFirstPlayer :: RawNetworkedWire s ([a], IntMap [a]) (IntMap [a])
     swapFirstPlayer = mkGen_ $ \(x, m) -> do
       cid <- getClientID
       let swapKeys k
@@ -212,7 +198,7 @@ networkedCopiesClient wireID =
       return . Right $ IMap.mapKeys swapKeys $ IMap.insert cid x m
 
     -- Just send packets and hope other side receives them...
-    client :: RawNetworkedWire s a (Maybe a)
+    client :: RawNetworkedWire s a [a]
     client = mkGen_ $ \x -> do
       -- TODO: Use clientID to actually make sure that we're receiving packets
       -- in order as we expect
@@ -220,27 +206,25 @@ networkedCopiesClient wireID =
       let dat = BSL.toStrict $ encode x
           wp = WirePacket dat cid wireID 0 0 []
       modify' $ \s -> s { packetsOutClient = wp : packetsOutClient s }
-      return $ Right (Just x)
+      return $ Right [x]
 
 networkedCopiesServer :: forall a s
                        . Binary a
-                      => Int -> NetworkedWire s a (IntMap (Maybe a))
+                      => Int -> NetworkedWire s a (IntMap [a])
 networkedCopiesServer wireID = networkWireFrom getServerPacketHandler $ \h ->
   NCW $ sendAllPackets . networkedCopiesPeers h wireID
   where
-    sendAllPackets :: RawNetworkedWire s (IntMap (Maybe a)) (IntMap (Maybe a))
+    sendAllPackets :: RawNetworkedWire s (IntMap [a]) (IntMap [a])
     sendAllPackets = mkGen_ $ \m -> do
-      forM_ (IMap.toList m) $ \(pid, x) ->
-        case x of
-          Nothing -> return ()
-          Just dat -> 
-            let pkt = WirePacket (BSL.toStrict $ encode dat) pid wireID 0 0 []
-            in modify' $ \s -> s {
-              packetsOutServer =
-                 IMap.insertWith (++) pid [pkt] (packetsOutServer s) }
+      forM_ (IMap.toList m) $ \(pid, dats) ->
+        forM_ dats $ \dat -> modify' $ \s -> s {
+          packetsOutServer =
+             let pkt = WirePacket (BSL.toStrict $ encode dat) pid wireID 0 0 []
+             in IMap.insertWith (++) pid [pkt] (packetsOutServer s)
+          }
       return (Right m)
 
-networkedCopies :: Binary a => NetworkedWire s a (IntMap (Maybe a))
+networkedCopies :: Binary a => NetworkedWire s a (IntMap [a])
 networkedCopies = networkWireFrom registerWire $ \r -> case r of
   Left wid -> networkedCopiesClient wid
   Right wid -> networkedCopiesServer wid

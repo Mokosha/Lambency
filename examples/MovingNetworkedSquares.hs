@@ -53,13 +53,14 @@ networkedSquare = arr (\_ -> ())
                 . L.networkedCopies
                 . L.withinNetwork squareOffset
   where
-    player :: Int -> L.NetworkedWire Int (IntMap (Maybe (Float, Float))) ()
+    player :: Int -> L.NetworkedWire Int (IntMap [(Float, Float)]) ()
     player n = L.withinNetwork $
                renderSquare . playerWithOffset (0, 0)
       where
         playerWithOffset off = L.mkContSFN $ \m ->
           case IMap.lookup n m of
-            Just (Just off') -> (off', playerWithOffset off')
+            Just os | not (null os) ->
+              let off' = last os in (off', playerWithOffset off')
             _ -> (off, playerWithOffset off)
 
 -- The movement is modeled by an offset, represented with a Float for each
