@@ -55,7 +55,7 @@ loadPlane = L.createRenderObject L.plane
 
 plane :: L.ContWire ((), Bool) (Maybe ())
 plane = L.bracketResource loadPlane
-        $ (L.liftWire (L.quitWire GLFW.Key'E) W.>>>)
+        $ (L.liftWireRCW (L.quitWire GLFW.Key'E) W.>>>)
         $ L.withResource
         $ flip L.staticObject xform
   where xform = L.uniformScale 10 $
@@ -139,7 +139,7 @@ loadFont = L.loadTTFont 18 (V3 1 0 0) =<<
 uiWire :: L.ContWire ((), Bool) (Maybe ())
 uiWire = L.bracketResource loadFont
          $ L.withResource
-         $ \font -> 
+         $ \font ->
          L.screen
          [ L.hbox [renderTime font, L.glue]
          , L.glue

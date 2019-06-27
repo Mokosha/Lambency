@@ -20,8 +20,11 @@ To get a sense of the technologies used by this library, the major dependencies 
 Try the examples:
 --------
 
-From the source directory:
+At the moment, the library is undergoing pretty massive an unstable API changes. As such, there isn't really a good "workflow". However, I will try to keep the `stack.yaml` in the root directory up to date such that the project builds from HEAD. If the stack.yaml is not present, then it should be generated via
 
-    stack init --solver
+    stack init . --solver
+    
+If it is present, then you can simply continue with building and executing the examples:
+    
     stack build --flag lambency:examples
     stack exec lambcubedemo
