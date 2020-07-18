@@ -45,11 +45,11 @@ import Lambency.Shader
 import qualified Lambency.Shader.OpenGL as OpenGLShader
 import Lambency.Renderer.OpenGL.Texture
 import Lambency.Texture
-import Lambency.Transform
+import Lambency.Transform hiding (identity)
 import Lambency.Types hiding (Renderer(..))
 import Lambency.Vertex
 
-import Linear hiding (trace, identity)
+import Linear hiding (trace)
 
 import System.Directory
 import System.Exit
@@ -66,7 +66,7 @@ data RenderState = RenderState {
   currentRenderFlags :: [RenderStateFlag]
 }
 
-type RenderContext = ReaderT Transform (StateT RenderState IO)
+type RenderContext = ReaderT Mat4f (StateT RenderState IO)
 type TransparentRenderAction = (Maybe Int, RenderObject)
 
 initialRenderState :: RenderState
@@ -168,8 +168,9 @@ vertexAttributesToOpenGL attribs =
                    (attribTypeToGLType ty)
                    (toEnum bytesPerVertex)
                    (nullPtr `plusPtr` (toEnum sz))
+            vtxSize = getVertexAttributeByteSize attrib
         in
-         desc : (buildVertexDescriptors (sz + (getVertexAttributeByteSize attrib)) rest)
+         desc : (buildVertexDescriptors (sz + vtxSize) rest)
   in
    buildVertexDescriptors 0 attribs
 
@@ -381,16 +382,16 @@ appendCamXForm cam sm' =
   let sm = Map.singleton "mvpMatrix" (Matrix4Val $ getViewProjMatrix cam)
   in Map.unionWithKey updateMatrices sm' sm
 
-mkModelUpdate :: Transform -> UniformMap
-mkModelUpdate xf = let matrix = xform2Matrix xf in
+mkModelUpdate :: Mat4f -> UniformMap
+mkModelUpdate matrix =
   Map.fromList [ ("mvpMatrix", Matrix4Val matrix)
                , ("m2wMatrix", Matrix4Val matrix)
                ]
 
-prependXform :: Transform -> UniformMap -> UniformMap
+prependXform :: Mat4f -> UniformMap -> UniformMap
 prependXform = flip (Map.unionWithKey updateMatrices) . mkModelUpdate
 
-xformWorld :: Transform -> RenderObject -> RenderObject
+xformWorld :: Mat4f -> RenderObject -> RenderObject
 xformWorld xform ro = ro { objectVars = prependXform xform (objectVars ro) }
 
 place :: Camera -> RenderObject -> RenderObject
@@ -584,34 +585,15 @@ renderLight (RenderClipped clip action) camera light = do
   return $ updateTransparentStencil stencilVal <$> results
 
 renderLight (RenderTransformed xf act) camera light =
-  local (flip transform xf) $ renderLight act camera light
+  local (xform2Matrix xf !*!) $ renderLight act camera light
 
-renderLight (RenderObjects ros') camera light =
-  let ros = filter (not . elem Text . flags) ros'
-   in divideAndRenderROs ros camera light
+renderLight (RenderObjects []) _ _ = return []
+renderLight (RenderObjects ros) camera light =
+  divideAndRenderROs ros camera light
 
 renderLight (RenderCons act1 act2) camera light = do
   r1 <- renderLight act1 camera light
   r2 <- renderLight act2 camera light
-  return $ r1 ++ r2
-
-renderText :: RenderAction -> Camera
-           -> RenderContext [TransparentRenderAction]
-renderText (RenderObjects objs) camera = do
-  let ros = filter ((elem Text) . flags) objs
-  divideAndRenderROs ros camera Nothing
-
-renderText (RenderTransformed xf act) camera = do
-  local (flip transform xf) $ renderText act camera
-
-renderText (RenderClipped _ act) c = do
-  -- !FIXME! ignoring clipped text...
-  -- liftIO $ putStrLn "Warning: Unable to render clipped text!"
-  renderText act c
-
-renderText (RenderCons act1 act2) c = do
-  r1 <- renderText act1 c
-  r2 <- renderText act2 c
   return $ r1 ++ r2
 
 sortByCamDist :: [TransparentRenderAction] -> [TransparentRenderAction]
@@ -659,7 +641,6 @@ sortAndRenderTransparent light acts = do
 
 performRenderActions :: [Light] -> Camera -> RenderActions -> RenderContext ()
 performRenderActions lights camera actions = do
-  liftIO $ GL.clear [GL.StencilBuffer]
   case lights of
     [] -> renderLight (renderScene actions) camera Nothing
           >>= sortAndRenderTransparent Nothing
@@ -678,18 +659,26 @@ performRenderActions lights camera actions = do
       0 (fromIntegral szx) (fromIntegral szy) 0   -- Match the screen size
       0.01 50.0                                   -- The near and far planes
   transUI <- renderLight (renderUI actions) cam Nothing
-  transText <- renderText (renderUI actions) cam
-  sortAndRenderTransparent Nothing $ transUI ++ transText
+  sortAndRenderTransparent Nothing $ transUI
 
 render :: GLFW.Window -> [Light] -> Camera -> RenderActions -> IO ()
 render win lights cam acts = do
+  -- By default, rendering into the depth buffer is *on*
+  GL.depthMask GL.$= GL.Enabled
+  GL.depthFunc GL.$= (Just GL.Lequal)
+
+  -- So is the color buffer
+  GL.colorMask GL.$= (pure GL.Enabled)
+
+  -- The stencil buffer needs to be cleared, so turn it on here.
+  GL.stencilMask GL.$= (complement 0)
+
   -- !FIXME! This should be moved to the camera...
   GL.clearColor GL.$= GL.Color4 0.29 0.64 0.86 1
   clearBuffers
 
-  -- By default, rendering into the depth buffer is *on*
-  GL.depthMask GL.$= GL.Enabled
-  GL.depthFunc GL.$= (Just GL.Lequal)
+  -- The stencil buffer is *off* by default
+  GL.stencilMask GL.$= 0
 
   let renderPrg = performRenderActions lights cam acts
   evalStateT (runReaderT renderPrg identity) initialRenderState

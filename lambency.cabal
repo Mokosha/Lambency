@@ -196,3 +196,21 @@ executable lambshooter
     buildable:    True
   else
     buildable:    False
+
+executable lambmovesquare
+  main-is:        MovingSquare.hs
+  hs-source-dirs: examples
+  ghc-options:    -Wall -O3
+  build-depends:  base          <  5,
+                  netwire       >= 5.0.0,
+                  netwire-input >= 0.0.3,
+                  GLFW-b,
+                  lambency,
+                  linear        >= 1.20,
+                  mtl,
+                  containers
+
+  if flag(examples)
+    buildable:    True
+  else
+    buildable:    False
