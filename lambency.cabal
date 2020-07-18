@@ -81,7 +81,7 @@ library
                        filepath,
                        freetype2,
                        GLFW-b               >= 3.2.1.0,
-                       hashable             >= 1.2.2.0 && < 1.3,
+                       hashable             >= 1.3,
                        HCodecs,
                        JuicyPixels          >= 3.2,
                        linear               >= 1.20,

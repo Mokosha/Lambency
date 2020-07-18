@@ -20,16 +20,9 @@ import Data.List (mapAccumL, foldl')
 import qualified Data.Map as Map
 import Data.Word
 
-import Foreign.C.String
-import Foreign.Marshal.Alloc
 import Foreign.Storable
 
-import Graphics.Rendering.FreeType.Internal
-import Graphics.Rendering.FreeType.Internal.Bitmap
-import Graphics.Rendering.FreeType.Internal.Face
-import Graphics.Rendering.FreeType.Internal.GlyphSlot as FT_GS
-import Graphics.Rendering.FreeType.Internal.PrimitiveTypes
-import Graphics.Rendering.FreeType.Internal.Vector hiding (x, y)
+import FreeType
 
 import Lambency.ResourceLoader
 import Lambency.Sprite
@@ -153,51 +146,44 @@ setFontColor (V3 r g b) fnt = MF $ \c -> do
 --------------------------------------------------------------------------------
 -- Freetype fonts
 
-runFreeType :: IO FT_Error -> IO ()
-runFreeType m = do
-  r <- m
-  unless (r == 0) $ fail $ "FreeType Error:" ++ show r
-
 analyzeGlyph :: FT_Face -> (Int, Int) -> Char -> IO (Int, Int)
 analyzeGlyph ft_face (widthAccum, maxHeight) c = do
-  runFreeType $ ft_Load_Char ft_face (toEnum . fromEnum $ c) ft_LOAD_RENDER
+  ft_Load_Char ft_face (toEnum . fromEnum $ c) FT_LOAD_RENDER
 
   -- Get the glyph
-  g <- peek $ glyph ft_face
+  g <- frGlyph <$> peek ft_face
 
   -- Get the bitmap for the glyph
-  bm <- peek $ bitmap g
+  bm <- gsrBitmap <$> peek g
 
   -- Figure out the rows and height of the bitmap
-  return (widthAccum + (fromEnum $ width bm), max maxHeight (fromEnum $ rows bm))
+  return (widthAccum + (fromEnum $ bWidth bm), max maxHeight (fromEnum $ bRows bm))
 
 getGlyphAdvanceOffset :: FT_Face -> Char -> IO (V2 Int, V2 Int)
 getGlyphAdvanceOffset ft_face c = do
-  runFreeType $ ft_Load_Char ft_face (toEnum . fromEnum $ c) ft_LOAD_RENDER
+  ft_Load_Char ft_face (toEnum . fromEnum $ c) FT_LOAD_RENDER
 
   -- Get the glyph
-  g <- peek $ glyph ft_face
+  gs <- (frGlyph <$> peek ft_face) >>= peek
 
-  -- Get the advance
-  FT_Vector advx advy <- peek $ FT_GS.advance g
-
-  -- Get the offset
-  offx <- peek $ bitmap_left g
-  offy <- peek $ bitmap_top g
+  -- Get the advance and offset
+  let FT_Vector advx advy = gsrAdvance gs
+      offx = gsrBitmap_left gs
+      offy = gsrBitmap_top gs
 
   return $ (fmap fromIntegral $ V2 advx advy, fmap fromIntegral $ V2 offx offy)
 
 uploadGlyph :: Renderer -> FT_Face -> Texture -> Int -> Char -> IO (Int)
 uploadGlyph r ft_face tex widthAccum c = do
-  runFreeType $ ft_Load_Char ft_face (cvt c) ft_LOAD_RENDER
-  g <- peek $ glyph ft_face
-  bm <- peek $ bitmap g
+  ft_Load_Char ft_face (cvt c) FT_LOAD_RENDER
+  g <- frGlyph <$> peek ft_face
+  bm <- gsrBitmap <$> peek g
   updateTexture r
     tex
-    (buffer bm)
+    (bBuffer bm)
     (V2 (cvt widthAccum) 0)
-    (cvt <$> (V2 (width bm) (rows bm)))
-  return (widthAccum + (cvt $ width bm))
+    (cvt <$> (V2 (bWidth bm) (bRows bm)))
+  return (widthAccum + (cvt $ bWidth bm))
   where
     cvt :: (Enum a, Enum b) => a -> b
     cvt = toEnum . fromEnum
@@ -207,15 +193,13 @@ loadTTFont fontSize (V3 fontR fontG fontB) filepath = do
   (texW, texH, texZeroA, ft_face) <- liftIO $ do
     -- Create local copy of freetype library... this will free itself once it
     -- goes out of scope...
-    ft_library <- alloca $ \p -> do { runFreeType $ ft_Init_FreeType p; peek p }
+    ft_library <- ft_Init_FreeType
 
     -- Load the font
-    ft_face <- withCString filepath $ \cstr -> alloca $ \f -> do
-      runFreeType $ ft_New_Face ft_library cstr 0 f
-      peek f
+    ft_face <- ft_New_Face ft_library filepath 0
 
     -- Set the pixel size
-    runFreeType $ ft_Set_Pixel_Sizes ft_face 0 (toEnum . fromEnum $ fontSize)
+    ft_Set_Pixel_Sizes ft_face 0 (toEnum . fromEnum $ fontSize)
 
     -- Figure out the width and height of the bitmap that we need...
     (texW, texH) <- let nextPower2 = (shiftL 1) . (+ 1) . logBase2

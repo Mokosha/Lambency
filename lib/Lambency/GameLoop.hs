@@ -28,7 +28,6 @@ import System.CPUTime
 import Linear
 --------------------------------------------------------------------------------
 
-
 maximumFramerate :: NominalDiffTime
 maximumFramerate = fromRational . toRational $ (1.0 / 10.0 :: Double)
 

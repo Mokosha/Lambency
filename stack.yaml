@@ -5,8 +5,6 @@ flags:
 #   library-profiling: true
 #   executable-profiling: true
 extra-deps:
-- GLFW-b-3.2.1.0
-- bindings-GLFW-3.2.1.1
 - git: http://www.github.com/Mokosha/netwire-input-glfw.git
   commit: 0f04a165c88087615ba5aa66ce90f9138e9fc7f7
-resolver: lts-11.6
+resolver: lts-16.2

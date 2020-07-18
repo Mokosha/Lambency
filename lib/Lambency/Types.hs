@@ -317,22 +317,26 @@ data RenderAction = RenderObjects [RenderObject]
                   | RenderTransformed XForm.Transform RenderAction
                   | RenderCons RenderAction RenderAction
 
+instance Semigroup RenderAction where
+  (RenderObjects []) <> x = x
+  x <> (RenderObjects []) = x
+  (RenderObjects x) <> (RenderObjects y) = RenderObjects (x ++ y)
+  x <> y = RenderCons x y
+
 instance Monoid RenderAction where
   mempty = RenderObjects []
-  mappend (RenderObjects []) x = x
-  mappend x (RenderObjects []) = x
-  mappend (RenderObjects x) (RenderObjects y) = RenderObjects (x ++ y)
-  mappend x y = RenderCons x y
 
 data RenderActions = RenderActions {
   renderScene :: RenderAction,
   renderUI :: RenderAction
 }
 
+instance Semigroup RenderActions where
+  (RenderActions a b) <> (RenderActions c d) =
+      RenderActions (a <> c) (b <> d)
+
 instance Monoid RenderActions where
   mempty = RenderActions mempty mempty
-  mappend (RenderActions a b) (RenderActions c d) =
-    RenderActions (a `mappend` c) (b `mappend` d)
 
 data Renderer = Renderer
   { mkTexture :: forall a
@@ -371,6 +375,7 @@ newtype ResourceLoader a = ResourceLoader
                          deriving ( Functor
                                   , Applicative
                                   , Monad
+                                  , MonadFail
                                   , MonadIO
                                   , MonadReader Renderer
                                   , MonadWriter (IO ())
@@ -432,6 +437,7 @@ newtype GameMonad a = GameMonad {
            , Applicative
            , Alternative
            , Monad
+           , MonadFail
            , MonadFix
            , MonadPlus
            , MonadReader GameConfig
@@ -462,6 +468,7 @@ newtype ResourceContextWire s a b =
            , Alternative
            , Floating
            , Fractional
+           , Semigroup
            , Monoid
            , Num
            , Choice
@@ -482,6 +489,7 @@ newtype ContWire a b =
            , Applicative
            , Floating
            , Fractional
+           , Semigroup
            , Monoid
            , Num
            , Choice

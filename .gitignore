@@ -8,7 +8,7 @@ cabal-dev
 .virthualenv
 *cabal.sandbox.config
 .stack-work/**
-stack.yaml
+stack.yaml.lock
 
 # Emacs things
 *~

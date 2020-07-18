@@ -10,7 +10,6 @@ import Control.Applicative
 import Control.Monad.Reader
 
 import qualified Data.Map as Map
-import Data.Monoid
 
 import Lambency.Material
 import Lambency.Mesh

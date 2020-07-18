@@ -237,22 +237,8 @@ instance Transformable3D Transform where
 --  rotate = Quat.rotate
 --  nonuniformScale = liftA2 (*)
 
-instance (W.Monoid s, Monad m, Transformable3D b) =>
+instance (Monoid s, Monad m, Transformable3D b) =>
          Transformable3D (W.Wire s e m a b) where
-  translate v w = W.mkGen $ \t a -> do
-    (result, w') <- W.stepWire w t (Right a)
-    case result of
-      Left _ -> return $ (result, translate v w')
-      Right r -> return $ (Right $ translate v r, translate v w')
-
-  nonuniformScale s w = W.mkGen $ \t a -> do
-    (result, w') <- W.stepWire w t (Right a)
-    case result of
-      Left _ -> return $ (result, translate s w')
-      Right r -> return $ (Right $ nonuniformScale s r, nonuniformScale s w')
-
-  rotate r w = W.mkGen $ \t a -> do
-    (result, w') <- W.stepWire w t (Right a)
-    case result of
-      Left _ -> return $ (result, rotate r w')
-      Right b -> return $ (Right $ rotate r b, rotate r w')
+  translate v = fmap (translate v)
+  nonuniformScale s = fmap (translate s)
+  rotate r = fmap (rotate r)

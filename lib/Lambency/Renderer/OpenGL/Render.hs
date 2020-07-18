@@ -11,7 +11,6 @@ import qualified Codec.Picture as JP
 import Control.Applicative
 #endif
 import Control.Concurrent.STM
-import Control.Monad (unless)
 import Control.Monad.RWS.Strict
 import Control.Monad.State
 import Control.Monad.Reader
@@ -287,8 +286,8 @@ createBasicRO verts@(v:_) idxs mat =
     bindShaderVertexAttributes (OpenGLShader _ vars) = let
 
       -- Lookup the location for the given attribute name in the shader program
-      lu :: String -> GL.AttribLocation
-      lu name =
+      attribLoc :: String -> GL.AttribLocation
+      attribLoc name =
         case Map.lookup name vars of
            Nothing -> GL.AttribLocation maxBound
            Just var -> case var of
@@ -296,7 +295,7 @@ createBasicRO verts@(v:_) idxs mat =
              Attribute _ (OpenGLAttributeBinding loc) -> loc
 
       locattrib = filter ((/= GL.AttribLocation maxBound) . fst) $
-                  zip (map lu $ getAttribNames v)
+                  zip (map attribLoc $ getAttribNames v)
                       (vertexAttributesToOpenGL . getVertexAttributes $ v)
       in flip mapM_ locattrib $ \(loc, desc) ->
           GL.vertexAttribPointer loc GL.$= (GL.ToFloat, desc)
