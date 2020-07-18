@@ -4,7 +4,5 @@ flags:
 # build:
 #   library-profiling: true
 #   executable-profiling: true
-extra-deps:
-- git: http://www.github.com/Mokosha/netwire-input-glfw.git
-  commit: 0f04a165c88087615ba5aa66ce90f9138e9fc7f7
+extra-deps: []
 resolver: lts-16.2
