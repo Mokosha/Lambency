@@ -23,7 +23,7 @@ import Lambency.Texture
 import Lambency.Types
 import Lambency.GameSession
 
-import Network (withSocketsDo)
+import Network.Socket (withSocketsDo)
 
 import System.Console.Concurrent
 import System.CPUTime

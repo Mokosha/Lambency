@@ -22,7 +22,7 @@ import Lambency.Network.Types
 import Lambency.Network.Utils
 import Lambency.Types
 
-import Network.Socket hiding (sendTo, recvFrom)
+import Network.Socket
 import Network.Socket.ByteString
 
 import Prelude hiding ((.), id)

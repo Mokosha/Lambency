@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module Lambency.Network.Types where
 
 --------------------------------------------------------------------------------
@@ -19,7 +20,7 @@ import FRP.Netwire
 
 import Lambency.Types
 
-import Network.Socket hiding (sendTo, recvFrom)
+import Network.Socket
 --------------------------------------------------------------------------------
 
 data ConnectionFailure
@@ -141,7 +142,6 @@ newtype NetworkedWire s a b = NCW { getNetworkedWire :: RawNetworkedWire s a b }
                                    , Applicative
                                    , Floating
                                    , Fractional
-                                   , Monoid
                                    , Num
                                    , Choice
                                    , Profunctor
@@ -151,3 +151,5 @@ newtype NetworkedWire s a b = NCW { getNetworkedWire :: RawNetworkedWire s a b }
                                    , ArrowChoice
                                    , ArrowLoop
                                    )
+deriving instance Semigroup b => Semigroup (NetworkedWire s a b)
+deriving instance Monoid b => Monoid (NetworkedWire s a b)

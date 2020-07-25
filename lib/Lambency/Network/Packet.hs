@@ -21,7 +21,7 @@ import qualified Data.ByteString      as BS
 
 import Lambency.Network.Types
 
-import Network.Socket hiding (sendTo, recvFrom)
+import Network.Socket
 import Network.Socket.ByteString
 --------------------------------------------------------------------------------
 

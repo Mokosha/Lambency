@@ -4,11 +4,9 @@ module Main (main) where
 --------------------------------------------------------------------------------
 import Prelude hiding (id, (.))
 
-import Control.Applicative  ((<|>))
 import Control.Monad.Reader (ask)
 
 import Data.Word  (Word16)
-import Data.Maybe (maybe)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IMap
 

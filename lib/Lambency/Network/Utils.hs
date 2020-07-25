@@ -9,7 +9,7 @@ import Data.Word
 import Lambency.Network.Types
 import Lambency.Types
 
-import Network.Socket hiding (sendTo, recvFrom)
+import Network.Socket
 
 import Prelude hiding ((.), id)
 
