@@ -12,5 +12,7 @@ flags:
 extra-deps:
 - git: https://www.github.com/Mokosha/yoga-hs
   commit: 265e2a4f5739e48341dc8511abcfcbe6b482b1e3
+- reliable-io-0.0.1
+- netcode-io-0.0.2
 
 resolver: lts-16.2
