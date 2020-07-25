@@ -1,8 +1,16 @@
+packages:
+- .
+
 flags:
   lambency:
     examples: true
+
 # build:
 #   library-profiling: true
 #   executable-profiling: true
-extra-deps: []
+
+extra-deps:
+- git: https://www.github.com/Mokosha/yoga-hs
+  commit: 265e2a4f5739e48341dc8511abcfcbe6b482b1e3
+
 resolver: lts-16.2
