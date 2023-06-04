@@ -89,7 +89,7 @@ initLambency = do
   -- (mapM_ putStrLn) =<< (GL.get GL.glExtensions)
   putStrLn "Done initializing..."
   where
-    printInfo :: (GL.GettableStateVar String) -> String -> IO ()
+    printInfo :: GL.GettableStateVar String -> String -> IO ()
     printInfo sv s = GL.get sv >>= putStrLn . (s ++)
 
 errorCallback :: GLFW.Error -> String -> IO()
@@ -99,7 +99,7 @@ makeWindow :: Int -> Int -> String -> IO (Maybe GLFW.Window)
 makeWindow width height title = do
   putStr "Initializing GLFW..."
   r <- GLFW.init
-  if not r then ioError (userError "Failed!") else return ()
+  unless r $ ioError (userError "Failed!")
   putStrLn "Done"
 
   GLFW.setErrorCallback $ Just errorCallback
@@ -199,4 +199,4 @@ runOpenGL :: Int -> Int -> String -> a -> Game a -> IO ()
 runOpenGL = run RendererType'OpenGL
 
 toggleWireframe :: Bool -> GameMonad ()
-toggleWireframe b = GameMonad $ tell $ ([WireframeAction b], mempty)
+toggleWireframe b = GameMonad $ tell ([WireframeAction b], mempty)

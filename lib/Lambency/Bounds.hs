@@ -66,11 +66,11 @@ containsPoint :: BoundingVolume -> Vec3f -> Bool
 containsPoint (BoundingBox x y z) (V3 x' y' z') =
   and $ zipWith (\v w -> ((-w) >= v) && (v <= w)) [x', y', z'] [x, y, z]
 containsPoint (BoundingEllipse x y z) (V3 x' y' z') =
-  (sqr $ x' / x) + (sqr $ y' / y) + (sqr $ z' / z) < 1
+  sqr (x' / x) + sqr (y' / y) + sqr (z' / z) < 1
   where
     sqr :: Num a => a -> a
     sqr k = k * k
-containsPoint (Union bv1 bv2) v = (containsPoint bv1 v) || (containsPoint bv2 v)
+containsPoint (Union bv1 bv2) v = containsPoint bv1 v || containsPoint bv2 v
 containsPoint (TranslatedVolume t bv) v = containsPoint bv (v ^-^ t)
 containsPoint (RotatedVolume q bv) v = containsPoint bv (Quat.rotate (negate q) v)
 
@@ -91,17 +91,17 @@ collideOriented (Box (t, o, s)) (Box (t', o', s')) =
   -- space of the second.
   let
     rotateAtoB :: Mat3f
-    rotateAtoB = (adjoint o') !*! o
+    rotateAtoB = adjoint o' !*! o
 
     cBwrtA :: Vec3f
-    cBwrtA = (t' ^-^ t) *! (adjoint o)
+    cBwrtA = (t' ^-^ t) *! adjoint o
 
     eBwrtA :: Vec3f
-    eBwrtA = s' *! (adjoint rotateAtoB)
+    eBwrtA = s' *! adjoint rotateAtoB
 
     absDot :: Vec3f -> Vec3f -> Float
     absDot (V3 x y z) (V3 x' y' z') =
-      (abs $ x * x') + (abs $ y * y') + (abs $ z * z')
+      abs (x * x') + abs (y * y') + abs (z * z')
 
     testAxis :: Vec3f -> Bool
     testAxis v = abs (cBwrtA `dot` v) <= ((s `absDot` v) + (eBwrtA `absDot` v))
@@ -113,8 +113,7 @@ collideOriented (Box (t, o, s)) (Box (t', o', s')) =
     axesB = map (*! rotateAtoB) axesA
 
   in
-   or $
-   map (testAxis . signorm) $
+   any (testAxis . signorm) $
    filter (not . nearZero) $
    [v1 `cross` v2 | v1 <- axesA, v2 <- axesB] ++ axesA ++ axesB
 
@@ -125,14 +124,14 @@ collideOriented (Box (t, o, s)) (Box (t', o', s')) =
 collideOriented ov1 ov2 = collideOriented ov2 ov1
 
 colliding :: BoundingVolume -> BoundingVolume -> Bool
-colliding bv (Union bv1 bv2) = (colliding bv bv1) || (colliding bv bv2)
-colliding (Union bv1 bv2) bv = (colliding bv bv1) || (colliding bv bv2)
+colliding bv (Union bv1 bv2) = colliding bv bv1 || colliding bv bv2
+colliding (Union bv1 bv2) bv = colliding bv bv1 || colliding bv bv2
 colliding bv1 bv2 =
-  any id [collideOriented x y | x <- (getO bv1 io), y <- (getO bv2 io)]
+  or [collideOriented x y | x <- getO bv1 io, y <- getO bv2 io]
   where
     getO :: BoundingVolume -> Orientation -> [OrientedVolume]
-    getO (BoundingBox x y z) (t, o, s) = [Box (t, o, (*) <$> s <*> (V3 x y z))]
-    getO (BoundingEllipse x y z) (t, o, s) = [Ellipse (t, o, (*) <$> s <*> (V3 x y z))]
+    getO (BoundingBox x y z) (t, o, s) = [Box (t, o, (*) <$> s <*> V3 x y z)]
+    getO (BoundingEllipse x y z) (t, o, s) = [Ellipse (t, o, (*) <$> s <*> V3 x y z)]
     getO (TranslatedVolume t bv) (t', o, s) = getO bv (t ^+^ t', o, s)
-    getO (RotatedVolume q bv) (t, o, s) = getO bv (t, (fromQuaternion q) !*! o, s)
-    getO (Union bv1' bv2') o = (getO bv1' o) ++ (getO bv2' o)
+    getO (RotatedVolume q bv) (t, o, s) = getO bv (t, fromQuaternion q !*! o, s)
+    getO (Union bv1' bv2') o = getO bv1' o ++ getO bv2' o
