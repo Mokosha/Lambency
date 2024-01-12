@@ -97,7 +97,7 @@ cube = Mesh {
             replicate 4 (V3 1 0 0),
             replicate 4 (V3 (-1) 0 0)])
   -- Texture Coordinates
-  ((concat . (replicate 6)) [V2 0 0, V2 1 0, V2 1 1, V2 0 1]),
+  ((concat . replicate 6) [V2 0 0, V2 1 0, V2 1 1, V2 0 1]),
 
   indices = concat [[x, x+1, x+2, x, x+2, x+3] | x <- [0,4..20]]
 }
@@ -179,7 +179,7 @@ genNormalsTV3 mesh =
 -- !FIXME! Actually properly generate texture coordinates... this is kind
 -- of embarassing
 genTexCoordsOV3 :: Mesh OVertex3 -> Mesh OTVertex3
-genTexCoordsOV3 (Mesh verts idxs) = Mesh (map (flip addTexCoordOV3 zero) verts) idxs
+genTexCoordsOV3 (Mesh verts idxs) = Mesh (map (`addTexCoordOV3` zero) verts) idxs
 
 genTexCoordsV3 :: Mesh Vertex3 -> Mesh TVertex3
-genTexCoordsV3 (Mesh verts idxs) = Mesh (map (flip addTexCoordV3 zero) verts) idxs
+genTexCoordsV3 (Mesh verts idxs) = Mesh (map (`addTexCoordV3` zero) verts) idxs

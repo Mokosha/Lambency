@@ -69,7 +69,7 @@ updateMatrixTranslation :: V2 Float -> M33 Float -> M33 Float
 updateMatrixTranslation (V2 tx ty) (V3 x y _) = V3 x y (V3 tx ty 1)
 
 getShaderVarMatrix :: MaterialVar Mat3f -> Mat3f
-getShaderVarMatrix (MaterialVar (_, (Just (Matrix3Val mat)))) = mat
+getShaderVarMatrix (MaterialVar (_, Just (Matrix3Val mat))) = mat
 getShaderVarMatrix _ = Linear.identity
 
 updateScale :: V2 Float -> Material -> Material
@@ -100,7 +100,7 @@ mapFrameRO :: (RenderObject -> RenderObject) -> SpriteFrame -> SpriteFrame
 mapFrameRO fn sf = sf { frameRO = fn (frameRO sf) }
 
 addTextFlag :: SpriteFrame -> SpriteFrame
-addTextFlag = mapFrameRO $ \ro -> ro { flags = nub $ Text : (flags ro) }
+addTextFlag = mapFrameRO $ \ro -> ro { flags = nub $ Text : flags ro }
 
 changeSpriteFrameColor :: V4 Float -> SpriteFrame -> SpriteFrame
 changeSpriteFrameColor c = mapFrameRO $ mapROMaterial $ updateColor c
@@ -112,7 +112,7 @@ changeSpriteColor :: V4 Float -> Sprite -> Sprite
 changeSpriteColor c = mapSpriteFrames $ changeSpriteFrameColor c
 
 addRenderFlag :: RenderFlag -> RenderObject -> RenderObject
-addRenderFlag flag = \r -> r { flags = nub $ flag : (flags r) }
+addRenderFlag flag r = r { flags = nub $ flag : flags r }
 
 initStaticSprite :: Bool -> Texture -> ResourceLoader Sprite
 initStaticSprite isMask tex = do
@@ -136,7 +136,7 @@ initAnimatedSprite isMask frameSzs offsets tex = do
             then maskedSpriteMaterial tex
             else texturedSpriteMaterial tex
   ro <- createRenderObject quad mat
-  return $ Sprite $ cyclicFromList $ map (genFrame ro) (zip frameSzs offsets)
+  return $ Sprite $ cyclicFromList $ zipWith (curry $ genFrame ro) frameSzs offsets
   where
     genFrame :: RenderObject -> (V2 Int, V2 Int) -> SpriteFrame
     genFrame ro (sz, off) =
@@ -164,7 +164,7 @@ loadSpriteWith f initFn = do
   tex <- loadTexture f
   case tex of
     Nothing -> return Nothing
-    (Just t@(Texture _ _)) -> initFn t >>= (return . Just)
+    (Just t@(Texture _ _)) -> Just <$> initFn t
     _ -> return Nothing
 
 loadStaticSpriteWithTexture :: Texture -> ResourceLoader Sprite
@@ -184,14 +184,14 @@ loadAnimatedSprite f frameSzs offsets =
 loadAnimatedSpriteWithTexture :: Texture -> [V2 Int] -> [V2 Int]
                               -> ResourceLoader (Maybe Sprite)
 loadAnimatedSpriteWithTexture t frameSzs offsets =
-  initAnimatedSprite False frameSzs offsets t >>= (return . Just)
+  Just <$> initAnimatedSprite False frameSzs offsets t
 
 loadAnimatedSpriteWithMask :: Texture -> [V2 Int] -> [V2 Int]
                            -> ResourceLoader (Maybe Sprite)
 loadAnimatedSpriteWithMask t frameSzs offsets =
   -- !HACK! Not all animated (multi-frame) mask sprites are fonts...
-  initAnimatedSprite True frameSzs offsets t >>=
-  (return . Just . mapSpriteFrames addTextFlag)
+  Just . mapSpriteFrames addTextFlag <$>
+    initAnimatedSprite True frameSzs offsets t
 
 loadFixedSizeAnimatedSprite :: FilePath -> V2 Int -> [V2 Int]
                             -> ResourceLoader (Maybe Sprite)
@@ -206,7 +206,7 @@ renderUISpriteWithSize sprite pos (V2 sx sy)
 
 renderUISprite :: Sprite -> V2 Float -> GameMonad ()
 renderUISprite s@(Sprite frames) pos =
-  renderUISpriteWithSize s pos $ fromIntegral <$> (spriteSize $ extract frames)
+  renderUISpriteWithSize s pos $ fromIntegral <$> spriteSize (extract frames)
 
 renderFrameAt :: RenderObject -> V2 Int -> Float -> V2 Float -> GameMonad ()
 renderFrameAt ro sc depth (V2 x y) = addRenderAction xf ro
@@ -228,7 +228,7 @@ renderSpriteWithAlpha (Sprite frames) a
   | otherwise = renderFrameAt (setAlpha . frameRO . extract $ frames)
   where
     setAlpha ro = ro { material = updateAlpha a (material ro),
-                       flags = nub $ Transparent : (flags ro) }
+                       flags = nub $ Transparent : flags ro }
 
 data SpriteAnimationType
   = SpriteAnimationType'Forward
@@ -260,4 +260,4 @@ animatedWire s SpriteAnimationType'PingPong =
   let f = animatedWire s SpriteAnimationType'Forward
       b = animatedWire s SpriteAnimationType'Backward
   in
-   f --> b --> (animatedWire s SpriteAnimationType'PingPong)
+   f --> b --> animatedWire s SpriteAnimationType'PingPong

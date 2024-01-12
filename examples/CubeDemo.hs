@@ -13,7 +13,7 @@ import Control.Monad.Reader
 import Data.Traversable (sequenceA)
 #endif
 
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Word
 
 import qualified Graphics.UI.GLFW as GLFW
@@ -41,7 +41,7 @@ quitWire = (pure True W.>>> keyPressed GLFW.Key'Q) `L.withDefault` pure False
 initialCam :: L.Camera
 initialCam = L.mkPerspCamera
              -- Pos           Dir              Up
-             ((-15) *^ L.localForward) (L.localForward) (L.localUp)
+             ((-15) *^ L.localForward) L.localForward L.localUp
              (pi / 4) (4.0 / 3.0)
              -- near far
              0.1 1000.0
@@ -59,8 +59,7 @@ plane = L.bracketResource loadPlane
         $ L.withResource
         $ flip L.staticObject xform
   where xform = L.uniformScale 10 $
-                L.translate (V3 0 (-2) 0) $
-                L.identity
+                L.translate (V3 0 (-2) 0) L.identity
 
 loadBunny :: L.ResourceLoader [L.RenderObject]
 loadBunny = do
@@ -71,15 +70,14 @@ loadBunny = do
 bunny :: L.ContWire ((), Bool) (Maybe ())
 bunny = L.bracketResource loadBunny
         $ L.withResource
-        $ (foldl (W.>>>) W.mkId) . map (flip L.staticObject xform)
+        $ foldl (W.>>>) W.mkId . map (`L.staticObject` xform)
   where xform = L.rotate (Quat.axisAngle (V3 0 1 0) pi) $
-                L.translate (V3 (-4) (-4.8) (-5)) $
-                L.identity
+                L.translate (V3 (-4) (-4.8) (-5)) L.identity
 
 type CubeResources = (L.Texture, L.Sound, [L.RenderObject])
 loadCubeResources :: L.ResourceLoader CubeResources
 loadCubeResources = do
-  tex <- liftM fromJust
+  tex <- fmap fromJust
          $   liftIO (getDataFileName $ "examples" </> "crate" <.> "png")
          >>= L.loadTexture
 
@@ -97,38 +95,36 @@ cubeWire =
     $ L.withResource
     $ \(_, sound, ros) ->
       playSound sound 3.0 W.>>>
-      (sequenceA $ (\ro -> L.mkObject ro (rotate initial)) <$> ros) W.>>>
-      pure ()
+      traverse (\ro -> L.mkObject ro (rotate initial)) ros W.>>> pure ()
   where
     playSound :: L.Sound -> Float -> L.GameWire a a
-    playSound sound p = L.pulseSound sound W.>>> (W.for p) W.-->
+    playSound sound p = L.pulseSound sound W.>>> W.for p W.-->
                         playSound sound p
 
     rotate :: L.Transform -> L.GameWire a L.Transform
     rotate xform =
       W.mkPure (\t _ -> let
-                   rotation = Quat.axisAngle L.localUp $ 3.0 * (W.dtime t)
+                   rotation = Quat.axisAngle L.localUp $ 3.0 * W.dtime t
                    newxform = L.rotateWorld rotation xform
                    in (Right newxform, rotate newxform))
 
     initial :: L.Transform
     initial = L.rotate (Quat.axisAngle (V3 1 0 1) 0.6) $
-              L.uniformScale 2.0 $
-              L.identity
+              L.uniformScale 2.0 L.identity
 
 lightWire :: L.ContWire a L.Light
 lightWire =
-  let lightPos = 5 *^ (V3 (-2) 1 0)
+  let lightPos = 5 *^ V3 (-2) 1 0
       lightParams = L.mkLightParams (V3 0.15 0.15 0.15) (V3 1.0 1.0 1.0) 1.0
       initial = L.spotlight lightParams lightPos (negate lightPos) (pi/4)
-      (Just (V3 _ py pz)) = L.getLightPosition initial
+      (V3 _ py pz) = fromJust $ L.getLightPosition initial
   in
-  ((arr $ maybe (error "Light wire inhibited?") id) W.<<<)
+  ((arr $ fromMaybe (error "Light wire inhibited?")) W.<<<)
   $ ((id &&& quitWire) W.>>>)
   $ L.bracketResource (L.addShadowMap initial)
   $ L.withResource
   $ \l -> (W.timeF W.>>>) $ W.mkSF_ $ \t ->
-  let newPos = V3 (sin(t) * 10) py pz
+  let newPos = V3 (sin t * 10) py pz
   in L.setLightPosition newPos $
      L.setLightDirection (negate newPos) l
 
@@ -165,7 +161,7 @@ uiWire = L.bracketResource loadFont
 
     lastRenderTime :: L.GameWire a Float
     lastRenderTime = W.mkGen_ $ \_ -> do
-      lastPicoSeconds <- L.lastFrameTime <$> ask
+      lastPicoSeconds <- asks L.lastFrameTime
       return . Right $ fromIntegral lastPicoSeconds / 1000000000.0
 
     avgRenderTimeWire :: L.GameWire a String

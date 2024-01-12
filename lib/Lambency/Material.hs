@@ -76,7 +76,7 @@ materialShaderVars (BlinnPhongMaterial{..}) =
     matVarToList specularMap,
     matVarToList ambientReflectivity,
     case reflectionInfo of
-      Just info -> concat $ [
+      Just info -> concat [
         matVarToList $ indexOfRefraction info,
         matVarToList $ reflectionMap info,
         matVarToList $ sharpness info
@@ -145,7 +145,7 @@ maskedSpriteMaterial tex =
   defaultMaskedSprite
   { spriteMaskMatrix = MaterialVar
                        ( "spriteMaskMatrix"
-                       , Just $ Matrix3Val $ identity
+                       , Just $ Matrix3Val identity
                        ),
     spriteMask = MaterialVar
                  ( "spriteMask"
@@ -157,7 +157,7 @@ texturedSpriteMaterial :: Texture -> Material
 texturedSpriteMaterial tex =
   TexturedSpriteMaterial
   { spriteTextureMatrix =
-       MaterialVar ("spriteMaskMatrix", Just $ Matrix3Val $ identity)
+       MaterialVar ("spriteMaskMatrix", Just $ Matrix3Val identity)
   , spriteTexture =
        MaterialVar ("spriteMask", Just $ TextureVal undefined tex)
   , spriteAlpha = MaterialVar ("spriteAlpha", Just $ FloatVal 1)
