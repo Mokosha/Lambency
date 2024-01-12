@@ -27,6 +27,7 @@ import Data.Text (pack)
 
 import Data.Array.Unboxed (UArray, listArray, (!))
 
+import Control.Monad (liftM)
 import Control.Monad.State.Strict as State
 
 #if __GLASGOW_HASKELL__ <= 708

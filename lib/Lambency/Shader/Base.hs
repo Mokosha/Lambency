@@ -5,6 +5,7 @@ module Lambency.Shader.Base where
 --------------------------------------------------------------------------------
 import Control.Applicative
 import Control.Monad.RWS.Strict
+import Control.Monad (MonadPlus(..))
 
 import Linear
 --------------------------------------------------------------------------------

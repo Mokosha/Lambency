@@ -1,3 +1,4 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Lambency.UI (
   UIWire, WidgetEvent(..), WidgetState(..), Widget(..), screen,
   animatedSpriteRenderer, spriteRenderer, colorRenderer,
@@ -7,6 +8,7 @@ module Lambency.UI (
 ) where
 
 --------------------------------------------------------------------------------
+import Control.Monad (foldM)
 import Control.Monad.Reader
 import Control.Wire hiding ((.))
 
@@ -52,11 +54,16 @@ blankState :: Monoid b => WidgetState a b
 blankState = WidgetState (ignoreFst $ mkConst (Right mempty)) []
 
 newtype Widget a b = Widget { getWidgetLayout :: Y.Layout (WidgetState a b) }
+newtype WidgetMonad a = WidgetMonad { liftGameMonad :: GameMonad a }
+  deriving (Functor, Applicative, Monad)
+
+instance MonadIO WidgetMonad where
+  liftIO = WidgetMonad . GameMonad . liftIO
 
 widgetRenderFn :: Monoid b =>
                   TimeStep -> a -> Y.LayoutInfo -> WidgetState a b ->
-                  GameMonad (b, WidgetState a b)
-widgetRenderFn dt input lytInfo widgetState =
+                  WidgetMonad (b, WidgetState a b)
+widgetRenderFn dt input lytInfo widgetState = WidgetMonad $
   let eventWire :: WidgetEvent a b -> UIWire a b
       eventWire (WidgetEvent'OnMouseDown mb uiw) =
         second (mousePressed mb) >>> uiw
@@ -117,16 +124,15 @@ ignoreFst logic = mkGen $ \dt (_, ipt) -> do
 
 widgetWire :: Monoid b => Widget a b -> GameWire a b
 widgetWire (Widget lyt) = mkGen $ \dt input -> do
-  (result, newLyt) <- Y.foldRender lyt (widgetRenderFn dt input)
+  (result, newLyt) <- liftGameMonad $ Y.foldRender lyt (widgetRenderFn dt input)
   return (Right result, widgetWire $ Widget newLyt)
 
 screenPrg :: Monoid b => [Widget a b] -> GameMonad (Widget a b)
 screenPrg children = do
   (V2 wx wy) <- asks windowSize
   return . Widget $
-    ($ blankState) $
     Y.withDimensions (fromIntegral wx) (fromIntegral wy) $
-    Y.vbox (Y.startToEnd $ getWidgetLayout <$> children)
+    Y.vbox (Y.startToEnd $ getWidgetLayout <$> children) blankState
 
 screen :: Monoid b => [Widget a b] -> GameWire a b
 screen children = wireFrom (asks windowSize) $ runScreen $
@@ -211,18 +217,15 @@ combineRenderers = mconcat
 
 hbox :: Monoid b => [Widget a b] -> Widget a b
 hbox widgets = Widget
-               $ ($ blankState)
                $ Y.stretched
-               $ Y.hbox (Y.spaceBetween (getWidgetLayout <$> widgets))
+               $ Y.hbox (Y.spaceBetween (getWidgetLayout <$> widgets)) blankState
 
 vbox :: Monoid b => [Widget a b] -> Widget a b
 vbox widgets = Widget
-               $ ($ blankState)
                $ Y.stretched
-               $ Y.vbox (Y.spaceBetween (getWidgetLayout <$> widgets))
+               $ Y.vbox (Y.spaceBetween (getWidgetLayout <$> widgets)) blankState
 
 glue :: Monoid b => Widget a b
 glue = Widget
-       $ ($ blankState)
        $ Y.growable 2.0 (Y.Min 0.0) (Y.Min 0.0)
-       $ Y.exact 1.0 1.0
+       $ Y.exact 1.0 1.0 blankState

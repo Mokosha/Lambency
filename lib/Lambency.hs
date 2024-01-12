@@ -43,6 +43,7 @@ module Lambency (
 --------------------------------------------------------------------------------
 import Prelude hiding ((.))
 
+import Control.Monad (unless)
 import Control.Monad.RWS.Strict
 import Control.Wire ((.))
 import qualified Control.Wire as W

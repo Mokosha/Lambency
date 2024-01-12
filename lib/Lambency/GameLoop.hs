@@ -5,6 +5,7 @@ module Lambency.GameLoop (
   ) where
 
 --------------------------------------------------------------------------------
+import Control.Monad (when)
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.RWS.Strict

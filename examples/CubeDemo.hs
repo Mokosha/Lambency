@@ -139,6 +139,7 @@ uiWire = L.bracketResource loadFont
          L.screen
          [ L.hbox [renderTime font, L.glue]
          , L.glue
+         -- , button
          , L.hbox [L.glue, button]
          ]
   where
@@ -155,9 +156,8 @@ uiWire = L.bracketResource loadFont
         }
 
     button = L.Widget
-             $ ($ background)
-             $ Y.withMargin Y.Edge'All 10.0
-             $ Y.exact 10.0 10.0
+             $ Y.setMargin Y.Edge'All 10.0
+             $ Y.exact 10.0 10.0 background
 
     lastRenderTime :: L.GameWire a Float
     lastRenderTime = W.mkGen_ $ \_ -> do
@@ -173,10 +173,9 @@ uiWire = L.bracketResource loadFont
       in L.WidgetState idle []
 
     renderTime font = L.Widget
-                      $ ($ frameRenderState font)
-                      $ Y.withMargin Y.Edge'Left 5.0
-                      $ Y.withMargin Y.Edge'Top 15.0
-                      $ Y.exact 300.0 50.0
+                      $ Y.setMargin Y.Edge'Left 5.0
+                      $ Y.setMargin Y.Edge'Top 15.0
+                      $ Y.exact 300.0 50.0 (frameRenderState font)
 
 game :: L.Game ()
 game =

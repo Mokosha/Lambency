@@ -26,6 +26,8 @@ module Lambency.Types (
 import Control.Arrow
 import Control.Applicative
 import Control.Category
+import Control.Monad (MonadPlus)
+import Control.Monad.Fix (MonadFix)
 import Control.Monad.RWS.Strict
 import Control.Monad.Reader
 import Control.Monad.Writer

@@ -11,6 +11,7 @@ import qualified Codec.Picture as JP
 import Control.Applicative
 #endif
 import Control.Concurrent.STM
+import Control.Monad (foldM, foldM_, forM, forM_, unless)
 import Control.Monad.RWS.Strict
 import Control.Monad.State
 import Control.Monad.Reader
